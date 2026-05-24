@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TS Stock OS — Apple theme preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #f0eee9; font-family: 'Inter', 'Noto Sans Thai', system-ui, sans-serif; min-height:100vh; }
+    .topnav{position:sticky; top:0; z-index:100; background:rgba(255,255,255,0.92); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px); border-bottom:1px solid #e5e5ea; padding:14px 32px; display:flex; align-items:center; gap:14px; font-size:13px;}
+    .topnav h1{margin:0; font-size:18px; font-weight:600; letter-spacing:-0.015em;}
+    .topnav .sub{color:#6e6e73; font-size:12px;}
+    .topnav nav{margin-left:auto; display:flex; gap:4px; background:#f5f5f7; padding:3px; border-radius:8px;}
+    .topnav nav button{padding:6px 12px; border:0; background:transparent; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer; font-family:inherit;}
+    .topnav nav button.on{background:#fff; color:#0071e3; box-shadow:0 1px 2px rgba(0,0,0,0.06);}
+    .stage{padding:24px;}
+    .frame{display:none; margin:0 auto; max-width:1480px;}
+    .frame.on{display:block;}
+    .browser{border-radius:12px; overflow:hidden; box-shadow:0 24px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.08); background:#202124;}
+    .urlbar{display:flex; align-items:center; gap:10px; padding:10px 14px; background:#202124;}
+    .urlbar .dots{display:flex; gap:6px;}
+    .urlbar .dots i{width:11px; height:11px; border-radius:50%; display:inline-block;}
+    .urlbar .url{flex:1; max-width:380px; margin:0 auto; padding:5px 12px; border-radius:6px; background:#35363a; color:#e8eaed; font-size:12px; text-align:center; font-family:'JetBrains Mono',monospace;}
+    .frame.dark .browser{box-shadow:0 24px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);}
+    iframe{display:block; width:100%; height:940px; border:0;}
+    @media (max-width:760px){ .topnav{padding:10px 16px; flex-wrap:wrap;} .stage{padding:12px;} }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div class="topnav">
+    <h1>TS Stock OS</h1>
+    <span class="sub">Apple theme reference · Light + Dark</span>
+    <nav id="nav">
+      <button class="on" data-frame="dashboard">Dashboard</button>
+      <button data-frame="products">Products</button>
+      <button data-frame="sales">Sales</button>
+      <button data-frame="reports">Reports</button>
+    </nav>
+  </div>
+
+  <div class="stage">
+    <div class="frame on" data-id="dashboard">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div class="browser"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/dashboard · Light</div><div style="width:60px"></div></div><div id="root-dashboard-light"></div></div>
+        <div class="browser dark"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/dashboard · Dark</div><div style="width:60px"></div></div><div id="root-dashboard-dark"></div></div>
+      </div>
+    </div>
+
+    <div class="frame" data-id="products">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div class="browser"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/products · Light</div><div style="width:60px"></div></div><div id="root-products-light"></div></div>
+        <div class="browser dark"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/products · Dark</div><div style="width:60px"></div></div><div id="root-products-dark"></div></div>
+      </div>
+    </div>
+
+    <div class="frame" data-id="sales">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div class="browser"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/sales · Light</div><div style="width:60px"></div></div><div id="root-sales-light"></div></div>
+        <div class="browser dark"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/sales · Dark</div><div style="width:60px"></div></div><div id="root-sales-dark"></div></div>
+      </div>
+    </div>
+
+    <div class="frame" data-id="reports">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div class="browser"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/reports · Light</div><div style="width:60px"></div></div><div id="root-reports-light"></div></div>
+        <div class="browser dark"><div class="urlbar"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div class="url">stock.tselectronics.co.th/reports · Dark</div><div style="width:60px"></div></div><div id="root-reports-dark"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/babel" src="data.jsx"></script>
+  <script type="text/babel" src="variant-d.jsx"></script>
+  <script type="text/babel" src="apple-shell.jsx"></script>
+  <script type="text/babel" src="apple-products.jsx"></script>
+  <script type="text/babel" src="apple-sales.jsx"></script>
+  <script type="text/babel" src="apple-reports.jsx"></script>
+
+  <script type="text/babel">
+    const { VariantD, AppleProducts, AppleSales, AppleReports } = window;
+    const Frame = ({ children, height = 940 }) => <div style={{ width:'100%', height }}>{children}</div>;
+
+    ReactDOM.createRoot(document.getElementById('root-dashboard-light')).render(<Frame><VariantD lang="TH" theme="light" /></Frame>);
+    ReactDOM.createRoot(document.getElementById('root-dashboard-dark') ).render(<Frame><VariantD lang="TH" theme="dark"  /></Frame>);
+    ReactDOM.createRoot(document.getElementById('root-products-light')).render(<Frame><AppleProducts lang="TH" theme="light" /></Frame>);
+    ReactDOM.createRoot(document.getElementById('root-products-dark') ).render(<Frame><AppleProducts lang="TH" theme="dark"  /></Frame>);
+    ReactDOM.createRoot(document.getElementById('root-sales-light')).render(<Frame><AppleSales lang="TH" theme="light" /></Frame>);
+    ReactDOM.createRoot(document.getElementById('root-sales-dark') ).render(<Frame><AppleSales lang="TH" theme="dark"  /></Frame>);
+    ReactDOM.createRoot(document.getElementById('root-reports-light')).render(<Frame><AppleReports lang="TH" theme="light" /></Frame>);
+    ReactDOM.createRoot(document.getElementById('root-reports-dark') ).render(<Frame><AppleReports lang="TH" theme="dark"  /></Frame>);
+
+    // Tab switcher
+    const nav = document.getElementById('nav');
+    nav.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-frame]');
+      if (!btn) return;
+      const id = btn.dataset.frame;
+      document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b === btn));
+      document.querySelectorAll('.frame').forEach((f) => f.classList.toggle('on', f.dataset.id === id));
+    });
+  </script>
+</body>
+</html>

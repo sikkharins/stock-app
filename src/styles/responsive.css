@@ -1,0 +1,243 @@
+/* ══════════════════════════════════════════════════════
+   STOCK & ORDER — Responsive CSS (Apple Sidebar Layout)
+   Breakpoints:
+     Desktop  > 1024px  (default / base)
+     Tablet   768–1024px
+     Mobile   < 768px
+══════════════════════════════════════════════════════ */
+
+/* ── Base / Touch ─────────────────────────────────── */
+* { box-sizing: border-box; }
+
+button, [role="button"], select, input, textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Sidebar ─────────────────────────────────────── */
+.app-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.app-sidebar::-webkit-scrollbar { width: 4px; }
+.app-sidebar::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+/* ── Search (mobile collapsed state helpers) ──────── */
+.search-bar-container {
+  display: flex;
+  align-items: center;
+  transition: width 0.2s ease;
+}
+.search-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 999;
+}
+
+/* ── Grids (desktop base — inline styles govern) ─── */
+.stat-grid  { /* overridden by inline; CSS adds responsive */ }
+.dash-panels { /* same */ }
+.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.contact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.user-grid    { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.form-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* ── Permission table ─────────────────────────────── */
+.perm-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* ── Sidebar toggle (hidden on desktop) ───────────── */
+.sidebar-toggle { display: none !important; }
+
+/* ══════════════════════════════════════════════════
+   TABLET: 768px – 1024px
+══════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 200px 1fr !important;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .app-main {
+    padding: 20px 20px 48px !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   MOBILE: < 768px
+══════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* ── Shell → single column ──────────────────── */
+  .app-shell {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 52px 1fr !important;
+  }
+
+  /* ── Sidebar off-canvas ─────────────────────── */
+  .app-sidebar {
+    position: fixed !important;
+    left: 0; top: 0; bottom: 0;
+    width: 260px !important;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    grid-row: auto !important;
+    box-shadow: none;
+  }
+  .app-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.18);
+  }
+
+  /* ── Sidebar toggle visible ─────────────────── */
+  .sidebar-toggle {
+    display: flex !important;
+  }
+
+  /* ── Topbar full-width ──────────────────────── */
+  .app-topbar {
+    grid-column: 1 !important;
+    padding: 0 14px !important;
+    gap: 8px !important;
+  }
+
+  /* ── Main content ───────────────────────────── */
+  .app-main {
+    grid-column: 1 !important;
+    padding: 16px 14px 48px !important;
+  }
+
+  /* ── Global Search (collapsed pill on mobile) ── */
+  .global-search:not(.mobile-open) .search-bar-container {
+    width: 36px !important;
+    padding: 4px 8px !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    overflow: hidden;
+  }
+  .global-search:not(.mobile-open) .search-input { display: none !important; }
+  .global-search:not(.mobile-open) .search-clear { display: none !important; }
+
+  /* Global Search expanded (mobile overlay) */
+  .global-search.mobile-open {
+    position: fixed !important;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    background: var(--panel);
+    padding: 10px 12px;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18);
+    display: flex !important;
+    align-items: center;
+  }
+  .global-search.mobile-open .search-bar-container {
+    width: 100% !important;
+    border-radius: 8px !important;
+  }
+  .global-search .search-dropdown {
+    width: calc(100vw - 24px) !important;
+    left: 0 !important;
+  }
+
+  /* ── Modal overlay ────────────────────────────── */
+  .modal-overlay {
+    padding-top: 0 !important;
+    align-items: flex-start !important;
+  }
+
+  /* ── Modal box ────────────────────────────────── */
+  .modal-box {
+    width: 100% !important;
+    min-height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+
+  /* ── Dashboard ───────────────────────────────── */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .dash-panels {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Product cards ───────────────────────────── */
+  .product-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Contact / User cards ────────────────────── */
+  .contact-grid,
+  .user-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Forms: 2-col → 1-col ─────────────────────── */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Touch-friendly minimum tap sizes ───────────── */
+  .modal-box button,
+  .modal-box select,
+  .modal-box input {
+    min-height: 40px;
+  }
+
+  /* ── Data tables — force horizontal scroll ────── */
+  .app-main table {
+    min-width: 640px;
+  }
+
+  /* ── Topbar — hide breadcrumb on small screens ── */
+  .app-topbar .topbar-breadcrumb {
+    display: none !important;
+  }
+
+  /* ── Topbar icon buttons — compact ──────────── */
+  .app-topbar .topbar-actions button {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 13px !important;
+  }
+
+  /* ── Notification dropdown — fit viewport ─────── */
+  .notif-dropdown {
+    width: calc(100vw - 28px) !important;
+    max-width: 340px !important;
+    right: -8px !important;
+  }
+
+  /* ── Inline stat grids — 2 col on mobile ──────── */
+  .stat-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ── Item form rows — stack on mobile ─────────── */
+  .item-form-row {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+
+  /* ── Detail info grids — 1 col on mobile ──────── */
+  .detail-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Filter rows — stack vertically ────────────── */
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .filter-bar input,
+  .filter-bar select {
+    width: 100% !important;
+  }
+}

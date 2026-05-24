@@ -1,0 +1,258 @@
+import { useState, useMemo } from "react";
+import { IB, TAB_LABELS } from "../utils/constants.js";
+import { fmt } from "../utils/helpers.js";
+import { createUser } from "../utils/auth.js";
+import { Modal, MBtns } from "./ui/Modal.jsx";
+import Badge from "./ui/Badge.jsx";
+import SB from "./ui/SearchBar.jsx";
+import Btn from "./ui/Btn.jsx";
+import Field from "./ui/Field.jsx";
+import CustomSelect from "./ui/CustomSelect.jsx";
+import StatCard from "./ui/StatCard.jsx";
+import CustomerProfile from "./CustomerProfile.jsx";
+import SupplierProfile from "./SupplierProfile.jsx";
+import ContactExcelImport from "./ContactExcelImport.jsx";
+
+const STAFF_TABS = ["dashboard","products","stock_log","purchase","sales","finance","reports"];
+
+const mkStaffPerms = () => Object.fromEntries(
+  [...STAFF_TABS,"suppliers","customers","users"].map(t=>[t,{
+    access:t==="products"||t==="purchase",
+    read:t==="products"||t==="purchase",
+    create:false,edit:false,delete:false
+  }])
+);
+
+export default function ContactPage({sh,ft}){
+  const{cN,pN,canE,contacts,setContacts,search,setSearch,modal,oM,cM,cu,users,sales,quotes,payments,products,pos}=sh;
+  const SS=(users||[]).filter(u=>u.salesName).map(u=>u.salesName);
+  const isC=ft==="customer";const tk=isC?"customers":"suppliers";const ed=canE(tk);
+  const sf=isC&&cu.role!=="SalesManager"&&cu.salesName;
+  const ef={type:ft,name:"",nameT:"",phone:"",email:"",address:"",taxId:"",salesPerson:"",vatReps:[],staff:[]};
+  const[form,setForm]=useState(ef);const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const[viewProfile,setViewProfile]=useState(null);
+  const[viewSupplier,setViewSupplier]=useState(null);
+  const[newVR,setNewVR]=useState({name:"",address:"",idCard:""});
+  const addVR=()=>{const n=newVR.name.trim();if(!n)return;setForm(f=>({...f,vatReps:[...f.vatReps,{id:Date.now(),name:n,address:newVR.address.trim(),idCard:newVR.idCard.trim()}]}));setNewVR({name:"",address:"",idCard:""});};
+  const delVR=id=>setForm(f=>({...f,vatReps:f.vatReps.filter(r=>r.id!==id)}));
+
+  // Staff management
+  const[staffForm,setStaffForm]=useState(null);
+  const mkSF=()=>({name:"",roleTitle:"",phone:"",email:"",lineId:"",username:"",_password:"",dashboardWidgets:["products","stock_value","recent_po","recent_log"],perms:mkStaffPerms()});
+  const toggleSA=tab=>setStaffForm(f=>{const on=!f.perms[tab]?.access;return{...f,perms:{...f.perms,[tab]:{access:on,read:on,create:false,edit:false,delete:false}}};});
+  const saveStaff=()=>{
+    if(!staffForm.name||!staffForm.username||(!staffForm.authId&&!staffForm._password))return;
+    const s={...staffForm,id:staffForm.id||Date.now()};
+    setForm(f=>({...f,staff:staffForm.id?(f.staff||[]).map(x=>x.id===staffForm.id?s:x):[...(f.staff||[]),s]}));
+    setStaffForm(null);
+  };
+  const delStaff=id=>setForm(f=>({...f,staff:(f.staff||[]).filter(s=>s.id!==id)}));
+
+  const mk="c_"+ft;const title=isC?"ลูกค้า":"ซัพพลายเออร์";
+  const filtered=(contacts||[]).filter(c=>{
+    if(!c||c.type!==ft)return false;
+    if(sf&&c.salesPerson!==cu.salesName)return false;
+    if(search){const s=search.toLowerCase();if(!((cN(c)||"").toLowerCase().includes(s)||(c.email||"").toLowerCase().includes(s)))return false;}
+    return true;
+  });
+  const[savingContact,setSavingContact]=useState(false);const[formErrors,setFormErrors]=useState([]);
+  const save=async()=>{
+    const errs=[];if(!form.name)errs.push("ยังไม่กรอกชื่อ");if(errs.length){setFormErrors(errs);return;}setFormErrors([]);
+    setSavingContact(true);
+    try{
+      const updatedStaff=[];
+      for(const s of(form.staff||[])){
+        if(s.username&&s._password&&!s.authId){
+          const authId=await createUser(s.username,s._password,{role:"Supplier",supplierName:form.nameT||form.name,supplierStaffId:s.id,staffName:s.name,roleTitle:s.roleTitle||"",dashboardWidgets:s.dashboardWidgets||["products","stock_value","recent_po","recent_log"],perms:s.perms||{}});
+          const{_password,...rest}=s;
+          updatedStaff.push({...rest,authId});
+        }else{
+          const{_password,...rest}=s;
+          updatedStaff.push(rest);
+        }
+      }
+      const item={...form,staff:updatedStaff,id:form.id||Date.now()};
+      setContacts(p=>form.id?p.map(c=>c.id===form.id?item:c):[...p,item]);
+      cM();
+    }catch(e){
+      alert("Error: "+e.message);
+    }
+    setSavingContact(false);
+  };
+  const del=id=>{const c=(contacts||[]).find(x=>x.id===id);if(!confirm("ต้องการลบ "+(cN(c)||c?.name||"รายการนี้")+" ?"))return;setContacts(p=>p.filter(x=>x.id!==id));};
+
+  const supStats=useMemo(()=>{
+    if(isC)return null;
+    const sups=filtered;
+    const allPOs=(pos||[]).filter(po=>sups.some(s=>s.id===po.supplierId));
+    const pendingPOs=allPOs.filter(po=>["pending","pending_approval","approved"].includes(po.status)).length;
+    const totalStaff=sups.reduce((s,c)=>s+(c.staff||[]).length,0);
+    const totalVal=allPOs.reduce((s,po)=>s+(po.items||[]).reduce((a,i)=>a+i.qty*(i.cost||0),0),0);
+    return{totalPO:allPOs.length,pendingPOs,totalStaff,totalVal};
+  },[isC,filtered,pos]);
+
+  const poCountMap=useMemo(()=>{
+    if(isC)return{};
+    const m={};
+    (pos||[]).forEach(po=>{if(!m[po.supplierId])m[po.supplierId]={count:0,val:0};m[po.supplierId].count++;m[po.supplierId].val+=(po.items||[]).reduce((s,i)=>s+i.qty*(i.cost||0),0);});
+    return m;
+  },[isC,pos]);
+
+  return <div>
+    {!isC&&supStats&&<div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+      <StatCard label="ซัพพลายเออร์" value={filtered.length} color="var(--blue)" accentBg="rgba(0,122,255,0.12)"/>
+      <StatCard label="PO ทั้งหมด" value={supStats.totalPO} sub={"฿"+fmt(supStats.totalVal)}/>
+      <StatCard label="PO รอดำเนินการ" value={supStats.pendingPOs} color={supStats.pendingPOs>0?"var(--orange)":"var(--green)"} accentBg={supStats.pendingPOs>0?"rgba(255,149,0,0.14)":"rgba(52,199,89,0.12)"}/>
+      <StatCard label="Staff ทั้งหมด" value={supStats.totalStaff} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>
+    </div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
+      <SB value={search} onChange={setSearch} placeholder={"ค้นหา"+title+"..."}/>
+      {ed&&<div style={{display:"flex",gap:8}}><Btn onClick={()=>oM("contactImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm({...ef});oM(mk);}}>{"+ เพิ่ม"+title}</Btn></div>}
+    </div>
+    {filtered.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}>
+      <div style={{fontSize:48,marginBottom:12}}>{isC?"C":"S"}</div>
+      <div style={{color:"var(--dim)",fontSize:14,marginBottom:4}}>{"ยังไม่มี"+title}</div>
+      <div style={{color:"var(--faint)",fontSize:12,marginBottom:16}}>{search?"ลองค้นหาด้วยคำอื่น":("เพิ่ม"+title+"รายแรกเพื่อเริ่มต้นใช้งาน")}</div>
+      {ed&&!search&&<Btn onClick={()=>{setFormErrors([]);setForm({...ef});oM(mk);}}>{"+ เพิ่ม"+title+"แรก"}</Btn>}
+    </div>}
+    <div className="contact-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:12}}>
+      {filtered.map(c=>{const poInfo=!isC?poCountMap[c.id]:null;return<div key={c.id} style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem 1.25rem"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+          <div onClick={isC?()=>setViewProfile(c):()=>setViewSupplier(c)} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{fontWeight:600,fontSize:14,cursor:"pointer",color:"var(--blue)"}}>{cN(c)}</div>
+          <Badge status={c.type}/>
+        </div>
+        <div style={{fontSize:12,color:"var(--dim)",marginBottom:2}}>{c.phone||"-"}</div>
+        <div style={{fontSize:12,color:"var(--blue)",marginBottom:4}}>{c.email||"-"}</div>
+        {!isC&&c.taxId&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:2}}>{"Tax ID: "+c.taxId}</div>}
+        {!isC&&c.address&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.address}</div>}
+        {!isC&&poInfo&&<div style={{display:"flex",gap:8,marginBottom:8,marginTop:6}}>
+          <span style={{fontSize:11,background:"rgba(0,122,255,0.1)",color:"var(--blue)",borderRadius:99,padding:"3px 10px",fontWeight:500}}>{poInfo.count+" PO"}</span>
+          <span style={{fontSize:11,background:"rgba(52,199,89,0.1)",color:"var(--green)",borderRadius:99,padding:"3px 10px",fontWeight:500}}>{"฿"+fmt(poInfo.val)}</span>
+        </div>}
+        {isC&&c.salesPerson&&<div style={{fontSize:12,marginBottom:6}}><span style={{background:"rgba(175,82,222,0.12)",color:"var(--purple)",borderRadius:99,padding:"2px 10px",fontWeight:500,fontSize:11}}>{c.salesPerson}</span></div>}
+        {isC&&c.vatReps&&c.vatReps.length>0&&<div style={{background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:12}}>
+          <div style={{color:"var(--blue)",fontWeight:500,marginBottom:4}}>{"ตัวแทน VAT ("+c.vatReps.length+")"}</div>
+          {c.vatReps.map(r=><div key={r.id} style={{marginBottom:3}}><span style={{fontWeight:500}}>{r.name}</span><span style={{color:"var(--faint)",marginLeft:6}}>{r.idCard}</span></div>)}
+        </div>}
+        {!isC&&(c.staff||[]).length>0&&<div style={{background:"rgba(52,199,89,0.08)",border:"1px solid var(--green)",borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:12}}>
+          <div style={{color:"var(--green)",fontWeight:500,marginBottom:4}}>{"Staff ("+c.staff.length+" คน)"}</div>
+          {c.staff.map(s=><div key={s.id} style={{marginBottom:3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontWeight:500}}>{s.name}</span>
+            <span style={{background:"rgba(52,199,89,0.12)",color:"var(--green)",borderRadius:99,padding:"1px 7px",fontSize:10}}>{s.roleTitle}</span>
+            <span style={{color:"var(--faint)",fontSize:11}}>{"@"+s.username}</span>
+          </div>)}
+        </div>}
+        {ed&&<div style={{display:"flex",gap:8,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
+          <button onClick={()=>{setFormErrors([]);setForm({vatReps:[],address:"",taxId:"",salesPerson:"",staff:[],...c});oM(mk);}} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 0",borderRadius:6,border:"1px solid var(--blue)",background:"rgba(0,122,255,0.08)",color:"var(--blue)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"แก้ไข"}</button>
+          <button onClick={()=>del(c.id)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 0",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"ลบ"}</button>
+        </div>}
+      </div>;})}
+    </div>
+
+    {modal==="contactImport"&&<ContactExcelImport contactType={ft} onClose={cM} onImport={(items)=>{setContacts(p=>[...p,...items]);sh.addA("นำเข้า Excel",items.length+" "+title);}}/>}
+
+    {viewProfile&&isC&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} onClose={()=>setViewProfile(null)}/>}
+    {viewSupplier&&!isC&&<SupplierProfile supplier={viewSupplier} pos={pos||[]} payments={payments||[]} products={products||[]} pN={pN} cN={cN} onClose={()=>setViewSupplier(null)}/>}
+
+    {modal===mk&&ed&&<Modal title={(form.id?"แก้ไข":"เพิ่ม")+title} onClose={cM} wide>
+      <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Field label="ชื่อ EN"><input value={form.name||""} onChange={e=>setF("name",e.target.value)} style={IB}/></Field>
+        <Field label="ชื่อ TH"><input value={form.nameT||""} onChange={e=>setF("nameT",e.target.value)} style={IB}/></Field>
+        <Field label="โทร"><input value={form.phone||""} onChange={e=>setF("phone",e.target.value)} style={IB}/></Field>
+        <Field label="Email"><input value={form.email||""} onChange={e=>setF("email",e.target.value)} style={IB}/></Field>
+        {isC&&<div style={{gridColumn:"1/-1"}}><Field label="เซลส์"><CustomSelect value={form.salesPerson||""} onChange={v=>setF("salesPerson",v)} options={[{value:"",label:"ไม่ระบุ"},...SS.map(s=>({value:s,label:s}))]}/></Field></div>}
+        {isC&&<Field label="วันเครดิตเริ่มต้น"><CustomSelect value={String(form.defaultCreditDays||"")} onChange={v=>setF("defaultCreditDays",v?+v:0)} options={[{value:"",label:"ค่าเริ่มต้น (45 วัน)"},...[45,60,90].map(d=>({value:String(d),label:d+" วัน"}))]}/></Field>}
+        {isC&&<Field label="ส่วนลดเริ่มต้น"><CustomSelect value={String(form.defaultDiscount!=null?form.defaultDiscount:"")} onChange={v=>setF("defaultDiscount",v!==""?+v:null)} options={[{value:"",label:"ค่าเริ่มต้น (1%)"},...[0,1,2,3,5].map(d=>({value:String(d),label:d===0?"ไม่ลด":d+"%"}))]}/></Field>}
+        {isC&&<Field label="ประเภทชำระเริ่มต้น"><CustomSelect value={form.defaultPayType||""} onChange={v=>setF("defaultPayType",v||"")} options={[{value:"",label:"ค่าเริ่มต้น (เงินสด)"},{value:"cash",label:"เงินสด"},{value:"credit",label:"เครดิต"}]}/></Field>}
+        {isC&&<Field label="VAT เริ่มต้น"><label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 0"}}><input type="checkbox" checked={form.defaultVat!==false} onChange={e=>setF("defaultVat",e.target.checked)}/><span style={{fontSize:13,color:"var(--text)"}}>รวม VAT 7%</span></label></Field>}
+        {!isC&&<Field label="เครดิตวัน"><CustomSelect value={String(form.creditDays||"")} onChange={v=>setF("creditDays",v?+v:0)} options={[{value:"",label:"— เลือก —"},{value:"45",label:"45 วัน"},{value:"60",label:"60 วัน"}]}/></Field>}
+        <div style={{gridColumn:"1/-1"}}><Field label="Tax ID"><input value={form.taxId||""} onChange={e=>setF("taxId",e.target.value)} style={IB}/></Field></div>
+        <div style={{gridColumn:"1/-1"}}><Field label="ที่อยู่"><textarea value={form.address||""} onChange={e=>setF("address",e.target.value)} style={{...IB,height:56,resize:"vertical"}}/></Field></div>
+        {isC&&<div style={{gridColumn:"1/-1"}}>
+          <div style={{fontSize:12,fontWeight:600,color:"var(--blue)",background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:8,padding:"8px 12px",marginBottom:8}}>{"ตัวแทนรับ VAT ("+(form.vatReps||[]).length+" คน)"}</div>
+          {(form.vatReps||[]).map(r=><div key={r.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"var(--panel)",border:"1px solid var(--line)",borderRadius:6,marginBottom:6}}>
+            <div style={{flex:1,fontSize:12}}><div style={{fontWeight:500}}>{r.name}</div><div style={{color:"var(--dim)"}}>{r.address}</div><div style={{color:"var(--faint)"}}>{"บัตร ปชช: "+r.idCard}</div></div>
+            <button onClick={()=>delVR(r.id)} style={{padding:"4px 8px",borderRadius:4,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontSize:12}}>{"×"}</button>
+          </div>)}
+          <div style={{background:"var(--hover)",border:"1px dashed var(--blue)",borderRadius:8,padding:"10px 12px"}}>
+            <div style={{fontSize:11,fontWeight:500,color:"var(--blue)",marginBottom:6}}>เพิ่มตัวแทนใหม่</div>
+            <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <Field label="ชื่อ"><input value={newVR.name} onChange={e=>setNewVR(p=>({...p,name:e.target.value}))} style={IB} placeholder="ชื่อ-นามสกุล"/></Field>
+              <Field label="เลขบัตร ปชช."><input value={newVR.idCard} onChange={e=>setNewVR(p=>({...p,idCard:e.target.value}))} style={IB} placeholder="13 หลัก"/></Field>
+            </div>
+            <Field label="ที่อยู่"><textarea value={newVR.address} onChange={e=>setNewVR(p=>({...p,address:e.target.value}))} style={{...IB,height:50,resize:"vertical"}} placeholder="ที่อยู่สำหรับออก VAT"/></Field>
+            <button onClick={addVR} style={{marginTop:8,padding:"6px 14px",borderRadius:6,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:500}}>{"+ เพิ่มตัวแทน"}</button>
+          </div>
+        </div>}
+
+        {/* Supplier Staff Section */}
+        {!isC&&<div style={{gridColumn:"1/-1",marginTop:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(52,199,89,0.08)",border:"1px solid var(--green)",borderRadius:8,padding:"8px 12px",marginBottom:8}}>
+            <div style={{fontSize:12,fontWeight:600,color:"var(--green)"}}>{"Staff / พนักงาน ("+(form.staff||[]).length+" คน)"}</div>
+            <button onClick={()=>setStaffForm(mkSF())} style={{padding:"5px 12px",borderRadius:6,border:"none",background:"var(--green)",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:500}}>{"+ เพิ่ม Staff"}</button>
+          </div>
+          {(form.staff||[]).length===0&&<div style={{textAlign:"center",color:"var(--faint)",fontSize:12,padding:"12px",background:"var(--hover)",borderRadius:6,border:"1px dashed var(--line)"}}>ยังไม่มี Staff — กด "+ เพิ่ม Staff" เพื่อสร้างบัญชีพนักงาน</div>}
+          {(form.staff||[]).map(s=><div key={s.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",background:"var(--panel)",border:"1px solid var(--line)",borderRadius:8,marginBottom:6}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
+                <span style={{fontWeight:500,fontSize:13}}>{s.name}</span>
+                <span style={{background:"rgba(52,199,89,0.12)",color:"var(--green)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:500}}>{s.roleTitle||"Staff"}</span>
+              </div>
+              <div style={{fontSize:11,color:"var(--faint)",display:"flex",gap:10,flexWrap:"wrap"}}>
+                <span>{s.username}</span>
+                {s.phone&&<span>{s.phone}</span>}
+                {s.lineId&&<span>{"LINE: "+s.lineId}</span>}
+              </div>
+              <div style={{fontSize:11,color:"var(--dim)",marginTop:3}}>
+                {STAFF_TABS.filter(t=>s.perms?.[t]?.access).map(t=>TAB_LABELS[t]?.th||t).join(", ")||"ไม่มีสิทธิ์เข้าถึงเมนู"}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <button onClick={()=>setStaffForm({...s})} style={{padding:"4px 10px",borderRadius:5,border:"1px solid var(--blue)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontSize:12}}>แก้ไข</button>
+              <button onClick={()=>delStaff(s.id)} style={{padding:"4px 10px",borderRadius:5,border:"1px solid var(--red)",background:"transparent",color:"var(--red)",cursor:"pointer",fontSize:12}}>ลบ</button>
+            </div>
+          </div>)}
+        </div>}
+      </div>
+      {formErrors.length>0&&<div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"10px 14px",marginTop:12}}><div style={{fontSize:12,fontWeight:600,color:"var(--red)",marginBottom:4}}>กรุณากรอกข้อมูลให้ครบ:</div>{formErrors.map((e,i)=><div key={i} style={{fontSize:12,color:"var(--red)",marginBottom:2}}>{"• "+e}</div>)}</div>}
+      <MBtns onCancel={cM} onSave={save}/>
+    </Modal>}
+
+    {/* Staff detail modal — z:200, stacks above supplier modal */}
+    {modal===mk&&staffForm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:200,paddingTop:40,overflowY:"auto"}}>
+      <div style={{background:"var(--panel)",borderRadius:12,border:"1.5px solid var(--line)",padding:"1.5rem",width:"min(680px,96%)",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 8px 32px rgba(0,0,0,0.3)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <span style={{fontWeight:600,fontSize:15}}>{(staffForm.id?"แก้ไข":"เพิ่ม")+" Staff"}</span>
+          <span onClick={()=>setStaffForm(null)} style={{cursor:"pointer",color:"var(--faint)",fontSize:26,lineHeight:1}}>{"×"}</span>
+        </div>
+        <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+          <Field label="ชื่อ *"><input value={staffForm.name||""} onChange={e=>setStaffForm(f=>({...f,name:e.target.value}))} style={IB} placeholder="ชื่อ-นามสกุล"/></Field>
+          <Field label="ตำแหน่ง (Role Title)"><input value={staffForm.roleTitle||""} onChange={e=>setStaffForm(f=>({...f,roleTitle:e.target.value}))} style={IB} placeholder="เช่น Sales, Manager"/></Field>
+          <Field label="โทร"><input value={staffForm.phone||""} onChange={e=>setStaffForm(f=>({...f,phone:e.target.value}))} style={IB}/></Field>
+          <Field label="Email"><input value={staffForm.email||""} onChange={e=>setStaffForm(f=>({...f,email:e.target.value}))} style={IB}/></Field>
+          <Field label="LINE ID"><input value={staffForm.lineId||""} onChange={e=>setStaffForm(f=>({...f,lineId:e.target.value}))} style={IB}/></Field>
+          <div/>
+          <Field label="Username *"><input value={staffForm.username||""} onChange={e=>setStaffForm(f=>({...f,username:e.target.value}))} style={IB} placeholder="สำหรับเข้าสู่ระบบ" disabled={!!staffForm.authId}/></Field>
+          <Field label={staffForm.authId?"เปลี่ยนรหัสผ่าน":"Password *"}><input type="password" value={staffForm._password||""} onChange={e=>setStaffForm(f=>({...f,_password:e.target.value}))} style={IB} placeholder={staffForm.authId?"ว่างไว้ถ้าไม่เปลี่ยน":"รหัสผ่าน"}/></Field>
+        </div>
+        <div style={{background:"rgba(255,149,0,0.14)",border:"1px solid var(--orange)",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:12,color:"var(--orange)"}}>
+          {"Staff ทุกคนดูได้อย่างเดียว (View Only) — ไม่สามารถสร้าง แก้ไข หรือลบข้อมูลได้"}
+        </div>
+        <div style={{fontWeight:500,fontSize:13,marginBottom:10}}>{"สิทธิ์เข้าใช้เมนู (เลือกเมนูที่เปิดให้ดู)"}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {STAFF_TABS.map(tab=>{
+            const on=staffForm.perms?.[tab]?.access;
+            return <label key={tab} onClick={()=>toggleSA(tab)} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:8,border:"1.5px solid "+(on?"var(--green)":"var(--line)"),background:on?"rgba(52,199,89,0.12)":"var(--hover)"}}>
+              <span style={{width:20,height:20,borderRadius:4,border:"1.5px solid "+(on?"var(--green)":"var(--line)"),background:on?"var(--green)":"var(--panel)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,flexShrink:0}}>{on&&"✓"}</span>
+              <span style={{fontSize:12,fontWeight:on?500:400,color:on?"var(--green)":"var(--dim)"}}>{TAB_LABELS[tab]?.th||tab}</span>
+            </label>;
+          })}
+        </div>
+        <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,gap:10}}>
+          <button onClick={()=>setStaffForm(null)} style={{padding:"7px 14px",borderRadius:6,border:"1px solid var(--line)",cursor:"pointer",background:"transparent",color:"var(--dim)"}}>ยกเลิก</button>
+          <button onClick={saveStaff} style={{padding:"7px 14px",borderRadius:6,border:"1px solid var(--green)",cursor:"pointer",background:"rgba(52,199,89,0.12)",fontWeight:500,color:"var(--green)"}}>บันทึก Staff</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
