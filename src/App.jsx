@@ -212,7 +212,7 @@ export default function App(){
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
-    <style>{THEME_CSS+"\n@keyframes ptr-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}\n@keyframes fab-pop{0%{opacity:0;transform:translateY(8px) scale(0.9)}100%{opacity:1;transform:translateY(0) scale(1)}}\n@media(max-width:600px){.quick-fab{bottom:12px!important;left:12px!important}}"}</style>
+    <style>{THEME_CSS+"\n@keyframes ptr-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}\n@keyframes fab-pop{0%{opacity:0;transform:translateY(8px) scale(0.9)}100%{opacity:1;transform:translateY(0) scale(1)}}\n@media(max-width:600px){.quick-fab{bottom:66px!important;right:12px!important}}"}</style>
     <div className="app-shell" style={{display:"grid",gridTemplateColumns:"240px 1fr",gridTemplateRows:"52px 1fr",minHeight:"100vh",background:"var(--bg)",color:"var(--text)"}}>
 
       {/* Sidebar */}
@@ -320,7 +320,7 @@ export default function App(){
       const doAct=a=>{handleTab(a.tab);setQuickCreate(a.mk);setFabOpen(false);};
       return <>
         {fabOpen&&<div onClick={()=>setFabOpen(false)} style={{position:"fixed",inset:0,zIndex:9990}}/>}
-        <div className="quick-fab" style={{position:"fixed",bottom:20,left:16,zIndex:9995}}>
+        <div className="quick-fab" style={{position:"fixed",bottom:82,right:16,zIndex:9995}}>
           {fabOpen&&<div style={{position:"absolute",bottom:60,left:0,display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
             {acts.map((a,i)=><button key={i} onClick={()=>doAct(a)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderRadius:12,border:"none",background:"var(--panel)",boxShadow:"0 4px 16px rgba(0,0,0,0.18)",color:"var(--text)",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",animation:`fab-pop 0.2s ${i*0.04}s both`}}>
               <span style={{fontSize:16}}>{a.icon}</span>{a.label}
