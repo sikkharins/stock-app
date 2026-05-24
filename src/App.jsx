@@ -76,6 +76,16 @@ export default function App(){
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
   const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[fabOpen,setFabOpen]=useState(false);
+  // Draggable FAB (AssistiveTouch style)
+  const fabRef=useRef(null);const fabDrag=useRef({dragging:false,startX:0,startY:0,startLeft:0,startTop:0,moved:false});
+  const [fabPos,setFabPos]=useState(()=>{try{const s=JSON.parse(localStorage.getItem("fab_pos"));return s&&s.x!=null?s:{x:null,y:null};}catch{return{x:null,y:null};}});
+  const [fabTouched,setFabTouched]=useState(false);
+  const fabIdleTimer=useRef(null);
+  const resetFabIdle=useCallback(()=>{setFabTouched(true);clearTimeout(fabIdleTimer.current);fabIdleTimer.current=setTimeout(()=>setFabTouched(false),3000);},[]);
+  const onFabPointerDown=useCallback((e)=>{const t=e.touches?e.touches[0]:e;const el=fabRef.current;if(!el)return;const r=el.getBoundingClientRect();fabDrag.current={dragging:true,startX:t.clientX,startY:t.clientY,startLeft:r.left,startTop:r.top,moved:false};resetFabIdle();},[resetFabIdle]);
+  const onFabPointerMove=useCallback((e)=>{const d=fabDrag.current;if(!d.dragging)return;const t=e.touches?e.touches[0]:e;const dx=t.clientX-d.startX,dy=t.clientY-d.startY;if(Math.abs(dx)>5||Math.abs(dy)>5)d.moved=true;if(!d.moved)return;e.preventDefault();const sz=44;const nx=Math.max(0,Math.min(window.innerWidth-sz,d.startLeft+dx));const ny=Math.max(0,Math.min(window.innerHeight-sz,d.startTop+dy));setFabPos({x:nx,y:ny});},[]);
+  const onFabPointerUp=useCallback(()=>{const d=fabDrag.current;d.dragging=false;if(d.moved&&fabPos.x!=null){const sz=44;const snapX=fabPos.x<window.innerWidth/2?8:window.innerWidth-sz-8;const snapped={x:snapX,y:fabPos.y};setFabPos(snapped);localStorage.setItem("fab_pos",JSON.stringify(snapped));}resetFabIdle();},[fabPos,resetFabIdle]);
+  useEffect(()=>{window.addEventListener("mousemove",onFabPointerMove);window.addEventListener("mouseup",onFabPointerUp);window.addEventListener("touchmove",onFabPointerMove,{passive:false});window.addEventListener("touchend",onFabPointerUp);return()=>{window.removeEventListener("mousemove",onFabPointerMove);window.removeEventListener("mouseup",onFabPointerUp);window.removeEventListener("touchmove",onFabPointerMove);window.removeEventListener("touchend",onFabPointerUp);};},[onFabPointerMove,onFabPointerUp]);
   const[pullY,setPullY]=useState(0);const[refreshing,setRefreshing]=useState(false);const pullStart=useRef(null);const mainRef=useRef(null);
   const doRefresh=useCallback(async()=>{setRefreshing(true);try{const sbData=await loadAllFromSupabase();if(sbData)applyData(sbData,false);}catch(e){console.warn("Refresh error:",e.message);}setRefreshing(false);setPullY(0);},[]);
   const onTouchStart=useCallback(e=>{if(mainRef.current&&mainRef.current.scrollTop<=0)pullStart.current=e.touches[0].clientY;else pullStart.current=null;},[]);
@@ -85,6 +95,25 @@ export default function App(){
   const realtimeSkipRef=useRef(new Set());
   const cuRef=useRef(cu);
   useEffect(()=>{cuRef.current=cu;},[cu]);
+
+  // Back button handler — prevent accidental app close (AssistiveTouch style)
+  const backToastTimer=useRef(null);const[backToast,setBackToast]=useState(false);
+  const backStateRef=useRef({fabOpen,sideOpen,showNotif,showBackup,tab,backToast});
+  useEffect(()=>{backStateRef.current={fabOpen,sideOpen,showNotif,showBackup,tab,backToast};},[fabOpen,sideOpen,showNotif,showBackup,tab,backToast]);
+  useEffect(()=>{
+    history.pushState({app:true},"");
+    const onBack=()=>{
+      const s=backStateRef.current;
+      if(s.fabOpen){setFabOpen(false);history.pushState({app:true},"");return;}
+      if(s.sideOpen){setSideOpen(false);history.pushState({app:true},"");return;}
+      if(s.showNotif){setShowNotif(false);history.pushState({app:true},"");return;}
+      if(s.showBackup){setShowBackup(false);history.pushState({app:true},"");return;}
+      if(s.tab!=="dashboard"){setTab("dashboard");history.pushState({app:true},"");return;}
+      if(!s.backToast){setBackToast(true);history.pushState({app:true},"");clearTimeout(backToastTimer.current);backToastTimer.current=setTimeout(()=>setBackToast(false),500);}
+    };
+    window.addEventListener("popstate",onBack);
+    return()=>{window.removeEventListener("popstate",onBack);clearTimeout(backToastTimer.current);};
+  },[]);
 
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
@@ -212,7 +241,7 @@ export default function App(){
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
-    <style>{THEME_CSS+"\n@keyframes ptr-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}\n@keyframes fab-pop{0%{opacity:0;transform:translateY(8px) scale(0.9)}100%{opacity:1;transform:translateY(0) scale(1)}}\n@media(max-width:600px){.quick-fab{bottom:66px!important;right:12px!important}}"}</style>
+    <style>{THEME_CSS+"\n@keyframes ptr-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}\n@keyframes fab-pop{0%{opacity:0;transform:translateY(8px) scale(0.9)}100%{opacity:1;transform:translateY(0) scale(1)}}\n"}</style>
     <div className="app-shell" style={{display:"grid",gridTemplateColumns:"240px 1fr",gridTemplateRows:"52px 1fr",minHeight:"100vh",background:"var(--bg)",color:"var(--text)"}}>
 
       {/* Sidebar */}
@@ -318,15 +347,18 @@ export default function App(){
       ].filter(Boolean);
       if(!acts.length)return null;
       const doAct=a=>{handleTab(a.tab);setQuickCreate(a.mk);setFabOpen(false);};
+      const fabStyle=fabPos.x!=null?{position:"fixed",left:fabPos.x,top:fabPos.y,zIndex:9995}:{position:"fixed",bottom:88,right:16,zIndex:9995};
+      const isRight=fabPos.x!=null?fabPos.x>window.innerWidth/2:true;
+      const menuAlign=isRight?{right:0,alignItems:"flex-end"}:{left:0,alignItems:"flex-start"};
       return <>
         {fabOpen&&<div onClick={()=>setFabOpen(false)} style={{position:"fixed",inset:0,zIndex:9990}}/>}
-        <div className="quick-fab" style={{position:"fixed",bottom:82,right:16,zIndex:9995}}>
-          {fabOpen&&<div style={{position:"absolute",bottom:60,left:0,display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
-            {acts.map((a,i)=><button key={i} onClick={()=>doAct(a)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderRadius:12,border:"none",background:"var(--panel)",boxShadow:"0 4px 16px rgba(0,0,0,0.18)",color:"var(--text)",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",animation:`fab-pop 0.2s ${i*0.04}s both`}}>
-              <span style={{fontSize:16}}>{a.icon}</span>{a.label}
+        <div ref={fabRef} style={{...fabStyle,transition:"opacity 0.4s"}}>
+          {fabOpen&&<div style={{position:"absolute",bottom:52,...menuAlign,display:"flex",flexDirection:"column",gap:6}}>
+            {acts.map((a,i)=><button key={i} onClick={()=>doAct(a)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(30,30,30,0.75)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",boxShadow:"0 4px 20px rgba(0,0,0,0.3)",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",animation:`fab-pop 0.2s ${i*0.04}s both`}}>
+              <span style={{fontSize:15}}>{a.icon}</span>{a.label}
             </button>)}
           </div>}
-          <button onClick={()=>setFabOpen(o=>!o)} style={{width:48,height:48,borderRadius:"50%",border:"none",background:"linear-gradient(135deg,#34C759,#30D158)",color:"#fff",fontSize:26,fontWeight:300,cursor:"pointer",boxShadow:"0 4px 16px rgba(52,199,89,0.4)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.25s",transform:fabOpen?"rotate(45deg)":"none"}}>+</button>
+          <button onMouseDown={onFabPointerDown} onTouchStart={onFabPointerDown} onClick={()=>{if(!fabDrag.current.moved)setFabOpen(o=>!o);}} style={{width:44,height:44,borderRadius:"50%",border:"1px solid rgba(255,255,255,0.1)",background:"rgba(40,40,40,0.6)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",color:"rgba(255,255,255,0.7)",fontSize:24,fontWeight:300,cursor:"grab",boxShadow:"0 2px 12px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.25s",transform:fabOpen?"rotate(45deg)":"none",touchAction:"none"}}>+</button>
         </div>
       </>;
     })()}
@@ -371,5 +403,7 @@ export default function App(){
       }));
       addA("แก้ไขสินค้า (AI Bot)",updates.length+" รายการ");
     }}/></Suspense>}
+
+    {backToast&&<div style={{position:"fixed",bottom:40,left:"50%",transform:"translateX(-50%)",background:"rgba(30,30,30,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",color:"rgba(255,255,255,0.9)",padding:"10px 24px",borderRadius:20,fontSize:13,fontWeight:500,zIndex:99999,boxShadow:"0 4px 16px rgba(0,0,0,0.3)",fontFamily:"inherit",animation:"fab-pop 0.2s both"}}>กดอีกครั้งเพื่อออก</div>}
   </>;
 }
