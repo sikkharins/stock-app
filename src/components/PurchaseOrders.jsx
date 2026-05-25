@@ -22,10 +22,11 @@ const STATUS_TABS=[
 ];
 
 export default function POPage({sh}){
-  const{pN,cN,canE,pos,setPOs,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,isSup,supN,addA}=sh;
+  const{pN,cN,canE,pos,setPOs,sales,setSales,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,isSup,supN,addA}=sh;
   const ed=canE("purchase");
   const isAdmin=cu?.role==="Admin";
   const sups=contacts.filter(c=>c.type==="supplier");
+  const custs=contacts.filter(c=>c.type==="customer");
 
   const purchasePerm=cu?.perms?.purchase;
   const canApprovePO=typeof purchasePerm==="object"?!!purchasePerm?.approve:(isAdmin);
@@ -41,7 +42,7 @@ export default function POPage({sh}){
     return ms&&mst;
   }),[basePOs,search,contacts,statusFilter,cN]);
 
-  const ef={supplierId:"",date:todayStr(),deliveryDate:"",items:[{productId:"",qty:1,cost:0}],note:""};
+  const ef={supplierId:"",date:todayStr(),deliveryDate:"",items:[{productId:"",qty:1,cost:0}],note:"",dropShip:false,dropShipCustomerId:""};
   const[form,setForm]=useState(ef);
   useEffect(()=>{if(sh.quickCreate==="addPO"&&ed&&!isSup){setForm(ef);oM("addPO");sh.clearQuickCreate();}},[sh.quickCreate]);
   const[viewPO,setViewPO]=useState(null);
@@ -58,7 +59,7 @@ export default function POPage({sh}){
   const savePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     const yr=new Date().getFullYear();const mx=pos.reduce((m,p)=>{const mt=p.poNum.match(/^PO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const pn="PO-"+yr+"-"+String(mx+1).padStart(3,"0");
-    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",status:"draft",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:""}]);
+    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",status:"draft",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
     addA("สร้าง PO (Draft)",pn);cM();
   };
 
@@ -74,6 +75,15 @@ export default function POPage({sh}){
     if(action==="approve"){
       setPOs(p=>p.map(x=>x.id!==po.id?x:{...x,status:"approved",approval:entry,approvalHistory:[...(x.approvalHistory||[]),{action:"approved",...entry}]}));
       addA("อนุมัติ PO",po.poNum);
+      if(po.dropShip&&po.dropShipCustomerId){
+        const yr=new Date().getFullYear();const mx=sales.reduce((m,s)=>{const mt=s.soNum.match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const sn="SO-"+yr+"-"+String(mx+1).padStart(3,"0");
+        const soItems=po.items.map(i=>{const pr=products.find(x=>x.id===i.productId);return{productId:i.productId,qty:i.qty,price:pr?pr.price:0};});
+        const cust=contacts.find(c=>c.id===+po.dropShipCustomerId);const sub=soItems.reduce((s,i)=>s+i.qty*i.price,0);
+        const defCredit=cust?.defaultCreditDays||45;const defVat=cust?.defaultVat!==false;const vatAmt=defVat?Math.round(sub*7/107*100)/100:0;
+        setSales(p=>[...p,{id:Date.now(),soNum:sn,customerId:+po.dropShipCustomerId,date:todayStr(),status:"pending_delivery",items:soItems,origPrices:soItems.map(i=>+i.price),includeVat:defVat,vatAmount:vatAmt,payType:"credit",discountAmt:0,discPct:0,extraDiscPct:0,creditDays:defCredit,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างอัตโนมัติจาก "+po.poNum+" (ส่งนอกสถานที่)",fromQuote:"",linkedPO:po.poNum,dropShip:true}]);
+        setPOs(p=>p.map(x=>x.id===po.id?{...x,linkedSO:sn}:x));
+        addA("สร้าง SO อัตโนมัติ (Drop Ship)",sn+" ← "+po.poNum);
+      }
     }else if(action==="reject"){
       setPOs(p=>p.map(x=>x.id!==po.id?x:{...x,status:"draft",rejectionReason:appComment,approvalHistory:[...(x.approvalHistory||[]),{action:"rejected",...entry}]}));
       addA("ปฏิเสธ PO",po.poNum+(appComment?" — "+appComment:""));
@@ -91,17 +101,18 @@ export default function POPage({sh}){
   };
 
   const cancelPO=po=>{
+    if(po.linkedSO){setSales(p=>p.filter(s=>s.soNum!==po.linkedSO||s.status==="completed"));addA("ลบ SO อัตโนมัติ (ยกเลิก PO)",po.linkedSO);}
     setPOs(p=>p.map(x=>x.id===po.id?{...x,status:"cancelled"}:x));
     addA("ยกเลิก PO",po.poNum);setConfirmCancel(null);cM();
   };
 
   const openEditPO=po=>{
-    setForm({supplierId:String(po.supplierId),date:po.date,deliveryDate:po.deliveryDate||"",items:po.items.map(i=>({productId:String(i.productId),qty:i.qty,cost:i.cost})),note:po.note||""});
+    setForm({supplierId:String(po.supplierId),date:po.date,deliveryDate:po.deliveryDate||"",items:po.items.map(i=>({productId:String(i.productId),qty:i.qty,cost:i.cost})),note:po.note||"",dropShip:!!po.dropShip,dropShipCustomerId:po.dropShipCustomerId?String(po.dropShipCustomerId):""});
     setEditPO(po);oM("editPO");
   };
   const updatePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
-    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||""};
+    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
     setPOs(p=>p.map(x=>x.id===editPO.id?{...x,...base}:x));
     addA("แก้ไข PO",editPO.poNum);setEditPO(null);cM();
   };
@@ -122,8 +133,10 @@ export default function POPage({sh}){
       a.push(<button key="app" onClick={()=>openApproval(po,"approve")} style={{...AB,border:"1px solid var(--green)",background:"rgba(52,199,89,0.12)",color:"var(--green)"}}>อนุมัติ</button>);
       a.push(<button key="rej" onClick={()=>openApproval(po,"reject")} style={{...AB,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)"}}>ปฏิเสธ</button>);
     }
-    if((po.status==="approved"||po.status==="pending")&&ed&&!isSup)
+    if((po.status==="approved"||po.status==="pending")&&ed&&!isSup&&!po.dropShip)
       a.push(<button key="rec" onClick={()=>openApproval(po,"receive")} style={{...AB,border:"1px solid var(--green)",background:"rgba(52,199,89,0.12)",color:"var(--green)"}}>รับของ</button>);
+    if(po.status==="approved"&&po.dropShip)
+      a.push(<span key="ds" style={{...AB,border:"1px solid var(--blue)",background:"rgba(10,132,255,0.08)",color:"var(--blue)",cursor:"default"}}>{"รอจัดส่ง SO"}</span>);
     if((isAdmin||(po.status==="draft"&&po.createdBy===cu?.username))&&!["received","cancelled"].includes(po.status)&&!isSup)
       a.push(<button key="can" onClick={()=>setConfirmCancel(po)} style={{...AB,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",marginRight:0}}>ยกเลิก</button>);
     return a;
@@ -161,6 +174,8 @@ export default function POPage({sh}){
             <td style={{padding:"8px 6px",fontWeight:500}}>
               {po.poNum}
               {wasRejected&&<span style={{marginLeft:6,fontSize:10,color:"var(--red)",background:"rgba(255,59,48,0.12)",borderRadius:4,padding:"1px 5px"}}>ถูกปฏิเสธ</span>}
+              {po.dropShip&&<span style={{marginLeft:6,fontSize:10,color:"var(--blue)",background:"rgba(10,132,255,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500}}>{"📦 ส่งนอกสถานที่"}</span>}
+              {po.linkedSO&&<span onClick={e=>{e.stopPropagation();sh.handleTab("sales");sh.setSearch(po.linkedSO);}} style={{marginLeft:4,fontSize:10,color:"var(--green)",background:"rgba(52,199,89,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500,cursor:"pointer"}}>{"→ "+po.linkedSO}</span>}
             </td>
             <td style={{padding:"8px 6px"}}>{sup?cN(sup):"-"}</td>
             <td style={{padding:"8px 6px",color:"var(--dim)"}}>{toBE(po.date)}</td>
@@ -180,6 +195,14 @@ export default function POPage({sh}){
         <Field label="ซัพพลายเออร์"><CustomSelect searchable value={form.supplierId} onChange={v=>setForm(f=>({...f,supplierId:v}))} options={[{value:"",label:"เลือก..."},...sups.map(s=>({value:String(s.id),label:cN(s)}))]}/></Field>
         <Field label="วันที่"><ThaiDateInput value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
         <Field label="วันกำหนดส่ง"><ThaiDateInput value={form.deliveryDate||""} onChange={e=>setForm(f=>({...f,deliveryDate:e.target.value}))}/></Field>
+        <div style={{gridColumn:"1/-1"}}>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(form.dropShip?"var(--blue)":"var(--line)"),background:form.dropShip?"rgba(10,132,255,0.08)":"var(--hover)"}}>
+            <input type="checkbox" checked={!!form.dropShip} onChange={e=>setForm(f=>({...f,dropShip:e.target.checked,dropShipCustomerId:e.target.checked?f.dropShipCustomerId:""}))}/>
+            <span style={{fontSize:13,fontWeight:form.dropShip?600:400,color:form.dropShip?"var(--blue)":"var(--dim)"}}>{"📦 ส่งนอกสถานที่ (Drop Ship)"}</span>
+          </label>
+        </div>
+        {form.dropShip&&<div style={{gridColumn:"1/-1"}}><Field label="ลูกค้าที่รับของ"><CustomSelect searchable value={form.dropShipCustomerId} onChange={v=>setForm(f=>({...f,dropShipCustomerId:v}))} options={[{value:"",label:"เลือกลูกค้า..."},...custs.map(c=>({value:String(c.id),label:cN(c)}))]}/></Field></div>}
+        {form.dropShip&&<div style={{gridColumn:"1/-1",background:"rgba(10,132,255,0.08)",border:"1px solid var(--blue)",borderRadius:6,padding:"8px 12px",fontSize:12,color:"var(--blue)"}}>{"เมื่อ PO ได้รับการอนุมัติ → ระบบจะสร้างใบขาย (SO) ให้ลูกค้าโดยอัตโนมัติ"}</div>}
       </div>
       {form.items.map((item,idx)=><div key={idx} style={{marginBottom:10,padding:"10px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)"}}>
         <div className="item-form-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,alignItems:"center"}}>
@@ -206,6 +229,11 @@ export default function POPage({sh}){
         </div>
         <Badge status={viewPO.status}/>
       </div>
+      {viewPO.dropShip&&<div style={{background:"rgba(10,132,255,0.08)",border:"1px solid var(--blue)",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:12}}>
+        <div style={{fontWeight:600,color:"var(--blue)",marginBottom:4}}>{"📦 ส่งนอกสถานที่ (Drop Ship)"}</div>
+        <div style={{color:"var(--dim)"}}>{"ลูกค้าที่รับของ: "}<span style={{fontWeight:500,color:"var(--text)"}}>{(()=>{const c=contacts.find(x=>x.id===viewPO.dropShipCustomerId);return c?cN(c):"-";})()}</span></div>
+        {viewPO.linkedSO&&<div style={{marginTop:4}}>{"SO: "}<span onClick={()=>{cM();sh.handleTab("sales");sh.setSearch(viewPO.linkedSO);}} style={{color:"var(--green)",fontWeight:600,cursor:"pointer",textDecoration:"underline"}}>{viewPO.linkedSO}</span></div>}
+      </div>}
 
       {viewPO.rejectionReason&&viewPO.status==="draft"&&<div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:6,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--red)"}}>{"ถูกปฏิเสธ: "+viewPO.rejectionReason}</div>}
 
