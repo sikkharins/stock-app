@@ -49,12 +49,15 @@ export default function ContactPage({sh,ft}){
   const delStaff=id=>setForm(f=>({...f,staff:(f.staff||[]).filter(s=>s.id!==id)}));
 
   const mk="c_"+ft;const title=isC?"ลูกค้า":"ซัพพลายเออร์";
+  const[groupFilter,setGroupFilter]=useState("all");
   const filtered=(contacts||[]).filter(c=>{
     if(!c||c.type!==ft)return false;
     if(sf&&c.salesPerson!==cu.salesName)return false;
+    if(isC&&groupFilter!=="all"){if(groupFilter==="regular"&&c.customerGroup!=="regular")return false;if(groupFilter==="walkin"&&c.customerGroup!=="walkin")return false;}
     if(search){const s=search.toLowerCase();if(!((cN(c)||"").toLowerCase().includes(s)||(c.email||"").toLowerCase().includes(s)))return false;}
     return true;
   });
+  const groupCounts=useMemo(()=>{if(!isC)return{};const custs=(contacts||[]).filter(c=>c&&c.type==="customer"&&(!sf||c.salesPerson===cu.salesName));return{all:custs.length,regular:custs.filter(c=>c.customerGroup==="regular").length,walkin:custs.filter(c=>c.customerGroup==="walkin").length};},[contacts,isC,sf,cu]);
   const[savingContact,setSavingContact]=useState(false);const[formErrors,setFormErrors]=useState([]);
   const save=async()=>{
     const errs=[];if(!form.name)errs.push("ยังไม่กรอกชื่อ");if(errs.length){setFormErrors(errs);return;}setFormErrors([]);
@@ -105,9 +108,12 @@ export default function ContactPage({sh,ft}){
       <StatCard label="PO รอดำเนินการ" value={supStats.pendingPOs} color={supStats.pendingPOs>0?"var(--orange)":"var(--green)"} accentBg={supStats.pendingPOs>0?"rgba(255,149,0,0.14)":"rgba(52,199,89,0.12)"}/>
       <StatCard label="Staff ทั้งหมด" value={supStats.totalStaff} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>
     </div>}
+    {isC&&<div style={{display:"flex",gap:6,marginBottom:12}}>
+      {[{k:"all",label:"ทั้งหมด",icon:""},{k:"regular",label:"ประจำ",icon:"⭐"},{k:"walkin",label:"หน้าร้าน",icon:"🏪"}].map(g=><button key={g.k} onClick={()=>setGroupFilter(g.k)} style={{padding:"6px 14px",borderRadius:20,border:groupFilter===g.k?"2px solid var(--blue)":"1px solid var(--line)",background:groupFilter===g.k?"rgba(0,122,255,0.1)":"var(--bg)",color:groupFilter===g.k?"var(--blue)":"var(--dim)",fontSize:12,fontWeight:groupFilter===g.k?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>{g.icon&&<span>{g.icon}</span>}{g.label}<span style={{fontSize:11,opacity:0.7,marginLeft:2}}>({groupCounts[g.k]||0})</span></button>)}
+    </div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
       <SB value={search} onChange={setSearch} placeholder={"ค้นหา"+title+"..."}/>
-      {ed&&<div style={{display:"flex",gap:8}}><Btn onClick={()=>oM("contactImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm({...ef});oM(mk);}}>{"+ เพิ่ม"+title}</Btn></div>}
+      {ed&&<div style={{display:"flex",gap:8}}><Btn onClick={()=>oM("contactImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm({...ef,customerGroup:isC?"walkin":undefined});oM(mk);}}>{"+ เพิ่ม"+title}</Btn></div>}
     </div>
     {filtered.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}>
       <div style={{fontSize:48,marginBottom:12}}>{isC?"C":"S"}</div>
@@ -121,6 +127,7 @@ export default function ContactPage({sh,ft}){
           <div onClick={isC?()=>setViewProfile(c):()=>setViewSupplier(c)} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{fontWeight:600,fontSize:14,cursor:"pointer",color:"var(--blue)"}}>{cN(c)}</div>
           <Badge status={c.type}/>
         </div>
+        {isC&&c.customerGroup&&<div style={{marginBottom:4}}><span style={{fontSize:11,borderRadius:99,padding:"2px 8px",fontWeight:500,...(c.customerGroup==="regular"?{background:"rgba(52,199,89,0.12)",color:"var(--green)"}:{background:"rgba(142,142,147,0.12)",color:"var(--faint)"})}}>{c.customerGroup==="regular"?"⭐ ประจำ":"🏪 หน้าร้าน"}</span></div>}
         <div style={{fontSize:12,color:"var(--dim)",marginBottom:2}}>{c.phone||"-"}</div>
         <div style={{fontSize:12,color:"var(--blue)",marginBottom:4}}>{c.email||"-"}</div>
         {!isC&&c.taxId&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:2}}>{"Tax ID: "+c.taxId}</div>}
@@ -161,6 +168,7 @@ export default function ContactPage({sh,ft}){
         <Field label="โทร"><input value={form.phone||""} onChange={e=>setF("phone",e.target.value)} style={IB}/></Field>
         <Field label="Email"><input value={form.email||""} onChange={e=>setF("email",e.target.value)} style={IB}/></Field>
         {isC&&<div style={{gridColumn:"1/-1"}}><Field label="เซลส์"><CustomSelect value={form.salesPerson||""} onChange={v=>setF("salesPerson",v)} options={[{value:"",label:"ไม่ระบุ"},...SS.map(s=>({value:s,label:s}))]}/></Field></div>}
+        {isC&&<Field label="กลุ่มลูกค้า"><CustomSelect value={form.customerGroup||""} onChange={v=>setF("customerGroup",v)} options={[{value:"walkin",label:"🏪 ลูกค้าหน้าร้าน"},{value:"regular",label:"⭐ ลูกค้าประจำ"}]}/></Field>}
         {isC&&<Field label="วันเครดิตเริ่มต้น"><CustomSelect value={String(form.defaultCreditDays||"")} onChange={v=>setF("defaultCreditDays",v?+v:0)} options={[{value:"",label:"ค่าเริ่มต้น (45 วัน)"},...[45,60,90].map(d=>({value:String(d),label:d+" วัน"}))]}/></Field>}
         {isC&&<Field label="ส่วนลดเริ่มต้น"><CustomSelect value={String(form.defaultDiscount!=null?form.defaultDiscount:"")} onChange={v=>setF("defaultDiscount",v!==""?+v:null)} options={[{value:"",label:"ค่าเริ่มต้น (1%)"},...[0,1,2,3,5].map(d=>({value:String(d),label:d===0?"ไม่ลด":d+"%"}))]}/></Field>}
         {isC&&<Field label="ประเภทชำระเริ่มต้น"><CustomSelect value={form.defaultPayType||""} onChange={v=>setF("defaultPayType",v||"")} options={[{value:"",label:"ค่าเริ่มต้น (เงินสด)"},{value:"cash",label:"เงินสด"},{value:"credit",label:"เครดิต"}]}/></Field>}
