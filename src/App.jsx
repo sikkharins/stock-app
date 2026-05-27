@@ -51,10 +51,6 @@ function LoginScreen({users,onLogin}){
     <div style={{marginBottom:20}}><Field label="Password"><input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&go()} style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field></div>
     {err&&<div style={{fontSize:13,color:"var(--red)",marginBottom:12,textAlign:"center"}}>{err}</div>}
     <button onClick={go} disabled={loading} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:loading?"var(--dim)":"var(--blue)",color:"#fff",fontWeight:500,fontSize:14,cursor:loading?"default":"pointer",fontFamily:"inherit"}}>{loading?"กำลังเข้าสู่ระบบ...":"เข้าสู่ระบบ"}</button>
-    {users.length>0&&<div style={{marginTop:20,padding:12,background:"var(--bg)",borderRadius:8,fontSize:12,color:"var(--dim)"}}>
-      <div style={{fontWeight:500,marginBottom:6}}>บัญชี:</div>
-      {users.map(u=><div key={u.id} style={{marginBottom:3}}>{u.username+" — "}<Badge status={u.role}/></div>)}
-    </div>}
   </div></div>;
 }
 
