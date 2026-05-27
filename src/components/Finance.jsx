@@ -34,7 +34,7 @@ export default function FinPage({sh}){
   const[batchLines,setBatchLines]=useState([{method:"เช็ค",amount:"",accId:bankAccs[0]?.id||1,chequeNo:"",chequeBank:"",chequeDue:"",date:todayStr()}]);
   const[cnFilter,setCnFilter]=useState("all");const[viewCN,setViewCN]=useState(null);const[viewSO,setViewSO]=useState(null);
   const[cnForm,setCnForm]=useState({type:"return",customerId:"",soNum:"",date:todayStr(),items:[],amount:"",reason:"",note:""});
-  const[viewPO,setViewPO]=useState(null);const[confirmDelPay,setConfirmDelPay]=useState(null);const[search,setSearch]=useState("");const[viewSupplier,setViewSupplier]=useState(null);const[viewPayHist,setViewPayHist]=useState(null);
+  const[viewPO,setViewPO]=useState(null);const[confirmDelPay,setConfirmDelPay]=useState(null);const[search,setSearch]=useState("");const[viewSupplier,setViewSupplier]=useState(null);const[viewPayHist,setViewPayHist]=useState(null);const[confirmDelTxn,setConfirmDelTxn]=useState(null);
   const[scnForm,setScnForm]=useState({supplierId:"",recognized:false,refNo:"",date:todayStr(),amount:"",reason:"",note:""});
   const[confirmDelScn,setConfirmDelScn]=useState(null);
   const[bapSup,setBapSup]=useState("");const[bapPOs,setBapPOs]=useState([]);const[bapCNs,setBapCNs]=useState([]);
@@ -327,7 +327,7 @@ export default function FinPage({sh}){
           <td style={{padding:"8px"}}>{t.from||"—"}</td>
           <td style={{padding:"8px",color:"var(--blue)",fontSize:12}}>{t.refId||"—"}</td>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{t.note||"—"}</td>
-          <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ed&&<button onClick={()=>setBankTxns(p=>p.filter(x=>x.id!==t.id))} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>
+          <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ed&&<button onClick={()=>setConfirmDelTxn(t)} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>
         </tr>;})}
       </tbody></table></div>
     </>}
@@ -806,6 +806,14 @@ export default function FinPage({sh}){
       <div style={{display:"flex",gap:10}}>
         <button onClick={()=>setConfirmDelPay(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--text)",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ยกเลิก</button>
         <button onClick={()=>{delPay(confirmDelPay.pay);setConfirmDelPay(null);}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"var(--red)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ยืนยันลบ</button>
+      </div>
+    </Modal>}
+
+    {confirmDelTxn&&<Modal title="ยืนยันลบรายการธนาคาร" onClose={()=>setConfirmDelTxn(null)}>
+      <div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px",marginBottom:16,fontSize:13,color:"var(--red)"}}>{"จะลบรายการ "+(confirmDelTxn.type==="in"?"เงินเข้า":"เงินออก")+" ฿"+fmt(confirmDelTxn.amount)+" ("+(confirmDelTxn.from||"—")+") ถาวร"}</div>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={()=>setConfirmDelTxn(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--text)",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ยกเลิก</button>
+        <button onClick={()=>{setBankTxns(p=>p.filter(x=>x.id!==confirmDelTxn.id));setConfirmDelTxn(null);}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"var(--red)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>
       </div>
     </Modal>}
 
