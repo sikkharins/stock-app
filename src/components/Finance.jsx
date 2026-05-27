@@ -40,7 +40,7 @@ export default function FinPage({sh}){
   const[bapSup,setBapSup]=useState("");const[bapPOs,setBapPOs]=useState([]);const[bapCNs,setBapCNs]=useState([]);
   const[bapMethod,setBapMethod]=useState("โอนเงินออก");const[bapAccId,setBapAccId]=useState(bankAccs[0]?.id||1);const[bapDate,setBapDate]=useState(todayStr());const[bapNote,setBapNote]=useState("");
 
-  const cnTot=cn=>{if(cn.type==="promo")return +cn.amount||0;const items=cn.items||[];if(cn.type!=="defective"&&cn.soNum){const so=sales.find(s=>s.soNum===cn.soNum);if(so&&so.discountAmt>0){const sub=(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);const r=sub>0?(sub-so.discountAmt)/sub:1;return items.reduce((s,it)=>{const si=(so.items||[]).find(x=>x.productId===it.productId);return s+it.qty*(si?Math.round(si.price*r*100)/100:it.price);},0);}}return items.reduce((s,i)=>s+i.qty*i.price,0);};
+  const cnTot=cn=>{if(cn.type==="promo")return +cn.amount||0;const items=cn.items||[];if(cn.type!=="defective"&&cn.soNum){const so=sales.find(s=>s.soNum===cn.soNum);if(so&&so.discountAmt>0){const sub=(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);const r=sub>0?(sub-so.discountAmt)/sub:1;const raw=items.reduce((s,it)=>{const si=(so.items||[]).find(x=>x.productId===it.productId);return s+it.qty*(si?si.price*r:it.price);},0);return Math.round(raw*100)/100;}}return items.reduce((s,i)=>s+i.qty*i.price,0);};
 
   const apList=useMemo(()=>pos.filter(po=>po.status==="received").map(po=>{const sup=contacts.find(c=>c.id===po.supplierId);const total=po.items.reduce((s,i)=>s+i.qty*i.cost,0);const paid=payments.filter(p=>p.refId===po.poNum&&p.type==="ap").reduce((s,p)=>s+(+p.amount||0),0);const rem=total-paid;return{...po,supName:sup?cN(sup):"-",total,paid,cnDeduct:0,remaining:rem,status2:paid===0?"unpaid":rem<=0?"paid":"partial"};}),[pos,contacts,payments]);
   const arList=useMemo(()=>sales.filter(so=>so.status==="completed").map(so=>{const cust=contacts.find(c=>c.id===so.customerId);const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0)+(so.vatAmount||0);const paid=soPays.reduce((s,p)=>s+(+p.amount||0),0);const rem=tot-paid;
@@ -54,6 +54,8 @@ export default function FinPage({sh}){
   const openEditPay=(p,nameStr)=>{setPayForm({editId:p.id,refId:p.refId,type:p.type,amount:String(p.amount),method:p.method,date:p.date,note:p.note||"",name:nameStr||"",accId:p.accId||bankAccs[0]?.id||1,chequeNo:p.chequeNo||"",chequeBank:p.chequeBank||"",chequeDue:p.chequeDue||""});oM("addPay");};
   const delPay=(p)=>{setPayments(prev=>prev.filter(x=>x.id!==p.id));setBankTxns(prev=>prev.filter(t=>!(t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="in")));if(p.method==="เช็ค"&&p.chequeNo)setCheques(prev=>prev.filter(c=>!(c.chequeNo===p.chequeNo&&c.refId===p.refId)));};
   const savePay=()=>{if(!payForm.amount||+payForm.amount<=0)return;const amt=+payForm.amount;if(payForm.method==="เช็ค"&&payForm.type==="ar"&&!payForm.chequeNo)return;
+    const target=(payForm.type==="ap"?apList:arList).find(x=>(payForm.type==="ap"?x.poNum:x.soNum)===payForm.refId);
+    if(target){let allowed=Math.max(0,target.remaining);if(payForm.editId){const oldP=payments.find(x=>x.id===payForm.editId);if(oldP)allowed+=(+oldP.amount||0);}if(amt>allowed+0.01){alert("ยอดชำระเกินยอดคงค้าง (เหลือ ฿"+fmt(allowed)+")");return;}}
     const isApBank=payForm.type==="ap"&&(payForm.method==="โอนเงินออก"||payForm.method==="จ่ายEPP")&&payForm.accId;
     const isArBank=payForm.type==="ar"&&payForm.method==="โอนเงิน"&&payForm.accId;
     if(payForm.editId){const old=payments.find(x=>x.id===payForm.editId);setPayments(p=>p.map(x=>x.id===payForm.editId?{...x,amount:amt,method:payForm.method,date:payForm.date,note:payForm.note,accId:payForm.accId,chequeNo:payForm.chequeNo,chequeBank:payForm.chequeBank,chequeDue:payForm.chequeDue}:x));if(old){setBankTxns(prev=>prev.filter(t=>!(t.refId===old.refId&&Math.abs(t.amount-old.amount)<0.01&&t.date===old.date)));if(old.method==="เช็ค"&&old.chequeNo)setCheques(prev=>prev.filter(c=>!(c.chequeNo===old.chequeNo&&c.refId===old.refId)));}if(isArBank){setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId}]);}if(isApBank){setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:(payForm.method==="จ่ายEPP"?"จ่ายEPP ":"จ่าย ")+payForm.refId}]);}if(payForm.method==="เช็ค"&&payForm.type==="ar"){setCheques(p=>[...p,{id:Date.now()+2,chequeNo:payForm.chequeNo,bank:payForm.chequeBank,amount:amt,date:payForm.date,dueDate:payForm.chequeDue,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,status:"pending"}]);}
@@ -122,7 +124,13 @@ export default function FinPage({sh}){
 
   const saveChq=()=>{if(!chqForm.chequeNo||!chqForm.amount||+chqForm.amount<=0)return;if(chqForm.id){setCheques(p=>p.map(c=>c.id===chqForm.id?{...chqForm,amount:+chqForm.amount}:c));}else{setCheques(p=>[...p,{id:Date.now(),...chqForm,amount:+chqForm.amount}]);}cM();};
   const openChqEdit=c=>{setChqForm({...c,amount:String(c.amount)});oM("addChq");};
-  const updateChqStatus=(id,st,extra)=>{setCheques(p=>p.map(c=>c.id===id?{...c,status:st,...(extra||{})}:c));if(st==="cleared"){const chq=cheques.find(c=>c.id===id);if(chq&&chq.depositAccId){setBankTxns(p=>[...p,{id:Date.now(),accId:chq.depositAccId,type:"in",amount:chq.amount,date:todayStr(),from:"เช็ค "+chq.chequeNo,refId:chq.refId||"",note:"เคลียร์เช็ค"}]);}}};
+  const updateChqStatus=(id,st,extra)=>{
+    const old=cheques.find(c=>c.id===id);if(!old)return;
+    if(st==="cleared"&&old.status==="bounced"){alert("เช็คเด้งแล้ว ไม่สามารถเคลียร์ได้");return;}
+    setCheques(p=>p.map(c=>c.id===id?{...c,status:st,...(extra||{})}:c));
+    if(st==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now(),accId:old.depositAccId,type:"in",amount:old.amount,date:todayStr(),from:"เช็ค "+old.chequeNo,refId:old.refId||"",note:"เคลียร์เช็ค"}]);}
+    if(st==="bounced"&&old.status==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now()+1,accId:old.depositAccId,type:"out",amount:old.amount,date:todayStr(),from:"เช็คเด้ง "+old.chequeNo,refId:old.refId||"",note:"เช็คเด้ง (กลับรายการเคลียร์)"}]);}
+  };
   const[chqConfirm,setChqConfirm]=useState(null);
   const chqFiltered=cheques.filter(c=>chqFilter==="all"||c.status===chqFilter).filter(c=>{if(!search)return true;const q=search.toLowerCase();return(c.chequeNo||"").toLowerCase().includes(q)||(c.bank||"").toLowerCase().includes(q)||(c.from||"").toLowerCase().includes(q)||(c.refId||"").toLowerCase().includes(q);});
   const chqTotalPending=cheques.filter(c=>c.status==="pending").reduce((s,c)=>s+c.amount,0);
@@ -864,6 +872,18 @@ export default function FinPage({sh}){
         if(cnForm.type==="return"&&(!cnForm.soNum||(cnForm.items||[]).length===0))return;
         if(cnForm.type==="promo"&&(!cnForm.amount||+cnForm.amount<=0))return;
         for(const it of(cnForm.items||[])){if(!it.productId||it.qty<=0)return;}
+        if(cnForm.type==="defective"||cnForm.type==="return"){
+          const refSoNum=cnForm.soNum||(cnForm.defectiveId?defectives.find(d=>d.id===cnForm.defectiveId)?.soNum:null);
+          if(refSoNum){
+            const refSo=sales.find(s=>s.soNum===refSoNum);
+            if(refSo){
+              const soSub=(refSo.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
+              const soTotal=soSub-(refSo.discountAmt||0)+(refSo.vatAmount||0);
+              const cnItems=(cnForm.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
+              if(cnItems>soTotal+0.01){alert("ยอด CN (฿"+fmt(cnItems)+") เกินยอด SO ต้นฉบับ (฿"+fmt(soTotal)+")");return;}
+            }
+          }
+        }
         const ts=Date.now();
         if(isEdit){
           const orig=cnotes.find(c=>c.id===cnForm.id);

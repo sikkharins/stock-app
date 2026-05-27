@@ -78,7 +78,7 @@ export default function App(){
   const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[fabOpen,setFabOpen]=useState(false);
   // Draggable FAB (AssistiveTouch style)
   const fabRef=useRef(null);const fabDrag=useRef({dragging:false,startX:0,startY:0,startLeft:0,startTop:0,moved:false});
-  const [fabPos,setFabPos]=useState(()=>{try{const s=JSON.parse(localStorage.getItem("fab_pos"));return s&&s.x!=null?s:{x:null,y:null};}catch{return{x:null,y:null};}});
+  const [fabPos,setFabPos]=useState(()=>{try{const s=JSON.parse(localStorage.getItem("fab_pos"));const sz=44;if(s&&s.x!=null&&s.x>=0&&s.y>=0&&s.x<=window.innerWidth-sz&&s.y<=window.innerHeight-sz)return s;}catch{}return{x:null,y:null};});
   const [fabTouched,setFabTouched]=useState(false);
   const fabIdleTimer=useRef(null);
   const resetFabIdle=useCallback(()=>{setFabTouched(true);clearTimeout(fabIdleTimer.current);fabIdleTimer.current=setTimeout(()=>setFabTouched(false),3000);},[]);
@@ -100,9 +100,12 @@ export default function App(){
   const backToastTimer=useRef(null);const[backToast,setBackToast]=useState(false);
   const backStateRef=useRef({fabOpen,sideOpen,showNotif,showBackup,tab,backToast});
   useEffect(()=>{backStateRef.current={fabOpen,sideOpen,showNotif,showBackup,tab,backToast};},[fabOpen,sideOpen,showNotif,showBackup,tab,backToast]);
+  const lastBackRef=useRef(0);
   useEffect(()=>{
     history.pushState({app:true},"");
     const onBack=()=>{
+      const now=Date.now();if(now-lastBackRef.current<80){history.pushState({app:true},"");return;}
+      lastBackRef.current=now;
       const s=backStateRef.current;
       if(s.fabOpen){setFabOpen(false);history.pushState({app:true},"");return;}
       if(s.sideOpen){setSideOpen(false);history.pushState({app:true},"");return;}
@@ -136,7 +139,7 @@ export default function App(){
   const pN=p=>lang==="th"?(p.nameT||p.name):p.name;
   const cN=c=>lang==="th"?(c.nameT||c.name):c.name;
   const lowStock=products.filter(p=>p.minStock>0&&p.stock<=p.minStock);
-  const gP=k=>{if(!cu)return{access:false};let p=cu.perms[k];if(!p){if(cu.role==="Admin")return{access:true,read:true,create:true,edit:true,delete:true,approve:true};return{access:false};}let r;if(typeof p==="string"){if(p==="edit")r={access:true,read:true,create:true,edit:true,delete:true};else if(p==="view")r={access:true,read:true};else return{access:false};}else r=p;if(cu.role==="Admin")return{...r,approve:true};return r;};
+  const gP=k=>{if(!cu)return{access:false};let p=(cu.perms||{})[k];if(!p){if(cu.role==="Admin")return{access:true,read:true,create:true,edit:true,delete:true,approve:true};return{access:false};}let r;if(typeof p==="string"){if(p==="edit")r={access:true,read:true,create:true,edit:true,delete:true};else if(p==="view")r={access:true,read:true};else return{access:false};}else r=p;if(cu.role==="Admin")return{...r,approve:true};return r;};
   const canA=k=>!!gP(k).access;const canE=k=>!!gP(k).edit;const canC=k=>!!gP(k).create;const canApv=k=>!!gP(k).approve;
   const getCN=id=>{const c=cats.find(x=>x.id===+id);return c?c.name:"-";};
   const addLog=log=>setLogs(p=>[log,...p]);
@@ -211,16 +214,25 @@ export default function App(){
     return()=>{cancelled=true;};
   },[]);
 
+  const pendingSaveRef=useRef(null);
   useEffect(()=>{if(!loaded)return;
-    const skip=realtimeSkipRef.current;
-    const skipped=new Set(skip);skip.clear();
-    setSaving(true);const tm=setTimeout(()=>{
     const allEntries=[["v3_products",products],["v3_contacts",contacts],["v3_pos",pos],["v3_sales",sales],["v3_cats",cats],["v3_brands",brands],["v3_logs",logs],["v3_payments",payments],["v3_activity",actLogs],["v3_quotes",quotes],["v3_targets",targets],["v3_audit",audit],["v3_pricehist",priceHist],["v3_cheques",cheques],["v3_bankaccs",bankAccs],["v3_banktxns",bankTxns],["v3_cnotes",cnotes],["v3_billings",billings],["v3_defectives",defectives],["v3_supcnotes",supCNotes],["v3_promos",promos]];
+    pendingSaveRef.current=allEntries;
+    setSaving(true);const tm=setTimeout(()=>{
+    const skipped=new Set(realtimeSkipRef.current);realtimeSkipRef.current.clear();
     allEntries.forEach(([k,v])=>saveData(k,v));
     const entries=skipped.size>0?allEntries.filter(([k])=>!skipped.has(k.replace("v3_",""))):allEntries;
     if(entries.length>0)saveAllToSupabase(entries,cuRef.current?.id).catch(e=>console.warn("Supabase save error:",e.message));
+    pendingSaveRef.current=null;
     setSaving(false);
   },800);return()=>clearTimeout(tm);},[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,loaded]);
+
+  useEffect(()=>{
+    const flush=()=>{if(pendingSaveRef.current){pendingSaveRef.current.forEach(([k,v])=>saveData(k,v));}};
+    window.addEventListener("beforeunload",flush);
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")flush();});
+    return()=>{window.removeEventListener("beforeunload",flush);};
+  },[]);
 
   useEffect(()=>{
     if(!cu)return;

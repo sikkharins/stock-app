@@ -1,13 +1,13 @@
 import { STOCK_STATUS } from "./constants.js";
 
 export const fmt = n => Number(n).toLocaleString("th-TH");
-export const todayStr = () => new Date().toISOString().split("T")[0];
+export const todayStr = () => {const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
 export const nowStr = () => {const d=new Date();return String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+(d.getFullYear()+543)+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");};
 export const toBE = d => {if(!d)return"-";const p=(d||"").split("-");if(p.length!==3)return d;return p[2]+"/"+p[1]+"/"+(+p[0]+543);};
 export const fmtD = s => {if(!s||s==="-")return"-";if(s.includes("-")&&s.split("-").length===3)return toBE(s);const[datePart,timePart]=(s+" ").split(" ");const dp=datePart.split("/");if(dp.length===3){let y=+dp[2];if(y<100)y+=2500;dp[0]=dp[0].padStart(2,"0");dp[1]=dp[1].padStart(2,"0");return dp[0]+"/"+dp[1]+"/"+y+(timePart.trim()?" "+timePart.trim():"");}return s;};
 export const mkLog = (pid,type,qty,before,after,ref,note,user) => ({id:Date.now()+Math.random(),date:nowStr(),productId:+pid,type,qty:+qty,qtyBefore:+before,qtyAfter:+after,ref:ref||"-",note:note||"",user:user||"system"});
 export const mkAudit = (action,detail,user) => ({id:Date.now()+Math.random(),date:nowStr(),action,detail,user:user||"system"});
-export const AddDue = (d,n) => {const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString().split("T")[0];};
+export const AddDue = (d,n) => {const p=(d||"").split("-");if(p.length!==3)return d;const x=new Date(+p[0],+p[1]-1,+p[2]);x.setDate(x.getDate()+n);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");};
 export const fmtDur = s => {if(!s||s<0)return"-";if(s<60)return s+"วิ";const m=Math.floor(s/60);if(m<60)return m+"น.";return Math.floor(m/60)+"ชม. "+(m%60)+"น.";};
 export const getSS = (pid,sales) => {
   let last = null;

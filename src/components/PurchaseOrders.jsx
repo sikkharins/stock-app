@@ -58,6 +58,7 @@ export default function POPage({sh}){
 
   const savePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
+    if(form.dropShip&&!form.dropShipCustomerId){alert("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
     const yr=new Date().getFullYear();const mx=pos.reduce((m,p)=>{const mt=p.poNum.match(/^PO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const pn="PO-"+yr+"-"+String(mx+1).padStart(3,"0");
     setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",status:"draft",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
     addA("สร้าง PO (Draft)",pn);cM();
@@ -73,6 +74,7 @@ export default function POPage({sh}){
     const{po,action}=appModal;
     const entry={approver:cu.username,approverName:cu.username,date:nowStr(),comment:appComment,signature:cu.signature||null};
     if(action==="approve"){
+      if(po.dropShip&&!po.dropShipCustomerId){alert("PO นี้เป็น drop-ship แต่ไม่มีลูกค้าปลายทาง — กรุณาแก้ไข PO ก่อนอนุมัติ");setAppModal(null);setAppComment("");return;}
       setPOs(p=>p.map(x=>x.id!==po.id?x:{...x,status:"approved",approval:entry,approvalHistory:[...(x.approvalHistory||[]),{action:"approved",...entry}]}));
       addA("อนุมัติ PO",po.poNum);
       if(po.dropShip&&po.dropShipCustomerId){
@@ -101,7 +103,11 @@ export default function POPage({sh}){
   };
 
   const cancelPO=po=>{
-    if(po.linkedSO){setSales(p=>p.filter(s=>s.soNum!==po.linkedSO||s.status==="completed"));addA("ลบ SO อัตโนมัติ (ยกเลิก PO)",po.linkedSO);}
+    if(po.linkedSO){
+      const linkedSo=sales.find(s=>s.soNum===po.linkedSO);
+      if(linkedSo&&linkedSo.status==="completed"){alert("ไม่สามารถยกเลิก PO นี้ได้ — SO "+po.linkedSO+" จัดส่งแล้ว");setConfirmCancel(null);return;}
+      setSales(p=>p.filter(s=>s.soNum!==po.linkedSO));addA("ลบ SO อัตโนมัติ (ยกเลิก PO)",po.linkedSO);
+    }
     setPOs(p=>p.map(x=>x.id===po.id?{...x,status:"cancelled"}:x));
     addA("ยกเลิก PO",po.poNum);setConfirmCancel(null);cM();
   };
@@ -112,6 +118,7 @@ export default function POPage({sh}){
   };
   const updatePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
+    if(form.dropShip&&!form.dropShipCustomerId){alert("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
     const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
     setPOs(p=>p.map(x=>x.id===editPO.id?{...x,...base}:x));
     addA("แก้ไข PO",editPO.poNum);setEditPO(null);cM();

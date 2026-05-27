@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { IB, TAB_LABELS } from "../utils/constants.js";
 import { fmt } from "../utils/helpers.js";
-import { createUser } from "../utils/auth.js";
+import { createUser, deleteUser } from "../utils/auth.js";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Badge from "./ui/Badge.jsx";
 import SB from "./ui/SearchBar.jsx";
@@ -82,7 +82,7 @@ export default function ContactPage({sh,ft}){
     }
     setSavingContact(false);
   };
-  const del=id=>{const c=(contacts||[]).find(x=>x.id===id);if(!confirm("ต้องการลบ "+(cN(c)||c?.name||"รายการนี้")+" ?"))return;setContacts(p=>p.filter(x=>x.id!==id));};
+  const del=async id=>{const c=(contacts||[]).find(x=>x.id===id);if(!c)return;const staffWithAuth=(c.type==="supplier"&&Array.isArray(c.staff))?c.staff.filter(s=>s.authId):[];const extraWarn=staffWithAuth.length>0?"\n\nจะลบบัญชีผู้ใช้ที่ผูกอยู่ "+staffWithAuth.length+" คนด้วย":"";if(!confirm("ต้องการลบ "+(cN(c)||c.name||"รายการนี้")+" ?"+extraWarn))return;for(const s of staffWithAuth){try{await deleteUser(s.authId);}catch(e){console.warn("Failed to delete supplier auth:",s.username,e?.message);}}setContacts(p=>p.filter(x=>x.id!==id));};
 
   const supStats=useMemo(()=>{
     if(isC)return null;

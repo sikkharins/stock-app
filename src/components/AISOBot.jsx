@@ -132,8 +132,10 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
   const chatKey = cu?.id ? `ai_chat_${cu.id}` : null;
 
   useEffect(() => {
-    const keys = ["bot_config", "ai_memory", "ai_action_log", "ai_product_notes", "ai_customer_notes"];
-    if (chatKey) keys.push(chatKey);
+    setMsgs([{ role: "bot", text: WELCOME, ts: Date.now() }]);
+    aiMsgsRef.current = [];
+    if (!chatKey) return;
+    const keys = ["bot_config", "ai_memory", "ai_action_log", "ai_product_notes", "ai_customer_notes", chatKey];
     supabase.from("app_data").select("key, data").in("key", keys).then(({ data: rows }) => {
       (rows || []).forEach(r => {
         if (r.key === "bot_config" && r.data && Object.keys(r.data).length > 0) {
