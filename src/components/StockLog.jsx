@@ -8,11 +8,13 @@ import StatCard from "./ui/StatCard.jsx";
 import { Modal } from "./ui/Modal.jsx";
 
 export default function LogPage({sh}){
-  const{pN,cN,products,logs,search,setSearch,sales,contacts,payments,pos,cnotes,billings,defectives}=sh;
+  const{pN,cN,products,logs,setLogs,search,setSearch,sales,contacts,payments,pos,cnotes,billings,defectives,canE}=sh;
   const[fType,setFType]=useState("");const[fProd,setFProd]=useState("");const[dateFrom,setDateFrom]=useState("");const[dateTo,setDateTo]=useState("");
   const[viewSO,setViewSO]=useState(null);
   const[viewPO,setViewPO]=useState(null);
   const[viewCN,setViewCN]=useState(null);
+  const[confirmDelLog,setConfirmDelLog]=useState(null);
+  const ed=canE("stock_log");
 
   const filtered=logs.filter(l=>{if(fType&&l.type!==fType)return false;if(fProd&&l.productId!==+fProd)return false;const ld=(l.date||"").slice(0,10);if(dateFrom&&ld<dateFrom)return false;if(dateTo&&ld>dateTo)return false;if(search){const s=search.toLowerCase();const pr=products.find(x=>x.id===l.productId);if(!((l.ref||"").toLowerCase().includes(s)||(pr?(pN(pr)||"").toLowerCase().includes(s):false)))return false;}return true;});
   const stats=useMemo(()=>{let inQty=0,outQty=0;filtered.forEach(l=>{const isIn=l.type==="in"||l.type==="adjust_in"||l.type==="cn_return"||(l.type==="cn_edit"&&l.qtyAfter>l.qtyBefore);if(isIn)inQty+=Math.abs(l.qty);else outQty+=Math.abs(l.qty);});return{total:filtered.length,inQty,outQty};},[filtered]);
@@ -56,8 +58,8 @@ export default function LogPage({sh}){
       {(dateFrom||dateTo)&&<button onClick={()=>{setDateFrom("");setDateTo("");}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:"1px solid var(--line)",background:"transparent",cursor:"pointer",color:"var(--dim)"}}>ล้าง</button>}
     </div>
     {filtered.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}><div style={{fontSize:18,marginBottom:8,color:"var(--faint)"}}>—</div><div style={{color:"var(--dim)",fontSize:14}}>{hasFilter?"ไม่พบรายการที่ตรงกับตัวกรอง":"ยังไม่มีประวัติการเคลื่อนไหวสต็อก"}</div></div>}
-    <div style={{overflowX:"auto"}}><table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}><thead><tr style={{borderBottom:"0.5px solid var(--line)",background:"var(--bg)"}}>{["วันที่","ประเภท","สินค้า","ก่อน","เคลื่อนไหว","หลัง","อ้างอิง","ผู้บันทึก"].map((h,i)=><th key={i} style={{textAlign:"left",padding:"8px",fontWeight:500,color:"var(--dim)",fontSize:12}}>{h}</th>)}</tr></thead>
-    <tbody>{filtered.map(l=>{const pr=products.find(x=>x.id===l.productId);const mt=MOVE_TYPES[l.type]||{label:l.type,color:"var(--dim)",bg:"var(--line)"};const isIn=l.type==="in"||l.type==="adjust_in"||l.type==="cn_return"||(l.type==="cn_edit"&&l.qtyAfter>l.qtyBefore);return <tr key={l.id} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"8px",color:"var(--dim)",fontSize:11}}>{fmtD(l.date)}</td><td style={{padding:"8px"}}><span style={{background:mt.bg,color:mt.color,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:600}}>{mt.label}</span></td><td style={{padding:"8px",fontWeight:500}}>{pr?pr.brand+" — "+pN(pr):"-"}</td><td style={{padding:"8px",color:"var(--dim)"}}>{l.qtyBefore}</td><td style={{padding:"8px",fontWeight:700,color:isIn?"var(--green)":"var(--red)"}}>{(isIn?"+":"-")+Math.abs(l.qty)}</td><td style={{padding:"8px",fontWeight:500}}>{l.qtyAfter}</td><td style={{padding:"8px",fontSize:12}}>{isClickable(l.ref)?<span style={{color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>openRef(l.ref)}>{l.ref}</span>:<span style={{color:"var(--blue)"}}>{l.ref}</span>}</td><td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{l.user}</td></tr>;})}</tbody></table></div>
+    <div style={{overflowX:"auto"}}><table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}><thead><tr style={{borderBottom:"0.5px solid var(--line)",background:"var(--bg)"}}>{["วันที่","ประเภท","สินค้า","ก่อน","เคลื่อนไหว","หลัง","อ้างอิง","ผู้บันทึก",""].map((h,i)=><th key={i} style={{textAlign:"left",padding:"8px",fontWeight:500,color:"var(--dim)",fontSize:12}}>{h}</th>)}</tr></thead>
+    <tbody>{filtered.map(l=>{const pr=products.find(x=>x.id===l.productId);const mt=MOVE_TYPES[l.type]||{label:l.type,color:"var(--dim)",bg:"var(--line)"};const isIn=l.type==="in"||l.type==="adjust_in"||l.type==="cn_return"||(l.type==="cn_edit"&&l.qtyAfter>l.qtyBefore);return <tr key={l.id} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"8px",color:"var(--dim)",fontSize:11}}>{fmtD(l.date)}</td><td style={{padding:"8px"}}><span style={{background:mt.bg,color:mt.color,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:600}}>{mt.label}</span></td><td style={{padding:"8px",fontWeight:500}}>{pr?pr.brand+" — "+pN(pr):"-"}</td><td style={{padding:"8px",color:"var(--dim)"}}>{l.qtyBefore}</td><td style={{padding:"8px",fontWeight:700,color:isIn?"var(--green)":"var(--red)"}}>{(isIn?"+":"-")+Math.abs(l.qty)}</td><td style={{padding:"8px",fontWeight:500}}>{l.qtyAfter}</td><td style={{padding:"8px",fontSize:12}}>{isClickable(l.ref)?<span style={{color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>openRef(l.ref)}>{l.ref}</span>:<span style={{color:"var(--blue)"}}>{l.ref}</span>}</td><td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{l.user}</td><td style={{padding:"8px",whiteSpace:"nowrap"}}>{ed&&<button onClick={()=>setConfirmDelLog(l)} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td></tr>;})}</tbody></table></div>
 
     {filtered.length>0&&<div style={{display:"flex",gap:16,padding:"10px 16px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)",marginTop:10,fontSize:13,flexWrap:"wrap"}}>
       <span style={{color:"var(--dim)"}}>{stats.total+" รายการ"}</span>
@@ -201,5 +203,13 @@ export default function LogPage({sh}){
         </div>}
       </Modal>;
     })()}
+
+    {confirmDelLog&&<Modal title="ยืนยันลบรายการสต็อก" onClose={()=>setConfirmDelLog(null)}>
+      <div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px",marginBottom:16,fontSize:13,color:"var(--red)"}}>{"จะลบรายการ "+(MOVE_TYPES[confirmDelLog.type]?MOVE_TYPES[confirmDelLog.type].label:confirmDelLog.type)+" "+Math.abs(confirmDelLog.qty)+" ชิ้น ("+(products.find(p=>p.id===confirmDelLog.productId)?pN(products.find(p=>p.id===confirmDelLog.productId)):"—")+") ถาวร"}</div>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={()=>setConfirmDelLog(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--text)",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ยกเลิก</button>
+        <button onClick={()=>{setLogs(p=>p.filter(x=>x.id!==confirmDelLog.id));setConfirmDelLog(null);}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"var(--red)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>
+      </div>
+    </Modal>}
   </div>;
 }
