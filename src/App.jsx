@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { ALL_TABS, TAB_LABELS, IB } from "./utils/constants.js";
-import { getNotifs, mkAudit, nowStr, todayStr } from "./utils/helpers.js";
+import { getNotifs, mkAudit, nowStr, todayStr, round2 } from "./utils/helpers.js";
 import { loadData, saveData, loadAllFromSupabase, saveAllToSupabase, subscribeRealtime, unsubscribeRealtime } from "./utils/storage.js";
 import { signIn, signOut, getSession, getProfile, getAllProfiles, migrateUsers } from "./utils/auth.js";
 import { initProducts, initContacts, initPOs, initSales, initCats, initBrands, initUsers, initQuotes, initTargets } from "./data/initData.js";
@@ -238,7 +238,7 @@ export default function App(){
 
   const handleTab=nt=>{setTab(nt);setSearch("");setSideOpen(false);setSess(s=>{if(!s)return s;const now=Date.now();const hist=[...s.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}hist.push({tab:nt,enterTime:now,endTime:null,duration:null});return{...s,tabHistory:hist};});};
   const handleLogin=user=>{const ft=[...ALL_TABS,"users"].find(tb=>{const p=user.perms[tb];return p&&(typeof p==="string"?p!=="none":p.access);})||"dashboard";const now=Date.now();setCu(user);setTab(ft);setSess({userId:user.id,username:user.username,role:user.role,salesName:user.salesName||"",supplierName:user.supplierName||"",loginTime:now,loginTimeStr:nowStr(),logoutTime:null,logoutTimeStr:null,totalDuration:null,tabHistory:[{tab:ft,enterTime:now,endTime:null,duration:null}]});};
-  const handleLogout=()=>{if(sess){const now=Date.now();const hist=[...sess.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}setActLogs(p=>[{...sess,logoutTime:now,logoutTimeStr:nowStr(),totalDuration:Math.floor((now-sess.loginTime)/1000),tabHistory:hist},...p].slice(0,200));}signOut().catch(()=>{});setSess(null);setCu(null);};
+  const handleLogout=()=>{if(sess){const now=Date.now();const hist=[...sess.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}setActLogs(p=>[{...sess,logoutTime:now,logoutTimeStr:nowStr(),totalDuration:Math.floor((now-sess.loginTime)/1000),tabHistory:hist},...p].slice(0,200));}signOut().catch(()=>{});Object.keys(localStorage).filter(k=>k.startsWith("v3_")&&k!=="v3_theme"||k==="fab_pos"||k==="ai_bot_settings").forEach(k=>localStorage.removeItem(k));setSess(null);setCu(null);};
 
   if(!loaded)return <><style>{THEME_CSS}</style><AppSkeleton/></>;
   if(!cu)return <><style>{THEME_CSS}</style><LoginScreen users={users} onLogin={handleLogin}/></>;
@@ -377,8 +377,8 @@ export default function App(){
       const sn="SO-"+yr+"-"+String(mx+1).padStart(3,"0");
       const items=(data.items||[]).map(i=>({productId:+i.productId,qty:+i.qty,price:+i.price}));
       const sub=items.reduce((s,i)=>s+i.qty*i.price,0);
-      const disc=data.payType==="cash"?Math.round(sub*(data.discPct||1)/100*100)/100:0;
-      const vatAmt=data.includeVat!==false?Math.round((sub-disc)*7/107*100)/100:0;
+      const disc=data.payType==="cash"?round2(sub*(data.discPct||1)/100):0;
+      const vatAmt=data.includeVat!==false?round2((sub-disc)*7/107):0;
       setSales(p=>[...p,{id:Date.now(),soNum:sn,status:"pending_delivery",fromQuote:"",customerId:+data.customerId,date:todayStr(),items,origPrices:items.map(i=>+i.price),includeVat:data.includeVat!==false,vatAmount:vatAmt,payType:data.payType||"cash",discountAmt:disc,discPct:data.payType==="cash"?(data.discPct||1):0,extraDiscPct:0,creditDays:data.payType==="credit"?(data.creditDays||45):0,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างโดย AI Bot"}]);
       addA("สร้าง SO (AI Bot)",sn);
     }} onCreatePO={(data)=>{

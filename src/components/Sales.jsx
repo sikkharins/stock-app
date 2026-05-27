@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2 } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -42,7 +42,7 @@ function SOList({sh}){
   const hasApv=canApv("sales");
   const doSave=(soId)=>{
     const items=form.items.map(i=>({productId:+i.productId,qty:+i.qty,price:+i.price}));
-    const sub=items.reduce((s,i)=>s+i.qty*i.price,0);const disc=payType==="cash"?Math.round(sub*discPct/100*100)/100:0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?Math.round(sub*ep/100*100)/100:0;const totalDisc=disc+extraDisc;const vatAmt=incVat?Math.round((sub-totalDisc)*7/107*100)/100:0;
+    const sub=items.reduce((s,i)=>s+i.qty*i.price,0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;const totalDisc=disc+extraDisc;const vatAmt=incVat?round2((sub-totalDisc)*7/107):0;
     const selRep=form.useVatRep&&form.vatRepId?curVatReps.find(r=>r.id===+form.vatRepId):null;
     const origPrices=items.map(i=>{const p=products.find(x=>x.id===i.productId);return p?+p.price:+i.price;});
     const priceChanged=items.some((i,idx)=>+i.price!==origPrices[idx]);
@@ -95,7 +95,7 @@ function SOList({sh}){
 
   const renderForm=(soId)=>{
     const exId=soId||0;const hasOver=form.items.some(it=>it.productId&&+it.qty>getAvail(it.productId,exId));
-    const sub=form.items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);const disc=payType==="cash"?Math.round(sub*discPct/100*100)/100:0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?Math.round(sub*ep/100*100)/100:0;const totalDisc=disc+extraDisc;const after=sub-totalDisc;const vatAmt=incVat?Math.round(after*7/107*100)/100:0;
+    const sub=form.items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;const totalDisc=disc+extraDisc;const after=sub-totalDisc;const vatAmt=incVat?round2(after*7/107):0;
     return <div>
       <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <Field label="ลูกค้า"><CustomSelect searchable value={form.customerId} onChange={v=>setCust(v)} options={[{value:"",label:"เลือก..."},...custs.map(c=>({value:String(c.id),label:cN(c)}))]}/></Field>
@@ -241,8 +241,8 @@ function SOList({sh}){
       <table style={{width:"100%",borderCollapse:"collapse",marginTop:10}}><thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{["สินค้า","Qty","ราคา","รวม"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"var(--dim)"}}>{h}</th>)}</tr></thead><tbody>{viewSO.items.map((it,i)=>{const pr=products.find(x=>x.id===it.productId);return <tr key={i} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"6px 8px"}}>{pr?pN(pr):"-"}</td><td style={{padding:"6px 8px"}}>{it.qty}</td><td style={{padding:"6px 8px"}}>{"฿"+fmt(it.price)}</td><td style={{padding:"6px 8px",fontWeight:500}}>{"฿"+fmt(it.qty*it.price)}</td></tr>;})}</tbody></table>
       <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginTop:10,fontSize:13}}>
         <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(vSub)}</span></div>
-        {viewSO.discPct>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+viewSO.discPct+"%"}</span><span>{"-฿"+fmt(Math.round(vSub*viewSO.discPct/100*100)/100)}</span></div>}
-        {(viewSO.extraDiscPct||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+viewSO.extraDiscPct+"%"}</span><span>{"-฿"+fmt(Math.round(vSub*viewSO.extraDiscPct/100*100)/100)}</span></div>}
+        {viewSO.discPct>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+viewSO.discPct+"%"}</span><span>{"-฿"+fmt(round2(vSub*viewSO.discPct/100))}</span></div>}
+        {(viewSO.extraDiscPct||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+viewSO.extraDiscPct+"%"}</span><span>{"-฿"+fmt(round2(vSub*viewSO.extraDiscPct/100))}</span></div>}
         {viewSO.includeVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4}}><span>VAT 7%</span><span>{"฿"+fmt(vVat)}</span></div>}
         <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15,borderTop:"1px solid var(--line)",paddingTop:8}}><span>ยอดสุทธิ</span><span style={{color:"var(--green)"}}>{"฿"+fmt(vAfter)}</span></div>
       </div>
@@ -259,7 +259,7 @@ function SOList({sh}){
       <div style={{background:"rgba(255,149,0,0.12)",border:"1px solid var(--orange)",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:14,color:"var(--orange)",fontWeight:500}}>{warnMsg}</div>
       <button onClick={()=>setWarnMsg(null)} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"var(--blue)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ตกลง</button>
     </Modal>}
-    {approveSO&&(()=>{const so=approveSO;const cust=contacts.find(c=>c.id===so.customerId);const aSub=so.items.reduce((s,i)=>s+i.qty*i.price,0);const aDisc=so.discPct?Math.round(aSub*so.discPct/100*100)/100:0;const aExtra=(so.extraDiscPct||0)>0?Math.round(aSub*so.extraDiscPct/100*100)/100:0;const aVat=so.includeVat?Math.round((aSub-aDisc-aExtra)*7/107*100)/100:0;const aTotal=aSub-aDisc-aExtra+aVat;const hasChanges=(so.origPrices||[]).some((op,i)=>so.items[i]&&+so.items[i].price!==+op)||(so.extraDiscPct||0)>0;return<Modal title="ยืนยันอนุมัติ" onClose={()=>setApproveSO(null)}>
+    {approveSO&&(()=>{const so=approveSO;const cust=contacts.find(c=>c.id===so.customerId);const aSub=so.items.reduce((s,i)=>s+i.qty*i.price,0);const aDisc=so.discPct?round2(aSub*so.discPct/100):0;const aExtra=(so.extraDiscPct||0)>0?round2(aSub*so.extraDiscPct/100):0;const aVat=so.includeVat?round2((aSub-aDisc-aExtra)*7/107):0;const aTotal=aSub-aDisc-aExtra+aVat;const hasChanges=(so.origPrices||[]).some((op,i)=>so.items[i]&&+so.items[i].price!==+op)||(so.extraDiscPct||0)>0;return<Modal title="ยืนยันอนุมัติ" onClose={()=>setApproveSO(null)}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div><div style={{fontWeight:700,fontSize:15}}>{so.soNum}</div><div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{cust?cN(cust):"-"}{" — "+toBE(so.date)}</div></div>
         <Badge status={so.status}/>

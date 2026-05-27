@@ -1,6 +1,7 @@
 import { STOCK_STATUS } from "./constants.js";
 
 export const fmt = n => Number(n).toLocaleString("th-TH");
+export const round2 = n => Math.round((+n + Number.EPSILON) * 100) / 100;
 export const todayStr = () => {const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
 export const nowStr = () => {const d=new Date();return String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+(d.getFullYear()+543)+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");};
 export const toBE = d => {if(!d)return"-";const p=(d||"").split("-");if(p.length!==3)return d;return p[2]+"/"+p[1]+"/"+(+p[0]+543);};

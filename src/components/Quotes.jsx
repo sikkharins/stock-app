@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, AddDue } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, AddDue, round2 } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import SB from "./ui/SearchBar.jsx";
@@ -132,9 +132,9 @@ export default function QuotesPage({sh}){
   const convertToSO = qt => {
     const yr2=new Date().getFullYear();const mxS=sales.reduce((m,s)=>{const mt=s.soNum.match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr2?Math.max(m,+mt[2]):m;},0);const sn="SO-"+yr2+"-"+String(mxS+1).padStart(3,"0");
     const sub = qt.items.reduce((s,i)=>s+i.qty*i.price,0);
-    const disc = qt.payType==="cash" ? Math.round(sub*(qt.discPct||0)/100*100)/100 : 0;
+    const disc = qt.payType==="cash" ? round2(sub*(qt.discPct||0)/100) : 0;
     const after = sub - disc;
-    const vatAmt = qt.includeVat ? Math.round(after*7/107*100)/100 : 0;
+    const vatAmt = qt.includeVat ? round2(after*7/107) : 0;
     setSales(p=>[...p,{
       id:Date.now(), soNum:sn, customerId:qt.customerId, date:todayStr(),
       status:"pending_delivery", items:qt.items,
@@ -165,9 +165,9 @@ export default function QuotesPage({sh}){
 
   const renderForm = () => {
     const sub = form.items.reduce((s,i)=>(+i.qty||0)*(+i.price||0)+s,0);
-    const disc = payType==="cash" ? Math.round(sub*discPct/100*100)/100 : 0;
+    const disc = payType==="cash" ? round2(sub*discPct/100) : 0;
     const after = sub - disc;
-    const vatAmt = incVat ? Math.round(after*7/107*100)/100 : 0;
+    const vatAmt = incVat ? round2(after*7/107) : 0;
     return <div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <Field label="ลูกค้า"><CustomSelect searchable value={form.customerId} onChange={v=>{setForm(f=>({...f,customerId:v}));const c=contacts.find(x=>x.id===+v);if(c){if(c.defaultCreditDays)setCreditDays(c.defaultCreditDays);if(c.defaultDiscount!=null)setDiscPct(c.defaultDiscount);if(c.defaultVat!=null)setIncVat(c.defaultVat);if(c.defaultPayType)setPayType(c.defaultPayType);}}} options={[{value:"",label:"เลือก..."},...custs.map(c=>({value:String(c.id),label:cN(c)}))]}/></Field>
@@ -277,9 +277,9 @@ export default function QuotesPage({sh}){
       </table>
       {(()=>{
         const sub=qtTot(viewQT);
-        const disc=viewQT.payType==="cash"?Math.round(sub*(viewQT.discPct||0)/100*100)/100:0;
+        const disc=viewQT.payType==="cash"?round2(sub*(viewQT.discPct||0)/100):0;
         const after=sub-disc;
-        const vatAmt=viewQT.includeVat?Math.round(after*7/107*100)/100:0;
+        const vatAmt=viewQT.includeVat?round2(after*7/107):0;
         return <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",fontSize:13}}>
           {viewQT.payType==="cash"&&disc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+(viewQT.discPct||0)+"%"}</span><span>{"-฿"+fmt(disc)}</span></div>}
           {viewQT.includeVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4}}><span>VAT 7%</span><span>{"฿"+fmt(vatAmt)}</span></div>}

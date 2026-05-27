@@ -8,6 +8,7 @@ const CO = {
 
 const toBE = d => { if(!d) return "-"; const p=(d||"").split("-"); if(p.length!==3) return d; return p[2]+"/"+p[1]+"/"+(+p[0]+543); };
 const fmtC = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const round2 = n => Math.round((+n + Number.EPSILON) * 100) / 100;
 const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
 
 export function printDoc(type, data, products, contacts) {
@@ -43,9 +44,9 @@ export function printDoc(type, data, products, contacts) {
   if (type === "po") {
     totalsHtml = `<tr><td style="padding:5px 8px;border:none;color:#555;">ยอดรวมทั้งสิ้น</td><td style="padding:5px 8px;border:none;text-align:right;font-weight:700;font-size:15px;">฿${fmtC(sub)}</td></tr>`;
   } else {
-    const disc = type==="so" ? (data.discountAmt||0) : (data.payType==="cash" ? Math.round(sub*(data.discPct||0)/100*100)/100 : 0);
+    const disc = type==="so" ? (data.discountAmt||0) : (data.payType==="cash" ? round2(sub*(data.discPct||0)/100) : 0);
     const after = sub - disc;
-    const vat = data.includeVat ? (type==="so" ? (data.vatAmount||0) : Math.round(after*7/107*100)/100) : 0;
+    const vat = data.includeVat ? (type==="so" ? (data.vatAmount||0) : round2(after*7/107)) : 0;
     const discPctLabel = type==="so" ? (data.discPct||0) : (data.discPct||0);
     totalsHtml = `
       <tr><td style="padding:4px 8px;border:none;color:#555;">ยอดรวม</td><td style="padding:4px 8px;border:none;text-align:right;">฿${fmtC(sub)}</td></tr>

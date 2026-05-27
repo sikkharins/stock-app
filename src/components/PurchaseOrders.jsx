@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, nowStr, fmtD } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, round2 } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Badge from "./ui/Badge.jsx";
@@ -60,7 +60,7 @@ export default function POPage({sh}){
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
     const yr=new Date().getFullYear();const mx=pos.reduce((m,p)=>{const mt=p.poNum.match(/^PO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const pn="PO-"+yr+"-"+String(mx+1).padStart(3,"0");
-    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",status:"draft",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
+    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",status:"draft",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
     addA("สร้าง PO (Draft)",pn);cM();
   };
 
@@ -79,9 +79,9 @@ export default function POPage({sh}){
       addA("อนุมัติ PO",po.poNum);
       if(po.dropShip&&po.dropShipCustomerId){
         const yr=new Date().getFullYear();const mx=sales.reduce((m,s)=>{const mt=s.soNum.match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const sn="SO-"+yr+"-"+String(mx+1).padStart(3,"0");
-        const soItems=po.items.map(i=>{const pr=products.find(x=>x.id===i.productId);return{productId:i.productId,qty:i.qty,price:pr?pr.price:0};});
+        const soItems=po.items.map(i=>({productId:i.productId,qty:i.qty,price:i.sellPrice||(products.find(x=>x.id===i.productId)||{}).price||0}));
         const cust=contacts.find(c=>c.id===+po.dropShipCustomerId);const sub=soItems.reduce((s,i)=>s+i.qty*i.price,0);
-        const defCredit=cust?.defaultCreditDays||45;const defVat=cust?.defaultVat!==false;const vatAmt=defVat?Math.round(sub*7/107*100)/100:0;
+        const defCredit=cust?.defaultCreditDays||45;const defVat=cust?.defaultVat!==false;const vatAmt=defVat?round2(sub*7/107):0;
         setSales(p=>[...p,{id:Date.now(),soNum:sn,customerId:+po.dropShipCustomerId,date:todayStr(),status:"pending_delivery",items:soItems,origPrices:soItems.map(i=>+i.price),includeVat:defVat,vatAmount:vatAmt,payType:"credit",discountAmt:0,discPct:0,extraDiscPct:0,creditDays:defCredit,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างอัตโนมัติจาก "+po.poNum+" (ส่งนอกสถานที่)",fromQuote:"",linkedPO:po.poNum,dropShip:true}]);
         setPOs(p=>p.map(x=>x.id===po.id?{...x,linkedSO:sn}:x));
         addA("สร้าง SO อัตโนมัติ (Drop Ship)",sn+" ← "+po.poNum);
@@ -119,7 +119,7 @@ export default function POPage({sh}){
   const updatePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
-    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",items:form.items.map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost})),note:form.note||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
+    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
     setPOs(p=>p.map(x=>x.id===editPO.id?{...x,...base}:x));
     addA("แก้ไข PO",editPO.poNum);setEditPO(null);cM();
   };
