@@ -128,6 +128,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
   const chatRef = useRef(null);
   const recogRef = useRef(null);
   const aiMsgsRef = useRef([]);
+  const abortRef = useRef(null);
 
   const chatKey = cu?.id ? `ai_chat_${cu.id}` : null;
 
@@ -255,6 +256,8 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
     const t = (text || input).trim();
     const hasImage = !!pendingImage;
     if ((!t && !hasImage) || loading) return;
+    if(abortRef.current)abortRef.current.abort();
+    const ctrl=new AbortController();abortRef.current=ctrl;
     unlockAudio();
     setInput("");
     addMsg("user", t, hasImage ? pendingImage.preview : undefined);
@@ -282,6 +285,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
       ctx.productNotes = productNotes.slice(0, 50);
       ctx.customerNotes = customerNotes.slice(0, 50);
       const res = await sendAIMessage(aiMsgsRef.current, ctx, { model: settings.model, lang: settings.lang, customPrompt: settings.customPrompt });
+      if(ctrl.signal.aborted)return;
       aiMsgsRef.current = [...aiMsgsRef.current, { role: "assistant", content: JSON.stringify(res) }];
       // Extract memory notes from AI
       if (res.memory && Array.isArray(res.memory) && res.memory.length > 0) {
@@ -322,6 +326,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
       }
       if (res.speak) { const sp = res.speak.length > 100 ? res.speak.slice(0, 100).replace(/[^\s]*$/, "") + "ครับ" : res.speak; speak(sp); }
     } catch (e) {
+      if(ctrl.signal.aborted)return;
       const m = e.message || "";
       const friendly = m.includes("Overloaded") || m.includes("overloaded") ? "ระบบ AI มีผู้ใช้จำนวนมาก กรุณาลองใหม่อีกครั้ง"
         : m.includes("rate_limit") ? "เรียก AI บ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่"

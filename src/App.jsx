@@ -88,7 +88,7 @@ export default function App(){
   const onTouchMove=useCallback(e=>{if(pullStart.current===null||refreshing)return;const dy=e.touches[0].clientY-pullStart.current;if(dy>0&&mainRef.current&&mainRef.current.scrollTop<=0){setPullY(Math.min(dy*0.4,80));if(dy>10)e.preventDefault();}else setPullY(0);},{refreshing});
   const onTouchEnd=useCallback(()=>{if(pullY>=60&&!refreshing)doRefresh();else setPullY(0);pullStart.current=null;},[pullY,refreshing,doRefresh]);
   const[sideOpen,setSideOpen]=useState(false);
-  const realtimeSkipRef=useRef(new Set());
+  const realtimeSkipRef=useRef({});
   const cuRef=useRef(cu);
   useEffect(()=>{cuRef.current=cu;},[cu]);
 
@@ -127,7 +127,7 @@ export default function App(){
     const setters=getSetters();
     subscribeRealtime(cu.id,(sbKey,data)=>{
       const setter=setters[sbKey];
-      if(setter){realtimeSkipRef.current.add(sbKey);setter(data);}
+      if(setter){realtimeSkipRef.current[sbKey]=Date.now();setter(data);}
     });
     return()=>{unsubscribeRealtime();RT_SETTERS.current=null;};
   },[cu,getSetters]);
@@ -215,9 +215,9 @@ export default function App(){
     const allEntries=[["v3_products",products],["v3_contacts",contacts],["v3_pos",pos],["v3_sales",sales],["v3_cats",cats],["v3_brands",brands],["v3_logs",logs],["v3_payments",payments],["v3_activity",actLogs],["v3_quotes",quotes],["v3_targets",targets],["v3_audit",audit],["v3_pricehist",priceHist],["v3_cheques",cheques],["v3_bankaccs",bankAccs],["v3_banktxns",bankTxns],["v3_cnotes",cnotes],["v3_billings",billings],["v3_defectives",defectives],["v3_supcnotes",supCNotes],["v3_promos",promos]];
     pendingSaveRef.current=allEntries;
     setSaving(true);const tm=setTimeout(()=>{
-    const skipped=new Set(realtimeSkipRef.current);realtimeSkipRef.current.clear();
+    const now=Date.now();const skipTs={...realtimeSkipRef.current};
     allEntries.forEach(([k,v])=>saveData(k,v));
-    const entries=skipped.size>0?allEntries.filter(([k])=>!skipped.has(k.replace("v3_",""))):allEntries;
+    const entries=allEntries.filter(([k])=>{const sbKey=k.replace("v3_","");const ts=skipTs[sbKey];if(ts&&now-ts<2000)return false;delete realtimeSkipRef.current[sbKey];return true;});
     if(entries.length>0)saveAllToSupabase(entries,cuRef.current?.id).catch(e=>console.warn("Supabase save error:",e.message));
     pendingSaveRef.current=null;
     setSaving(false);

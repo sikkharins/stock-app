@@ -899,6 +899,7 @@ export default function FinPage({sh}){
               const soTotal=soSub-(refSo.discountAmt||0)+(refSo.vatAmount||0);
               const cnItems=(cnForm.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
               if(cnItems>soTotal+0.01){setWarnMsg("ยอด CN (฿"+fmt(cnItems)+") เกินยอด SO ต้นฉบับ (฿"+fmt(soTotal)+")");return;}
+              for(const ci of(cnForm.items||[])){const si=(refSo.items||[]).find(x=>x.productId===ci.productId);if(!si){setWarnMsg("สินค้าไม่อยู่ใน SO ต้นฉบับ");return;}if(ci.qty>si.qty){setWarnMsg("จำนวน CN ("+ci.qty+") เกินจำนวนใน SO ("+si.qty+")");return;}}
             }
           }
         }
