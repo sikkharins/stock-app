@@ -21,7 +21,7 @@ function SOList({sh}){
   const myCI=isSU?custs.map(c=>c.id):null;
 
   const ef={customerId:"",date:todayStr(),items:[{productId:"",qty:1,price:0}],useVatRep:false,vatRepId:"",note:""};
-  const[form,setForm]=useState(ef);const[viewSO,setViewSO]=useState(null);const[confirmSO,setConfirmSO]=useState(null);const[delSO,setDelSO]=useState(null);const[editSO,setEditSO]=useState(null);const[viewProfile,setViewProfile]=useState(null);const[fSt,setFSt]=useState("all");const[approveSO,setApproveSO]=useState(null);
+  const[form,setForm]=useState(ef);const[viewSO,setViewSO]=useState(null);const[confirmSO,setConfirmSO]=useState(null);const[delSO,setDelSO]=useState(null);const[editSO,setEditSO]=useState(null);const[viewProfile,setViewProfile]=useState(null);const[fSt,setFSt]=useState("all");const[approveSO,setApproveSO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);
 
   const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId))return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
   const[incVat,setIncVat]=useState(true);const[payType,setPayType]=useState("cash");const[discPct,setDiscPct]=useState(1);const[creditDays,setCreditDays]=useState(45);const[extraDiscPct,setExtraDiscPct]=useState("");const[formErrors,setFormErrors]=useState([]);
@@ -53,7 +53,7 @@ function SOList({sh}){
     cM();
   };
   const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);doSave(soId);};
-  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO){alert("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
+  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
   const deliveringRef=useRef(new Set());
   const confirmDelivery=id=>{
     if(deliveringRef.current.has(id))return;
@@ -255,6 +255,10 @@ function SOList({sh}){
     </Modal>;
     })()}
     {delSO&&<Modal title="ยืนยันลบ" onClose={()=>setDelSO(null)}><div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px",marginBottom:16,fontSize:13,color:"var(--red)"}}>{"จะลบ "+delSO.soNum+" ถาวร"}</div><MBtns onCancel={()=>setDelSO(null)} onSave={()=>{confirmDel(delSO.id);setDelSO(null);}} saveLabel="ลบ"/></Modal>}
+    {warnMsg&&<Modal title="แจ้งเตือน" onClose={()=>setWarnMsg(null)}>
+      <div style={{background:"rgba(255,149,0,0.12)",border:"1px solid var(--orange)",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:14,color:"var(--orange)",fontWeight:500}}>{warnMsg}</div>
+      <button onClick={()=>setWarnMsg(null)} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"var(--blue)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ตกลง</button>
+    </Modal>}
     {approveSO&&(()=>{const so=approveSO;const cust=contacts.find(c=>c.id===so.customerId);const aSub=so.items.reduce((s,i)=>s+i.qty*i.price,0);const aDisc=so.discPct?Math.round(aSub*so.discPct/100*100)/100:0;const aExtra=(so.extraDiscPct||0)>0?Math.round(aSub*so.extraDiscPct/100*100)/100:0;const aVat=so.includeVat?Math.round((aSub-aDisc-aExtra)*7/107*100)/100:0;const aTotal=aSub-aDisc-aExtra+aVat;const hasChanges=(so.origPrices||[]).some((op,i)=>so.items[i]&&+so.items[i].price!==+op)||(so.extraDiscPct||0)>0;return<Modal title="ยืนยันอนุมัติ" onClose={()=>setApproveSO(null)}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div><div style={{fontWeight:700,fontSize:15}}>{so.soNum}</div><div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{cust?cN(cust):"-"}{" — "+toBE(so.date)}</div></div>
