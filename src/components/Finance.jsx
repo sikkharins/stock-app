@@ -316,8 +316,8 @@ export default function FinPage({sh}){
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหา..." style={{...IB,width:160,padding:"5px 10px",fontSize:12}}/>{ed&&<button onClick={()=>{setTxnForm({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:""});oM("addTxn");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ บันทึกรายการ</button>}</div>
       </div>
-      <div style={{overflowX:"auto"}}><table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}><thead><tr style={{borderBottom:"0.5px solid var(--line)",background:"var(--bg)"}}>{["วันที่","บัญชี","ประเภท","จำนวน","จาก/ถึง","อ้างอิง","หมายเหตุ"].map((h,i)=><th key={i} style={{textAlign:"left",padding:"8px",fontWeight:500,color:"var(--dim)",fontSize:12}}>{h}</th>)}</tr></thead>
-      <tbody>{txnFiltered.length===0?<tr><td colSpan={7} style={{padding:"3rem 2rem",textAlign:"center"}}><div style={{color:"var(--dim)",fontSize:28,marginBottom:6}}>---</div><div style={{color:"var(--faint)",fontSize:13,marginBottom:10}}>ยังไม่มีรายการเคลื่อนไหว</div>{ed&&<button onClick={()=>{setTxnForm({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:""});oM("addTxn");}} style={{padding:"6px 16px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ บันทึกรายการแรก</button>}</td></tr>:[...txnFiltered].reverse().map(t=>{
+      <div style={{overflowX:"auto"}}><table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}><thead><tr style={{borderBottom:"0.5px solid var(--line)",background:"var(--bg)"}}>{["วันที่","บัญชี","ประเภท","จำนวน","จาก/ถึง","อ้างอิง","หมายเหตุ",""].map((h,i)=><th key={i} style={{textAlign:"left",padding:"8px",fontWeight:500,color:"var(--dim)",fontSize:12}}>{h}</th>)}</tr></thead>
+      <tbody>{txnFiltered.length===0?<tr><td colSpan={8} style={{padding:"3rem 2rem",textAlign:"center"}}><div style={{color:"var(--dim)",fontSize:28,marginBottom:6}}>---</div><div style={{color:"var(--faint)",fontSize:13,marginBottom:10}}>ยังไม่มีรายการเคลื่อนไหว</div>{ed&&<button onClick={()=>{setTxnForm({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:""});oM("addTxn");}} style={{padding:"6px 16px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ บันทึกรายการแรก</button>}</td></tr>:[...txnFiltered].reverse().map(t=>{
         const acc=bankAccs.find(a=>a.id===t.accId);
         return<tr key={t.id} style={{borderBottom:"0.5px solid var(--line)"}}>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{toBE(t.date)}</td>
@@ -327,6 +327,7 @@ export default function FinPage({sh}){
           <td style={{padding:"8px"}}>{t.from||"—"}</td>
           <td style={{padding:"8px",color:"var(--blue)",fontSize:12}}>{t.refId||"—"}</td>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{t.note||"—"}</td>
+          <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ed&&<button onClick={()=>setBankTxns(p=>p.filter(x=>x.id!==t.id))} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>
         </tr>;})}
       </tbody></table></div>
     </>}
