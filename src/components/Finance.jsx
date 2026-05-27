@@ -122,7 +122,7 @@ export default function FinPage({sh}){
 
   const stB=s=>s==="paid"?<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)"}}>ชำระแล้ว</span>:s==="partial"?<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"var(--blue-bg)",color:"var(--blue)"}}>บางส่วน</span>:s==="cn_credit"?<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(175,82,222,0.12)",color:"var(--purple)"}}>หักCN</span>:<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)"}}>รอชำระ</span>;
 
-  const saveChq=()=>{if(!chqForm.chequeNo||!chqForm.amount||+chqForm.amount<=0)return;if(chqForm.id){setCheques(p=>p.map(c=>c.id===chqForm.id?{...chqForm,amount:+chqForm.amount}:c));}else{setCheques(p=>[...p,{id:Date.now(),...chqForm,amount:+chqForm.amount}]);}cM();};
+  const saveChq=()=>{if(!chqForm.chequeNo||!chqForm.amount||+chqForm.amount<=0)return;if(chqForm.id){const old=cheques.find(c=>c.id===chqForm.id);if(old&&old.status!==chqForm.status){if(chqForm.status==="cleared"&&old.status==="bounced"){alert("เช็คเด้งแล้ว ไม่สามารถเคลียร์ได้");return;}updateChqStatus(chqForm.id,chqForm.status);}setCheques(p=>p.map(c=>c.id===chqForm.id?{...c,chequeNo:chqForm.chequeNo,bank:chqForm.bank,amount:+chqForm.amount,receiveDate:chqForm.receiveDate,dueDate:chqForm.dueDate,from:chqForm.from,refId:chqForm.refId,note:chqForm.note}:c));}else{setCheques(p=>[...p,{id:Date.now(),...chqForm,amount:+chqForm.amount}]);}cM();};
   const openChqEdit=c=>{setChqForm({...c,amount:String(c.amount)});oM("addChq");};
   const updateChqStatus=(id,st,extra)=>{
     const old=cheques.find(c=>c.id===id);if(!old)return;
