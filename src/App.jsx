@@ -24,11 +24,13 @@ const DefectivePage = lazy(() => import("./components/DefectiveProducts.jsx"));
 const BackupManager = lazy(() => import("./components/BackupManager.jsx"));
 const AISOBot = lazy(() => import("./components/AISOBot.jsx"));
 const SalesOverviewPage = lazy(() => import("./components/SalesOverview.jsx"));
+const FinancialCalendarPage = lazy(() => import("./components/FinancialCalendar.jsx"));
 
-const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",finance:"$",reports:"◑",sales_overview:"◎",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙"};
+const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙"};
 const NAV_SECTIONS=[
   {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","purchase","sales","promos"]},
   {label:{th:"การจัดการ",en:"Manage"},tabs:["finance","reports","sales_overview","defective","suppliers","customers"]},
+  {label:{th:"วางแผน",en:"Planning"},tabs:["financial_calendar"]},
   {label:{th:"ระบบ",en:"System"},tabs:["users"]},
 ];
 
@@ -349,6 +351,7 @@ export default function App(){
           {tab==="finance"&&<FinPage sh={sh}/>}
           {tab==="reports"&&<RepPage sh={sh}/>}
           {tab==="sales_overview"&&<SalesOverviewPage sh={sh}/>}
+          {tab==="financial_calendar"&&<FinancialCalendarPage sh={sh}/>}
           {tab==="suppliers"&&<ContactPage key="s" sh={sh} ft="supplier"/>}
           {tab==="customers"&&<ContactPage key="c" sh={sh} ft="customer"/>}
           {tab==="defective"&&<DefectivePage sh={sh}/>}

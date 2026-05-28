@@ -42,7 +42,7 @@ export default function POPage({sh}){
     return ms&&mst;
   }),[basePOs,search,contacts,statusFilter,cN]);
 
-  const ef={supplierId:"",date:todayStr(),deliveryDate:"",items:[{productId:"",qty:1,cost:0}],note:"",dropShip:false,dropShipCustomerId:""};
+  const ef={supplierId:"",date:todayStr(),deliveryDate:"",creditDays:0,items:[{productId:"",qty:1,cost:0}],note:"",dropShip:false,dropShipCustomerId:""};
   const[form,setForm]=useState(ef);
   useEffect(()=>{if(sh.quickCreate==="addPO"&&ed&&!isSup){setForm(ef);oM("addPO");sh.clearQuickCreate();}},[sh.quickCreate]);
   const[viewPO,setViewPO]=useState(null);
@@ -60,7 +60,7 @@ export default function POPage({sh}){
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
     const yr=new Date().getFullYear();const mx=pos.reduce((m,p)=>{const mt=p.poNum.match(/^PO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const pn="PO-"+yr+"-"+String(mx+1).padStart(3,"0");
-    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",status:"draft",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
+    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,status:"draft",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
     addA("สร้าง PO (Draft)",pn);cM();
   };
 
@@ -120,13 +120,13 @@ export default function POPage({sh}){
   };
 
   const openEditPO=po=>{
-    setForm({supplierId:String(po.supplierId),date:po.date,deliveryDate:po.deliveryDate||"",items:po.items.map(i=>({productId:String(i.productId),qty:i.qty,cost:i.cost})),note:po.note||"",dropShip:!!po.dropShip,dropShipCustomerId:po.dropShipCustomerId?String(po.dropShipCustomerId):""});
+    setForm({supplierId:String(po.supplierId),date:po.date,deliveryDate:po.deliveryDate||"",creditDays:po.creditDays||0,items:po.items.map(i=>({productId:String(i.productId),qty:i.qty,cost:i.cost})),note:po.note||"",dropShip:!!po.dropShip,dropShipCustomerId:po.dropShipCustomerId?String(po.dropShipCustomerId):""});
     setEditPO(po);oM("editPO");
   };
   const updatePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
-    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
+    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
     setPOs(p=>p.map(x=>x.id===editPO.id?{...x,...base}:x));
     addA("แก้ไข PO",editPO.poNum);setEditPO(null);cM();
   };
@@ -211,6 +211,7 @@ export default function POPage({sh}){
         <Field label="ซัพพลายเออร์"><CustomSelect searchable value={form.supplierId} onChange={v=>setForm(f=>({...f,supplierId:v}))} options={[{value:"",label:"เลือก..."},...sups.map(s=>({value:String(s.id),label:cN(s)}))]}/></Field>
         <Field label="วันที่"><ThaiDateInput value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
         <Field label="วันกำหนดส่ง"><ThaiDateInput value={form.deliveryDate||""} onChange={e=>setForm(f=>({...f,deliveryDate:e.target.value}))}/></Field>
+        <Field label="เครดิต (วันจ่าย)"><select value={form.creditDays||0} onChange={e=>setForm(f=>({...f,creditDays:+e.target.value}))} style={{width:"100%",boxSizing:"border-box",background:"var(--bg2)",border:"1px solid var(--line)",borderRadius:7,padding:"7px 12px",fontSize:13,color:"var(--text)",fontFamily:"inherit"}}><option value={0}>จ่ายทันที</option><option value={30}>30 วัน</option><option value={45}>45 วัน</option><option value={60}>60 วัน</option><option value={90}>90 วัน</option></select></Field>
         <div style={{gridColumn:"1/-1"}}>
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(form.dropShip?"var(--blue)":"var(--line)"),background:form.dropShip?"rgba(10,132,255,0.08)":"var(--hover)"}}>
             <input type="checkbox" checked={!!form.dropShip} onChange={e=>setForm(f=>({...f,dropShip:e.target.checked,dropShipCustomerId:e.target.checked?f.dropShipCustomerId:""}))}/>
