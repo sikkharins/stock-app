@@ -10,8 +10,10 @@ const addDays = (dateStr, days) => {
   return d.toISOString().slice(0,10);
 };
 
+const diffDays = (a,b) => Math.round((new Date(a)-new Date(b))/(1000*60*60*24));
+
 export default function FinancialCalendar({sh}){
-  const{sales,pos,cheques,payments,contacts,lang}=sh;
+  const{sales,pos,cheques,payments,contacts,bankAccs,lang}=sh;
 
   const now = new Date();
   const[year,setYear]=useState(now.getFullYear());
@@ -21,6 +23,7 @@ export default function FinancialCalendar({sh}){
   const todayStr = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
 
   const contMap = useMemo(()=>{const m={};contacts.forEach(c=>{m[c.id]=c;});return m;},[contacts]);
+  const accMap = useMemo(()=>{const m={};(bankAccs||[]).forEach(a=>{m[a.id]=a;});return m;},[bankAccs]);
 
   // SO ref → customer name map
   const soMap = useMemo(()=>{const m={};sales.forEach(s=>{m[s.soNum]=s;});return m;},[sales]);
@@ -38,16 +41,35 @@ export default function FinancialCalendar({sh}){
     // ── ACTUAL PAYMENTS (เงินที่รับ/จ่ายจริงแล้ว) ──────────────────────────
     payments.forEach(p=>{
       if(!p.date)return;
+      const acc = p.accId?accMap[p.accId]:null;
+      const accLabel = acc?`${acc.name} — ${acc.bank}`:"";
       if(p.type==="ar"){
-        // รับเงินจากลูกค้า
         const so = soMap[p.refId];
         const c = so?contMap[so.customerId]:null;
-        addEv(p.date,"in",{kind:"actual",ref:p.refId,name:c?.nameT||c?.name||p.refId,amount:+p.amount||0,type:"ar_paid",method:p.method||""});
+        // คำนวณว่าชำระก่อน/หลัง/ตรงกำหนด
+        let timing="";
+        if(so&&so.date){
+          const days2 = so.payType==="credit"&&so.creditDays>0?so.creditDays:7;
+          const dueDate2 = addDays(so.date,days2);
+          const diff = diffDays(p.date,dueDate2); // + = ช้า, - = เร็ว
+          if(diff<0)timing=`ชำระก่อนกำหนด ${Math.abs(diff)} วัน`;
+          else if(diff>0)timing=`ชำระหลังกำหนด ${diff} วัน`;
+          else timing="ชำระตรงกำหนด";
+        }
+        addEv(p.date,"in",{kind:"actual",ref:p.refId,name:c?.nameT||c?.name||p.refId,amount:+p.amount||0,type:"ar_paid",method:p.method||"",timing,accLabel});
       } else if(p.type==="ap"){
-        // จ่ายเงินให้ supplier
         const po = poMap[p.refId];
         const s = po?contMap[po.supplierId]:null;
-        addEv(p.date,"out",{kind:"actual",ref:p.refId,name:s?.nameT||s?.name||p.refId,amount:+p.amount||0,type:"ap_paid",method:p.method||""});
+        let timing="";
+        if(po&&po.date){
+          const baseDate2=po.deliveryDate||po.date;
+          const dueDate2=addDays(baseDate2,po.creditDays||0);
+          const diff=diffDays(p.date,dueDate2);
+          if(diff<0)timing=`จ่ายก่อนกำหนด ${Math.abs(diff)} วัน`;
+          else if(diff>0)timing=`จ่ายหลังกำหนด ${diff} วัน`;
+          else timing="จ่ายตรงกำหนด";
+        }
+        addEv(p.date,"out",{kind:"actual",ref:p.refId,name:s?.nameT||s?.name||p.refId,amount:+p.amount||0,type:"ap_paid",method:p.method||"",timing,accLabel});
       }
     });
 
@@ -211,16 +233,19 @@ export default function FinancialCalendar({sh}){
         </div>
         {selEv.in.map((e,i)=>{
           const tl=typeLabel(e.type);
-          return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 16px",borderTop:"0.5px solid var(--line)"}}>
-            <div>
+          const timingColor=e.timing?.includes("ก่อน")?"var(--green)":e.timing?.includes("หลัง")?"var(--red)":"var(--dim)";
+          return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"9px 16px",borderTop:"0.5px solid var(--line)"}}>
+            <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:500}}>{e.name}</div>
-              <div style={{fontSize:11,color:"var(--dim)",marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+              <div style={{fontSize:11,color:"var(--dim)",marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span style={{background:tl.bg,color:tl.color,borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600}}>{tl.label}</span>
                 <span>{e.ref}</span>
                 {e.method&&<span style={{color:"var(--faint)"}}>· {e.method}</span>}
               </div>
+              {e.timing&&<div style={{fontSize:11,color:timingColor,marginTop:3,fontWeight:500}}>{e.timing}</div>}
+              {e.accLabel&&<div style={{fontSize:11,color:"var(--blue)",marginTop:2}}>เข้า: {e.accLabel}</div>}
             </div>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--green)"}}>{"฿"+fmtC2(e.amount)}</div>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--green)",marginLeft:12,whiteSpace:"nowrap"}}>{"฿"+fmtC2(e.amount)}</div>
           </div>;
         })}
       </div>}
@@ -232,16 +257,19 @@ export default function FinancialCalendar({sh}){
         </div>
         {selEv.out.map((e,i)=>{
           const tl=typeLabel(e.type);
-          return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 16px",borderTop:"0.5px solid var(--line)"}}>
-            <div>
+          const timingColor=e.timing?.includes("ก่อน")?"var(--green)":e.timing?.includes("หลัง")?"var(--red)":"var(--dim)";
+          return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"9px 16px",borderTop:"0.5px solid var(--line)"}}>
+            <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:500}}>{e.name}</div>
-              <div style={{fontSize:11,color:"var(--dim)",marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+              <div style={{fontSize:11,color:"var(--dim)",marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span style={{background:tl.bg,color:tl.color,borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600}}>{tl.label}</span>
                 <span>{e.ref}</span>
                 {e.method&&<span style={{color:"var(--faint)"}}>· {e.method}</span>}
               </div>
+              {e.timing&&<div style={{fontSize:11,color:timingColor,marginTop:3,fontWeight:500}}>{e.timing}</div>}
+              {e.accLabel&&<div style={{fontSize:11,color:"var(--blue)",marginTop:2}}>ออก: {e.accLabel}</div>}
             </div>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--red)"}}>{"฿"+fmtC2(e.amount)}</div>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--red)",marginLeft:12,whiteSpace:"nowrap"}}>{"฿"+fmtC2(e.amount)}</div>
           </div>;
         })}
       </div>}
