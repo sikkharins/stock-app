@@ -33,13 +33,14 @@ export default function FinancialCalendar({sh}){
       map[date][dir].push(ev);
     };
 
-    // เงินเข้า: AR due from completed credit SOs
-    sales.filter(so=>so.status==="completed"&&so.payType==="credit"&&so.creditDays>0).forEach(so=>{
+    // เงินเข้า: AR due from completed SOs (cash=7วัน, credit=creditDays) — same logic as Finance.jsx
+    sales.filter(so=>so.status==="completed").forEach(so=>{
       const tot = so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0)+(so.vatAmount||0);
       const paid = payments.filter(p=>p.refId===so.soNum&&p.type==="ar").reduce((s,p)=>s+(+p.amount||0),0);
       const rem = tot - paid;
       if(rem<=0)return;
-      const dueDate = addDays(so.date, so.creditDays);
+      const days = so.payType==="credit"&&so.creditDays>0?so.creditDays:7;
+      const dueDate = addDays(so.date, days);
       const c = contMap[so.customerId];
       addEvent(dueDate,"in",{ref:so.soNum,name:c?.nameT||c?.name||"-",amount:rem,type:"ar"});
     });
