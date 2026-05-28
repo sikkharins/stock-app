@@ -117,6 +117,18 @@ export default function App(){
     return()=>window.removeEventListener("popstate",onBack);
   },[]);
 
+  // Service Worker update detection — auto-reload when new SW takes control
+  useEffect(()=>{
+    if(!("serviceWorker" in navigator))return;
+    let refreshing=false;
+    const onCtrlChange=()=>{if(refreshing)return;refreshing=true;window.location.reload();};
+    navigator.serviceWorker.addEventListener("controllerchange",onCtrlChange);
+    const checkUpdate=()=>{navigator.serviceWorker.getRegistrations().then(regs=>{regs.forEach(reg=>{reg.update();if(reg.waiting)reg.waiting.postMessage({type:"SKIP_WAITING"});});}).catch(()=>{});};
+    checkUpdate();
+    const t=setInterval(checkUpdate,60000);
+    return()=>{clearInterval(t);navigator.serviceWorker.removeEventListener("controllerchange",onCtrlChange);};
+  },[]);
+
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
     if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos};
