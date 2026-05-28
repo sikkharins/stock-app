@@ -191,7 +191,7 @@ export default function DefectivePage({sh}){
         <Field label="วันที่"><ThaiDateInput value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/></Field>
 
         <Field label="สินค้า">
-          <CustomSelect value={form.productId} onChange={v=>setForm(f=>({...f,productId:v,soNum:""}))} options={[{value:"",label:"— เลือกสินค้า —"},...products.map(p=>({value:String(p.id),label:pN(p)}))]}/>
+          <CustomSelect searchable value={form.productId} onChange={v=>setForm(f=>({...f,productId:v,soNum:""}))} options={[{value:"",label:"— เลือกสินค้า —"},...products.map(p=>({value:String(p.id),label:pN(p),searchText:(p.code||"")+" "+(p.brand||"")}))]}/>
         </Field>
         <Field label="ร้าน / ลูกค้า">
           <CustomSelect searchable value={form.customerId} onChange={v=>setForm(f=>({...f,customerId:v,soNum:""}))} options={[{value:"",label:"— เลือกลูกค้า —"},...customers.map(c=>({value:String(c.id),label:cN(c)}))]}/>

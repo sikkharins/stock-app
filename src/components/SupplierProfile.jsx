@@ -57,7 +57,7 @@ export default function SupplierProfile({supplier,pos,payments,products,pN,cN,on
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"4px 16px",fontSize:12,color:"var(--dim)"}}>
         {supplier.phone&&<div>{supplier.phone}</div>}
-        {supplier.email&&<div>{"✉ "+supplier.email}</div>}
+        {supplier.email&&<div>{supplier.email}</div>}
         {supplier.taxId&&<div>{"Tax ID: "+supplier.taxId}</div>}
         {supplier.address&&<div style={{gridColumn:"1/-1"}}>{supplier.address}</div>}
       </div>

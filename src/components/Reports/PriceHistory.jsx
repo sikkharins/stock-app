@@ -16,7 +16,7 @@ export default function PriceTab({priceHist,products,pN}){
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
       <span style={{fontWeight:600,fontSize:14}}>{"ประวัติราคา"}</span>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <CustomSelect value={fP} onChange={v=>setFP(v)} options={[{value:"",label:"ทุกสินค้า"},...products.map(pr=>({value:String(pr.id),label:pr.brand+" — "+pN(pr)}))]} style={{width:"auto",minWidth:200}}/>
+        <CustomSelect searchable value={fP} onChange={v=>setFP(v)} options={[{value:"",label:"ทุกสินค้า"},...products.map(pr=>({value:String(pr.id),label:pr.brand+" — "+pN(pr),searchText:pr.code||""}))] } style={{width:"auto",minWidth:200}}/>
         {fl.length>0&&<button onClick={exportCSV} style={{padding:"6px 14px",borderRadius:6,border:"0.5px solid var(--line)",background:"var(--bg)",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>Export CSV</button>}
       </div>
     </div>

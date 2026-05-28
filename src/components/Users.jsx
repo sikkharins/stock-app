@@ -166,7 +166,7 @@ export default function UserPage({sh}){
       <div className="perm-table-wrap">
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead><tr style={{borderBottom:"2px solid var(--line)",background:"var(--bg)"}}><th style={{padding:"10px 8px",textAlign:"left",fontWeight:600,minWidth:100}}>เมนู</th>{PK.map(k=><th key={k} style={{padding:"10px 4px",textAlign:"center",fontWeight:600,color:PC[k],fontSize:11,minWidth:50}}>{PL[k]}{k==="approve"&&<div style={{fontSize:9,color:"var(--faint)",fontWeight:400}}>(PO/SO)</div>}</th>)}</tr></thead>
-          <tbody>{[...PT,"users"].map(tab=>{const p=form.perms[tab]||{};return <tr key={tab} style={{borderBottom:"0.5px solid var(--line)",background:p.access?"":"var(--hover)"}}><td style={{padding:"8px",fontWeight:500,color:p.access?"var(--text)":"var(--faint)"}}>{TAB_LABELS[tab]?TAB_LABELS[tab].th:tab}</td>{PK.map(k=>{if(k==="approve"&&!["purchase","sales"].includes(tab))return <td key={k} style={{padding:"6px 4px",textAlign:"center",color:"var(--line)",fontSize:14}}>{"—"}</td>;return <td key={k} style={{padding:"6px 4px",textAlign:"center"}}><label style={{cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:6,background:p[k]?PC[k]+"18":"var(--hover)",border:"1.5px solid "+(p[k]?PC[k]:"var(--line)")}}><input type="checkbox" checked={!!p[k]} onChange={()=>toggleP(tab,k)} style={{display:"none"}}/>{p[k]&&<span style={{color:PC[k],fontWeight:700,fontSize:13}}>{"✓"}</span>}</label></td>;})}</tr>;})}</tbody>
+          <tbody>{[...PT,"users"].map(tab=>{const p=form.perms[tab]||{};return <tr key={tab} style={{borderBottom:"0.5px solid var(--line)",background:p.access?"":"var(--hover)"}}><td style={{padding:"8px",fontWeight:500,color:p.access?"var(--text)":"var(--faint)"}}>{TAB_LABELS[tab]?TAB_LABELS[tab].th:tab}</td>{PK.map(k=>{if(k==="approve"&&!["purchase","sales"].includes(tab))return <td key={k} style={{padding:"6px 4px",textAlign:"center",color:"var(--line)",fontSize:14}}>{"—"}</td>;return <td key={k} style={{padding:"6px 4px",textAlign:"center"}}><label style={{cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:6,background:p[k]?PC[k]+"18":"var(--hover)",border:"1.5px solid "+(p[k]?PC[k]:"var(--line)")}}><input type="checkbox" checked={!!p[k]} onChange={()=>toggleP(tab,k)} style={{display:"none"}}/>{p[k]&&<span style={{color:PC[k],fontWeight:700,fontSize:13}}>{"v"}</span>}</label></td>;})}</tr>;})}</tbody>
         </table>
       </div>
       <div style={{marginTop:16,marginBottom:4}}>
@@ -187,7 +187,7 @@ export default function UserPage({sh}){
             const on=(form.dashboardWidgets||[]).includes(w.key);
             const toggle=()=>setForm(f=>{const ws=f.dashboardWidgets||[];return{...f,dashboardWidgets:on?ws.filter(k=>k!==w.key):[...ws,w.key]};});
             return<button key={w.key} onClick={toggle} style={{padding:"6px 14px",borderRadius:6,border:"1.5px solid "+(on?"var(--green)":"var(--line)"),background:on?"rgba(52,199,89,0.12)":"var(--hover)",color:on?"var(--green)":"var(--faint)",fontSize:12,fontWeight:on?600:400,cursor:"pointer"}}>
-              {on?"✓ ":""}{w.label}
+              {on?"":""}{w.label}
             </button>;
           })}
         </div>

@@ -102,7 +102,7 @@ body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;backgr
 
 <div class="no-print" style="margin-bottom:20px;display:flex;gap:10px;align-items:center;">
   <button onclick="window.print()" style="padding:9px 22px;background:#111;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">พิมพ์ / Save as PDF</button>
-  <button onclick="window.close()" style="padding:9px 16px;background:transparent;color:#666;border:1px solid #ccc;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">✕ ปิด</button>
+  <button onclick="window.close()" style="padding:9px 16px;background:transparent;color:#666;border:1px solid #ccc;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">ปิด</button>
   <span style="font-size:12px;color:#aaa;">เลือก "Save as PDF" ใน dialog ของ browser เพื่อบันทึก PDF</span>
 </div>
 

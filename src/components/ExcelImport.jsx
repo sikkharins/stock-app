@@ -150,7 +150,7 @@ export default function ExcelImport({ onClose, onImport, cats, brands, contacts,
             </button>
 
             <div style={{ border: "2px dashed var(--line)", borderRadius: 12, padding: "2rem", background: "var(--bg)", cursor: "pointer" }} onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) parseFile(f); }}>
-              <div style={{ fontSize: 36, marginBottom: 8 }}>📂</div>
+              <div style={{ fontSize: 14, marginBottom: 8, color: "var(--blue)", fontWeight: 600 }}>เลือกไฟล์</div>
               <div style={{ color: "var(--dim)", fontSize: 13, marginBottom: 4 }}>คลิกเลือกไฟล์ หรือลากมาวาง</div>
               <div style={{ color: "var(--faint)", fontSize: 11 }}>รองรับ .xlsx, .xls</div>
               <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={(e) => { const f = e.target.files[0]; if (f) parseFile(f); }} />

@@ -24,7 +24,7 @@ const mkStaffPerms = () => Object.fromEntries(
 );
 
 export default function ContactPage({sh,ft}){
-  const{cN,pN,canE,contacts,setContacts,search,setSearch,modal,oM,cM,cu,users,sales,quotes,payments,products,pos}=sh;
+  const{cN,pN,canE,contacts,setContacts,search,setSearch,modal,oM,cM,cu,users,sales,quotes,payments,products,pos,brands}=sh;
   const SS=(users||[]).filter(u=>u.salesName).map(u=>u.salesName);
   const isC=ft==="customer";const tk=isC?"customers":"suppliers";const ed=canE(tk);
   const sf=isC&&cu.role!=="SalesManager"&&cu.salesName;
@@ -109,7 +109,7 @@ export default function ContactPage({sh,ft}){
       <StatCard label="Staff ทั้งหมด" value={supStats.totalStaff} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>
     </div>}
     {isC&&<div style={{display:"flex",gap:6,marginBottom:12}}>
-      {[{k:"all",label:"ทั้งหมด",icon:""},{k:"regular",label:"ประจำ",icon:"⭐"},{k:"walkin",label:"หน้าร้าน",icon:"🏪"}].map(g=><button key={g.k} onClick={()=>setGroupFilter(g.k)} style={{padding:"6px 14px",borderRadius:20,border:groupFilter===g.k?"2px solid var(--blue)":"1px solid var(--line)",background:groupFilter===g.k?"rgba(0,122,255,0.1)":"var(--bg)",color:groupFilter===g.k?"var(--blue)":"var(--dim)",fontSize:12,fontWeight:groupFilter===g.k?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>{g.icon&&<span>{g.icon}</span>}{g.label}<span style={{fontSize:11,opacity:0.7,marginLeft:2}}>({groupCounts[g.k]||0})</span></button>)}
+      {[{k:"all",label:"ทั้งหมด",icon:""},{k:"regular",label:"ประจำ",icon:""},{k:"walkin",label:"หน้าร้าน",icon:""}].map(g=><button key={g.k} onClick={()=>setGroupFilter(g.k)} style={{padding:"6px 14px",borderRadius:20,border:groupFilter===g.k?"2px solid var(--blue)":"1px solid var(--line)",background:groupFilter===g.k?"rgba(0,122,255,0.1)":"var(--bg)",color:groupFilter===g.k?"var(--blue)":"var(--dim)",fontSize:12,fontWeight:groupFilter===g.k?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>{g.icon&&<span>{g.icon}</span>}{g.label}<span style={{fontSize:11,opacity:0.7,marginLeft:2}}>({groupCounts[g.k]||0})</span></button>)}
     </div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
       <SB value={search} onChange={setSearch} placeholder={"ค้นหา"+title+"..."}/>
@@ -127,7 +127,7 @@ export default function ContactPage({sh,ft}){
           <div onClick={isC?()=>setViewProfile(c):()=>setViewSupplier(c)} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{fontWeight:600,fontSize:14,cursor:"pointer",color:"var(--blue)"}}>{cN(c)}</div>
           <Badge status={c.type}/>
         </div>
-        {isC&&c.customerGroup&&<div style={{marginBottom:4}}><span style={{fontSize:11,borderRadius:99,padding:"2px 8px",fontWeight:500,...(c.customerGroup==="regular"?{background:"rgba(52,199,89,0.12)",color:"var(--green)"}:{background:"rgba(142,142,147,0.12)",color:"var(--faint)"})}}>{c.customerGroup==="regular"?"⭐ ประจำ":"🏪 หน้าร้าน"}</span></div>}
+        {isC&&c.customerGroup&&<div style={{marginBottom:4}}><span style={{fontSize:11,borderRadius:99,padding:"2px 8px",fontWeight:500,...(c.customerGroup==="regular"?{background:"rgba(52,199,89,0.12)",color:"var(--green)"}:{background:"rgba(142,142,147,0.12)",color:"var(--faint)"})}}>{c.customerGroup==="regular"?"ประจำ":"หน้าร้าน"}</span></div>}
         <div style={{fontSize:12,color:"var(--dim)",marginBottom:2}}>{c.phone||"-"}</div>
         <div style={{fontSize:12,color:"var(--blue)",marginBottom:4}}>{c.email||"-"}</div>
         {!isC&&c.taxId&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:2}}>{"Tax ID: "+c.taxId}</div>}
@@ -168,12 +168,16 @@ export default function ContactPage({sh,ft}){
         <Field label="โทร"><input value={form.phone||""} onChange={e=>setF("phone",e.target.value)} style={IB}/></Field>
         <Field label="Email"><input value={form.email||""} onChange={e=>setF("email",e.target.value)} style={IB}/></Field>
         {isC&&<div style={{gridColumn:"1/-1"}}><Field label="เซลส์"><CustomSelect value={form.salesPerson||""} onChange={v=>setF("salesPerson",v)} options={[{value:"",label:"ไม่ระบุ"},...SS.map(s=>({value:s,label:s}))]}/></Field></div>}
-        {isC&&<Field label="กลุ่มลูกค้า"><CustomSelect value={form.customerGroup||""} onChange={v=>setF("customerGroup",v)} options={[{value:"walkin",label:"🏪 ลูกค้าหน้าร้าน"},{value:"regular",label:"⭐ ลูกค้าประจำ"}]}/></Field>}
+        {isC&&<Field label="กลุ่มลูกค้า"><CustomSelect value={form.customerGroup||""} onChange={v=>setF("customerGroup",v)} options={[{value:"walkin",label:"ลูกค้าหน้าร้าน"},{value:"regular",label:"ลูกค้าประจำ"}]}/></Field>}
         {isC&&<Field label="วันเครดิตเริ่มต้น"><CustomSelect value={String(form.defaultCreditDays||"")} onChange={v=>setF("defaultCreditDays",v?+v:0)} options={[{value:"",label:"ค่าเริ่มต้น (45 วัน)"},...[45,60,90].map(d=>({value:String(d),label:d+" วัน"}))]}/></Field>}
         {isC&&<Field label="ส่วนลดเริ่มต้น"><CustomSelect value={String(form.defaultDiscount!=null?form.defaultDiscount:"")} onChange={v=>setF("defaultDiscount",v!==""?+v:null)} options={[{value:"",label:"ค่าเริ่มต้น (1%)"},...[0,1,2,3,5].map(d=>({value:String(d),label:d===0?"ไม่ลด":d+"%"}))]}/></Field>}
         {isC&&<Field label="ประเภทชำระเริ่มต้น"><CustomSelect value={form.defaultPayType||""} onChange={v=>setF("defaultPayType",v||"")} options={[{value:"",label:"ค่าเริ่มต้น (เงินสด)"},{value:"cash",label:"เงินสด"},{value:"credit",label:"เครดิต"}]}/></Field>}
         {isC&&<Field label="VAT เริ่มต้น"><label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 0"}}><input type="checkbox" checked={form.defaultVat!==false} onChange={e=>setF("defaultVat",e.target.checked)}/><span style={{fontSize:13,color:"var(--text)"}}>รวม VAT 7%</span></label></Field>}
         {!isC&&<Field label="เครดิตวัน"><CustomSelect value={String(form.creditDays||"")} onChange={v=>setF("creditDays",v?+v:0)} options={[{value:"",label:"— เลือก —"},{value:"45",label:"45 วัน"},{value:"60",label:"60 วัน"}]}/></Field>}
+        {!isC&&<div style={{gridColumn:"1/-1"}}><Field label="ยี่ห้อที่จำหน่าย">
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>{(form.linkedBrands||[]).map(b=><span key={b} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:99,background:"var(--blue-bg)",border:"1px solid var(--blue)",color:"var(--blue)",fontSize:12,fontWeight:500}}>{b}<span onClick={()=>setF("linkedBrands",(form.linkedBrands||[]).filter(x=>x!==b))} style={{cursor:"pointer",fontSize:14,lineHeight:1}}>{"×"}</span></span>)}</div>
+          <CustomSelect value="" onChange={v=>{if(v&&!(form.linkedBrands||[]).includes(v))setF("linkedBrands",[...(form.linkedBrands||[]),v]);}} options={[{value:"",label:"+ เลือกยี่ห้อ..."},...(brands||[]).filter(b=>!(form.linkedBrands||[]).includes(b)).map(b=>({value:b,label:b}))]}/>
+        </Field></div>}
         <div style={{gridColumn:"1/-1"}}><Field label="Tax ID"><input value={form.taxId||""} onChange={e=>setF("taxId",e.target.value)} style={IB}/></Field></div>
         <div style={{gridColumn:"1/-1"}}><Field label="ที่อยู่"><textarea value={form.address||""} onChange={e=>setF("address",e.target.value)} style={{...IB,height:56,resize:"vertical"}}/></Field></div>
         {isC&&<div style={{gridColumn:"1/-1"}}>
@@ -251,7 +255,7 @@ export default function ContactPage({sh,ft}){
           {STAFF_TABS.map(tab=>{
             const on=staffForm.perms?.[tab]?.access;
             return <label key={tab} onClick={()=>toggleSA(tab)} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:8,border:"1.5px solid "+(on?"var(--green)":"var(--line)"),background:on?"rgba(52,199,89,0.12)":"var(--hover)"}}>
-              <span style={{width:20,height:20,borderRadius:4,border:"1.5px solid "+(on?"var(--green)":"var(--line)"),background:on?"var(--green)":"var(--panel)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,flexShrink:0}}>{on&&"✓"}</span>
+              <span style={{width:20,height:20,borderRadius:4,border:"1.5px solid "+(on?"var(--green)":"var(--line)"),background:on?"var(--green)":"var(--panel)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,flexShrink:0}}>{on&&"v"}</span>
               <span style={{fontSize:12,fontWeight:on?500:400,color:on?"var(--green)":"var(--dim)"}}>{TAB_LABELS[tab]?.th||tab}</span>
             </label>;
           })}

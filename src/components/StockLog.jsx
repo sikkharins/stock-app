@@ -48,7 +48,7 @@ export default function LogPage({sh}){
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10,alignItems:"center"}}>
       <SB value={search} onChange={setSearch} placeholder="ค้นหา..."/>
       <CustomSelect value={fType} onChange={setFType} options={[{value:"",label:"ทุกประเภท"},...Object.entries(MOVE_TYPES).map(([k,v])=>({value:k,label:v.label}))]} style={{width:"auto",minWidth:140}}/>
-      <CustomSelect value={fProd} onChange={setFProd} options={[{value:"",label:"ทุกสินค้า"},...products.map(p=>({value:String(p.id),label:p.brand+" — "+pN(p)}))]} style={{width:"auto",minWidth:160}}/>
+      <CustomSelect searchable value={fProd} onChange={setFProd} options={[{value:"",label:"ทุกสินค้า"},...products.map(p=>({value:String(p.id),label:p.brand+" — "+pN(p),searchText:p.code||""}))]} style={{width:"auto",minWidth:160}}/>
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14,alignItems:"center",fontSize:12}}>
       <span style={{color:"var(--dim)"}}>ช่วงวันที่:</span>

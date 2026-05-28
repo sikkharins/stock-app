@@ -53,7 +53,7 @@ function SOList({sh}){
     cM();
   };
   const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);doSave(soId);};
-  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.status==="completed"){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
+  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO&&cu?.role!=="Admin"){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.linkedPO){setPOs(p=>p.map(x=>x.linkedSO===so.soNum?{...x,linkedSO:""}:x));}if(so.status==="completed"){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
   const deliveringRef=useRef(new Set());
   const confirmDelivery=id=>{
     if(deliveringRef.current.has(id))return;
@@ -164,7 +164,7 @@ function SOList({sh}){
       <td style={{padding:"8px 6px",fontWeight:500}}>
         <span onClick={()=>{setViewSO(so);oM("viewSO");}} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{cursor:"pointer",color:"var(--blue)"}}>{so.soNum}</span>
         {so.fromQuote&&<span style={{fontSize:10,background:"rgba(175,82,222,0.12)",color:"var(--purple)",borderRadius:4,padding:"1px 6px",marginLeft:6,fontWeight:500}}>{so.fromQuote}</span>}
-        {so.dropShip&&<span style={{fontSize:10,background:"rgba(10,132,255,0.12)",color:"var(--blue)",borderRadius:4,padding:"1px 6px",marginLeft:6,fontWeight:500}}>{"📦 ส่งนอกสถานที่"}</span>}
+        {so.dropShip&&<span style={{fontSize:10,background:"rgba(10,132,255,0.12)",color:"var(--blue)",borderRadius:4,padding:"1px 6px",marginLeft:6,fontWeight:500}}>{"ส่งนอกสถานที่"}</span>}
         {so.linkedPO&&<span onClick={e=>{e.stopPropagation();sh.handleTab("purchase");sh.setSearch(so.linkedPO);}} style={{fontSize:10,background:"rgba(255,149,0,0.12)",color:"var(--orange)",borderRadius:4,padding:"1px 6px",marginLeft:4,fontWeight:500,cursor:"pointer"}}>{"← "+so.linkedPO}</span>}
       </td>
       <td style={{padding:"8px 6px"}}>{cust?<span onClick={()=>setViewProfile(cust)} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{cursor:"pointer",color:"var(--blue)"}}>{cN(cust)}</span>:"-"}</td>
@@ -177,7 +177,7 @@ function SOList({sh}){
         {hasApv&&so.status==="pending_special_approval"&&<button onClick={()=>setApproveSO(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--purple)",background:"rgba(175,82,222,0.12)",color:"var(--purple)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>อนุมัติ</button>}
         {ed&&(so.status==="pending_delivery"||so.status==="pending_special_approval")&&<button onClick={()=>openEdit(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>แก้ไข</button>}
         {ed&&so.status==="pending_delivery"&&<button onClick={()=>{setConfirmSO(so);oM("confirmD");}} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--green)",background:"rgba(52,199,89,0.12)",color:"var(--green)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>จัดส่ง</button>}
-        {ed&&!so.linkedPO&&<button onClick={()=>setDelSO(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
+        {ed&&(!so.linkedPO||cu?.role==="Admin")&&<button onClick={()=>setDelSO(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
       </td>
     </tr>;})}</tbody></table></div>
 
@@ -205,7 +205,7 @@ function SOList({sh}){
             </tr></tbody>
           </table>
         </div>
-        {confirmSO.dropShip?<div style={{background:"rgba(10,132,255,0.08)",border:"1px solid var(--blue)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}><strong>{"📦 ส่งนอกสถานที่"}</strong><div style={{fontSize:12,color:"var(--dim)",marginTop:4}}>{"สต็อกจะ +รับเข้า แล้ว -จ่ายออก (ไม่กระทบยอดสต็อก)"}</div>{confirmSO.linkedPO&&<div style={{fontSize:12,color:"var(--blue)",marginTop:2}}>{confirmSO.linkedPO+" จะเปลี่ยนเป็น \"รับแล้ว\" อัตโนมัติ"}</div>}</div>
+        {confirmSO.dropShip?<div style={{background:"rgba(10,132,255,0.08)",border:"1px solid var(--blue)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}><strong>{"ส่งนอกสถานที่"}</strong><div style={{fontSize:12,color:"var(--dim)",marginTop:4}}>{"สต็อกจะ +รับเข้า แล้ว -จ่ายออก (ไม่กระทบยอดสต็อก)"}</div>{confirmSO.linkedPO&&<div style={{fontSize:12,color:"var(--blue)",marginTop:2}}>{confirmSO.linkedPO+" จะเปลี่ยนเป็น \"รับแล้ว\" อัตโนมัติ"}</div>}</div>
         :<div style={{background:"rgba(52,199,89,0.12)",border:"1px solid var(--green)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}><strong>ยืนยันแล้วสต็อกจะถูกตัดทันที</strong></div>}
         <MBtns onCancel={cM} onSave={()=>{confirmDelivery(confirmSO.id);setConfirmSO(null);cM();}} saveLabel="ยืนยัน"/>
       </Modal>;
@@ -221,7 +221,7 @@ function SOList({sh}){
         <Badge status={viewSO.status}/>
       </div>
       {viewSO.fromQuote&&<div style={{fontSize:12,background:"rgba(175,82,222,0.12)",color:"var(--purple)",borderRadius:6,padding:"6px 10px",marginBottom:10}}>{"มาจากใบเสนอราคา: "+viewSO.fromQuote}</div>}
-      {viewSO.linkedPO&&<div style={{fontSize:12,background:"rgba(255,149,0,0.12)",color:"var(--orange)",borderRadius:6,padding:"6px 10px",marginBottom:10}}>{"📦 ส่งนอกสถานที่จาก PO: "}<span onClick={()=>{cM();sh.handleTab("purchase");sh.setSearch(viewSO.linkedPO);}} style={{fontWeight:600,cursor:"pointer",textDecoration:"underline"}}>{viewSO.linkedPO}</span></div>}
+      {viewSO.linkedPO&&<div style={{fontSize:12,background:"rgba(255,149,0,0.12)",color:"var(--orange)",borderRadius:6,padding:"6px 10px",marginBottom:10}}>{"ส่งนอกสถานที่จาก PO: "}<span onClick={()=>{cM();sh.handleTab("purchase");sh.setSearch(viewSO.linkedPO);}} style={{fontWeight:600,cursor:"pointer",textDecoration:"underline"}}>{viewSO.linkedPO}</span></div>}
       {viewSO.status==="pending_special_approval"&&<div style={{background:"rgba(175,82,222,0.12)",border:"1.5px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12}}>
         <div style={{fontWeight:600,color:"var(--purple)",marginBottom:6}}>{"รายการที่แก้ไข:"}</div>
         {(viewSO.origPrices||[]).map((op,i)=>{const it=viewSO.items[i];if(!it)return null;const diff=+it.price!==+op;return diff?<div key={i} style={{color:"var(--purple)"}}>{(products.find(x=>x.id===it.productId)?pN(products.find(x=>x.id===it.productId)):"-")+" — ราคาตั้งต้น ฿"+fmt(op)+" → ฿"+fmt(it.price)}</div>:null;})}

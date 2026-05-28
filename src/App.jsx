@@ -23,11 +23,12 @@ const UserPage = lazy(() => import("./components/Users.jsx"));
 const DefectivePage = lazy(() => import("./components/DefectiveProducts.jsx"));
 const BackupManager = lazy(() => import("./components/BackupManager.jsx"));
 const AISOBot = lazy(() => import("./components/AISOBot.jsx"));
+const SalesOverviewPage = lazy(() => import("./components/SalesOverview.jsx"));
 
-const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",finance:"$",reports:"◑",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙"};
+const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",finance:"$",reports:"◑",sales_overview:"◎",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙"};
 const NAV_SECTIONS=[
   {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","purchase","sales","promos"]},
-  {label:{th:"การจัดการ",en:"Manage"},tabs:["finance","reports","defective","suppliers","customers"]},
+  {label:{th:"การจัดการ",en:"Manage"},tabs:["finance","reports","sales_overview","defective","suppliers","customers"]},
   {label:{th:"ระบบ",en:"System"},tabs:["users"]},
 ];
 
@@ -93,9 +94,9 @@ export default function App(){
   useEffect(()=>{cuRef.current=cu;},[cu]);
 
   // Back button handler — prevent accidental app close (AssistiveTouch style)
-  const backToastTimer=useRef(null);const[backToast,setBackToast]=useState(false);
-  const backStateRef=useRef({fabOpen,sideOpen,showNotif,showBackup,tab,backToast});
-  useEffect(()=>{backStateRef.current={fabOpen,sideOpen,showNotif,showBackup,tab,backToast};},[fabOpen,sideOpen,showNotif,showBackup,tab,backToast]);
+  const[exitConfirm,setExitConfirm]=useState(false);
+  const backStateRef=useRef({fabOpen,sideOpen,showNotif,showBackup,tab,modal,exitConfirm});
+  useEffect(()=>{backStateRef.current={fabOpen,sideOpen,showNotif,showBackup,tab,modal,exitConfirm};},[fabOpen,sideOpen,showNotif,showBackup,tab,modal,exitConfirm]);
   const lastBackRef=useRef(0);
   useEffect(()=>{
     history.pushState({app:true},"");
@@ -107,11 +108,13 @@ export default function App(){
       if(s.sideOpen){setSideOpen(false);history.pushState({app:true},"");return;}
       if(s.showNotif){setShowNotif(false);history.pushState({app:true},"");return;}
       if(s.showBackup){setShowBackup(false);history.pushState({app:true},"");return;}
+      if(s.modal){setModal(null);history.pushState({app:true},"");return;}
       if(s.tab!=="dashboard"){setTab("dashboard");history.pushState({app:true},"");return;}
-      if(!s.backToast){setBackToast(true);history.pushState({app:true},"");clearTimeout(backToastTimer.current);backToastTimer.current=setTimeout(()=>setBackToast(false),500);}
+      if(s.exitConfirm){setExitConfirm(false);history.pushState({app:true},"");return;}
+      setExitConfirm(true);history.pushState({app:true},"");
     };
     window.addEventListener("popstate",onBack);
-    return()=>{window.removeEventListener("popstate",onBack);clearTimeout(backToastTimer.current);};
+    return()=>window.removeEventListener("popstate",onBack);
   },[]);
 
   const RT_SETTERS=useRef(null);
@@ -236,7 +239,7 @@ export default function App(){
     if(u)setCu(u);
   },[users]);
 
-  const handleTab=nt=>{setTab(nt);setSearch("");setSideOpen(false);setSess(s=>{if(!s)return s;const now=Date.now();const hist=[...s.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}hist.push({tab:nt,enterTime:now,endTime:null,duration:null});return{...s,tabHistory:hist};});};
+  const handleTab=nt=>{history.pushState({app:true},"");setTab(nt);setSearch("");setSideOpen(false);setSess(s=>{if(!s)return s;const now=Date.now();const hist=[...s.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}hist.push({tab:nt,enterTime:now,endTime:null,duration:null});return{...s,tabHistory:hist};});};
   const handleLogin=user=>{const ft=[...ALL_TABS,"users"].find(tb=>{const p=user.perms[tb];return p&&(typeof p==="string"?p!=="none":p.access);})||"dashboard";const now=Date.now();setCu(user);setTab(ft);setSess({userId:user.id,username:user.username,role:user.role,salesName:user.salesName||"",supplierName:user.supplierName||"",loginTime:now,loginTimeStr:nowStr(),logoutTime:null,logoutTimeStr:null,totalDuration:null,tabHistory:[{tab:ft,enterTime:now,endTime:null,duration:null}]});};
   const handleLogout=()=>{if(sess){const now=Date.now();const hist=[...sess.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}setActLogs(p=>[{...sess,logoutTime:now,logoutTimeStr:nowStr(),totalDuration:Math.floor((now-sess.loginTime)/1000),tabHistory:hist},...p].slice(0,200));}signOut().catch(()=>{});Object.keys(localStorage).filter(k=>k.startsWith("v3_")&&k!=="v3_theme"||k==="fab_pos"||k==="ai_bot_settings").forEach(k=>localStorage.removeItem(k));setSess(null);setCu(null);};
 
@@ -303,12 +306,12 @@ export default function App(){
         </div>
         <div className="topbar-actions" style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
           <button onClick={async()=>{setSaving(true);try{const d=await loadAllFromSupabase();applyData(d,false);}catch(e){console.warn("Reload error:",e.message);}setSaving(false);}} style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--dim)",cursor:"pointer",background:"none",border:"none",fontSize:15}} title="โหลดข้อมูลใหม่">↻</button>
-          {saving?<span style={{fontSize:11,color:"var(--dim)"}}>⟳</span>:<span style={{fontSize:11,color:"var(--green)"}}>✓</span>}
+          {saving?<span style={{fontSize:11,color:"var(--dim)"}}>...</span>:<span style={{fontSize:11,color:"var(--green)"}}>OK</span>}
           <div style={{position:"relative"}}>
             <button onClick={()=>setShowNotif(!showNotif)} style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--dim)",cursor:"pointer",background:"none",border:"none",fontSize:15}}>N{notifs.length>0&&<span style={{position:"absolute",top:4,right:5,width:7,height:7,borderRadius:"50%",background:"var(--red)"}}/>}</button>
             {showNotif&&<div className="notif-dropdown" style={{position:"absolute",right:0,top:38,width:340,maxHeight:380,overflowY:"auto",background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,boxShadow:"0 8px 24px rgba(0,0,0,0.18)",zIndex:200}}>
               <div style={{padding:"10px 14px",fontWeight:600,fontSize:13,borderBottom:"1px solid var(--line)",display:"flex",justifyContent:"space-between",color:"var(--text)"}}><span>{"แจ้งเตือน ("+notifs.length+")"}</span><span onClick={()=>setShowNotif(false)} style={{cursor:"pointer",color:"var(--dim)",fontSize:18}}>×</span></div>
-              {notifs.length===0&&<div style={{padding:"2rem",textAlign:"center",color:"var(--dim)",fontSize:13}}>ไม่มีการแจ้งเตือน ✓</div>}
+              {notifs.length===0&&<div style={{padding:"2rem",textAlign:"center",color:"var(--dim)",fontSize:13}}>ไม่มีการแจ้งเตือน</div>}
               {notifs.map((n,i)=><div key={i} style={{padding:"8px 14px",borderBottom:"1px solid var(--line)",fontSize:12,display:"flex",gap:8}}><span>{n.icon}</span><span style={{color:n.type==="danger"?"var(--red)":"var(--text)"}}>{n.msg}</span></div>)}
             </div>}
           </div>
@@ -333,6 +336,7 @@ export default function App(){
           {tab==="promos"&&<PromosPage sh={sh}/>}
           {tab==="finance"&&<FinPage sh={sh}/>}
           {tab==="reports"&&<RepPage sh={sh}/>}
+          {tab==="sales_overview"&&<SalesOverviewPage sh={sh}/>}
           {tab==="suppliers"&&<ContactPage key="s" sh={sh} ft="supplier"/>}
           {tab==="customers"&&<ContactPage key="c" sh={sh} ft="customer"/>}
           {tab==="defective"&&<DefectivePage sh={sh}/>}
@@ -348,10 +352,10 @@ export default function App(){
 
     {(()=>{
       const acts=[
-        canC("sales")&&{label:"สร้างใบขาย",icon:"📦",tab:"sales",mk:"addSO"},
-        canC("products")&&{label:"เพิ่มสินค้า",icon:"📋",tab:"products",mk:"product"},
-        canC("purchase")&&!isSup&&{label:"สร้าง PO",icon:"🛒",tab:"purchase",mk:"addPO"},
-        canC("quotes")&&{label:"ใบเสนอราคา",icon:"📄",tab:"quotes",mk:"addQT"},
+        canC("sales")&&{label:"สร้างใบขาย",icon:"SO",tab:"sales",mk:"addSO"},
+        canC("products")&&{label:"เพิ่มสินค้า",icon:"+",tab:"products",mk:"product"},
+        canC("purchase")&&!isSup&&{label:"สร้าง PO",icon:"PO",tab:"purchase",mk:"addPO"},
+        canC("quotes")&&{label:"ใบเสนอราคา",icon:"QT",tab:"quotes",mk:"addQT"},
       ].filter(Boolean);
       if(!acts.length)return null;
       const doAct=a=>{handleTab(a.tab);setQuickCreate(a.mk);setFabOpen(false);};
@@ -412,6 +416,16 @@ export default function App(){
       addA("แก้ไขสินค้า (AI Bot)",updates.length+" รายการ");
     }}/></Suspense>}
 
-    {backToast&&<div style={{position:"fixed",bottom:40,left:"50%",transform:"translateX(-50%)",background:"rgba(30,30,30,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",color:"rgba(255,255,255,0.9)",padding:"10px 24px",borderRadius:20,fontSize:13,fontWeight:500,zIndex:99999,boxShadow:"0 4px 16px rgba(0,0,0,0.3)",fontFamily:"inherit",animation:"fab-pop 0.2s both"}}>กดอีกครั้งเพื่อออก</div>}
+    {exitConfirm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",zIndex:99999,display:"flex",alignItems:"center",justifyContent:"center",animation:"fab-pop 0.2s both"}} onClick={()=>setExitConfirm(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",borderRadius:16,padding:"28px 24px",width:"min(320px,90vw)",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",textAlign:"center"}}>
+        <div style={{fontSize:24,marginBottom:8,fontWeight:600}}>{"!"}</div>
+        <div style={{fontSize:16,fontWeight:600,marginBottom:6}}>ออกจากระบบ?</div>
+        <div style={{fontSize:13,color:"var(--dim)",marginBottom:20}}>ต้องการออกจาก TS Electronics หรือไม่</div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setExitConfirm(false)} style={{flex:1,padding:"11px 0",borderRadius:10,border:"1.5px solid var(--line)",background:"var(--bg)",color:"var(--text)",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>อยู่ต่อ</button>
+          <button onClick={()=>{setExitConfirm(false);handleLogout();}} style={{flex:1,padding:"11px 0",borderRadius:10,border:"none",background:"var(--red)",color:"#fff",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>ออกจากระบบ</button>
+        </div>
+      </div>
+    </div>}
   </>;
 }

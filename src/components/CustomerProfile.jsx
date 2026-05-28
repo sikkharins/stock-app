@@ -107,7 +107,7 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"4px 16px",fontSize:12,color:"var(--dim)"}}>
           {customer.phone&&<div>{customer.phone}</div>}
-          {customer.email&&<div>{"✉ "+customer.email}</div>}
+          {customer.email&&<div>{customer.email}</div>}
           {customer.taxId&&<div>{"Tax ID: "+customer.taxId}</div>}
           {customer.address&&<div style={{gridColumn:"1/-1"}}>{customer.address}</div>}
         </div>

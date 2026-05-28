@@ -48,7 +48,7 @@ export default function POPage({sh}){
   const[viewPO,setViewPO]=useState(null);
   const[appModal,setAppModal]=useState(null);
   const[appComment,setAppComment]=useState("");
-  const[confirmCancel,setConfirmCancel]=useState(null);const[editPO,setEditPO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);
+  const[confirmCancel,setConfirmCancel]=useState(null);const[editPO,setEditPO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);const[confirmDelPO,setConfirmDelPO]=useState(null);
 
   const poTot=po=>(po.items||[]).reduce((s,i)=>s+i.qty*i.cost,0);
   const stats=useMemo(()=>{const pa=basePOs.filter(p=>p.status==="pending_approval").length;const recv=basePOs.filter(p=>p.status==="received").length;const totAmt=basePOs.reduce((s,po)=>s+poTot(po),0);return{total:basePOs.length,pa,recv,totAmt};},[basePOs]);
@@ -95,6 +95,7 @@ export default function POPage({sh}){
 
   const receive=po=>{
     if(po.status!=="approved"&&po.status!=="pending")return;
+    if(po.dropShip){setWarnMsg("PO ส่งนอกสถานที่ ไม่ต้องรับของ — ใช้ปุ่มจัดส่งที่ SO แทน");return;}
     for(const it of po.items){const pr=products.find(p=>p.id===it.productId);if(pr)addLog(mkLog(pr.id,"in",it.qty,pr.stock,pr.stock+it.qty,po.poNum,"รับของ PO",cu.username));}
     setProducts(pp=>pp.map(pr=>{const it=po.items.find(i=>i.productId===pr.id);return it?{...pr,stock:pr.stock+it.qty}:pr;}));
     addA("รับของ PO",po.poNum);
@@ -110,6 +111,12 @@ export default function POPage({sh}){
     }
     setPOs(p=>p.map(x=>x.id===po.id?{...x,status:"cancelled"}:x));
     addA("ยกเลิก PO",po.poNum);setConfirmCancel(null);cM();
+  };
+
+  const deletePO=po=>{
+    if(po.linkedSO){setSales(p=>p.filter(s=>s.soNum!==po.linkedSO));addA("ลบ SO (พร้อม PO)",po.linkedSO);}
+    setPOs(p=>p.filter(x=>x.id!==po.id));
+    addA("ลบ PO (Admin)",po.poNum);setConfirmDelPO(null);cM();
   };
 
   const openEditPO=po=>{
@@ -145,7 +152,9 @@ export default function POPage({sh}){
     if(po.status==="approved"&&po.dropShip)
       a.push(<span key="ds" style={{...AB,border:"1px solid var(--blue)",background:"rgba(10,132,255,0.08)",color:"var(--blue)",cursor:"default"}}>{"รอจัดส่ง SO"}</span>);
     if((isAdmin||(po.status==="draft"&&po.createdBy===cu?.username))&&!["received","cancelled"].includes(po.status)&&!isSup)
-      a.push(<button key="can" onClick={()=>setConfirmCancel(po)} style={{...AB,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",marginRight:0}}>ยกเลิก</button>);
+      a.push(<button key="can" onClick={()=>setConfirmCancel(po)} style={{...AB,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)"}}>ยกเลิก</button>);
+    if(isAdmin&&!isSup)
+      a.push(<button key="del" onClick={()=>setConfirmDelPO(po)} style={{...AB,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",marginRight:0}}>ลบ</button>);
     return a;
   };
 
@@ -181,7 +190,7 @@ export default function POPage({sh}){
             <td style={{padding:"8px 6px",fontWeight:500}}>
               {po.poNum}
               {wasRejected&&<span style={{marginLeft:6,fontSize:10,color:"var(--red)",background:"rgba(255,59,48,0.12)",borderRadius:4,padding:"1px 5px"}}>ถูกปฏิเสธ</span>}
-              {po.dropShip&&<span style={{marginLeft:6,fontSize:10,color:"var(--blue)",background:"rgba(10,132,255,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500}}>{"📦 ส่งนอกสถานที่"}</span>}
+              {po.dropShip&&<span style={{marginLeft:6,fontSize:10,color:"var(--blue)",background:"rgba(10,132,255,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500}}>{"ส่งนอกสถานที่"}</span>}
               {po.linkedSO&&<span onClick={e=>{e.stopPropagation();sh.handleTab("sales");sh.setSearch(po.linkedSO);}} style={{marginLeft:4,fontSize:10,color:"var(--green)",background:"rgba(52,199,89,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500,cursor:"pointer"}}>{"→ "+po.linkedSO}</span>}
             </td>
             <td style={{padding:"8px 6px"}}>{sup?cN(sup):"-"}</td>
@@ -205,7 +214,7 @@ export default function POPage({sh}){
         <div style={{gridColumn:"1/-1"}}>
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(form.dropShip?"var(--blue)":"var(--line)"),background:form.dropShip?"rgba(10,132,255,0.08)":"var(--hover)"}}>
             <input type="checkbox" checked={!!form.dropShip} onChange={e=>setForm(f=>({...f,dropShip:e.target.checked,dropShipCustomerId:e.target.checked?f.dropShipCustomerId:""}))}/>
-            <span style={{fontSize:13,fontWeight:form.dropShip?600:400,color:form.dropShip?"var(--blue)":"var(--dim)"}}>{"📦 ส่งนอกสถานที่ (Drop Ship)"}</span>
+            <span style={{fontSize:13,fontWeight:form.dropShip?600:400,color:form.dropShip?"var(--blue)":"var(--dim)"}}>{"ส่งนอกสถานที่ (Drop Ship)"}</span>
           </label>
         </div>
         {form.dropShip&&<div style={{gridColumn:"1/-1"}}><Field label="ลูกค้าที่รับของ"><CustomSelect searchable value={form.dropShipCustomerId} onChange={v=>setForm(f=>({...f,dropShipCustomerId:v}))} options={[{value:"",label:"เลือกลูกค้า..."},...custs.map(c=>({value:String(c.id),label:cN(c)}))]}/></Field></div>}
@@ -213,7 +222,7 @@ export default function POPage({sh}){
       </div>
       {form.items.map((item,idx)=><div key={idx} style={{marginBottom:10,padding:"10px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)"}}>
         <div className="item-form-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,alignItems:"center"}}>
-          <CustomSelect searchable value={item.productId} onChange={v=>setIt(idx,"productId",v)} options={[{value:"",label:"เลือกสินค้า..."},...products.map(pr=>({value:String(pr.id),label:pr.brand+" — "+pN(pr)}))]}/>
+          <CustomSelect searchable value={item.productId} onChange={v=>setIt(idx,"productId",v)} options={[{value:"",label:"เลือกสินค้า..."},...(()=>{const sup=contacts.find(c=>c.id===+form.supplierId);const lb=sup&&sup.linkedBrands&&sup.linkedBrands.length>0?sup.linkedBrands:null;return(lb?products.filter(pr=>lb.includes(pr.brand)):products).map(pr=>({value:String(pr.id),label:pr.brand+" — "+pN(pr),searchText:pr.code||""}));})()]}/>
           <input type="number" min="1" placeholder="Qty" value={item.qty} onChange={e=>setIt(idx,"qty",e.target.value)} style={IB}/>
           <input type="number" min="0" placeholder="ราคา/หน่วย" value={item.cost} onChange={e=>setIt(idx,"cost",e.target.value)} style={IB}/>
           <span onClick={()=>rmItem(idx)} style={{cursor:"pointer",color:"var(--red)",fontSize:20}}>{"×"}</span>
@@ -237,7 +246,7 @@ export default function POPage({sh}){
         <Badge status={viewPO.status}/>
       </div>
       {viewPO.dropShip&&<div style={{background:"rgba(10,132,255,0.08)",border:"1px solid var(--blue)",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:12}}>
-        <div style={{fontWeight:600,color:"var(--blue)",marginBottom:4}}>{"📦 ส่งนอกสถานที่ (Drop Ship)"}</div>
+        <div style={{fontWeight:600,color:"var(--blue)",marginBottom:4}}>{"ส่งนอกสถานที่ (Drop Ship)"}</div>
         <div style={{color:"var(--dim)"}}>{"ลูกค้าที่รับของ: "}<span style={{fontWeight:500,color:"var(--text)"}}>{(()=>{const c=contacts.find(x=>x.id===viewPO.dropShipCustomerId);return c?cN(c):"-";})()}</span></div>
         {viewPO.linkedSO&&<div style={{marginTop:4}}>{"SO: "}<span onClick={()=>{cM();sh.handleTab("sales");sh.setSearch(viewPO.linkedSO);}} style={{color:"var(--green)",fontWeight:600,cursor:"pointer",textDecoration:"underline"}}>{viewPO.linkedSO}</span></div>}
       </div>}
@@ -285,7 +294,7 @@ export default function POPage({sh}){
           <button onClick={()=>{setViewPO(null);openApproval(viewPO,"approve");}} style={{padding:"8px 18px",background:"var(--green)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"อนุมัติ"}</button>
           <button onClick={()=>{setViewPO(null);openApproval(viewPO,"reject");}} style={{padding:"8px 18px",background:"var(--red)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"ปฏิเสธ"}</button>
         </>}
-        {(viewPO.status==="approved"||viewPO.status==="pending")&&ed&&!isSup&&
+        {(viewPO.status==="approved"||viewPO.status==="pending")&&ed&&!isSup&&!viewPO.dropShip&&
           <button onClick={()=>{setViewPO(null);openApproval(viewPO,"receive");}} style={{padding:"8px 18px",background:"var(--blue)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"รับของ"}</button>}
       </div>
       <MBtns onCancel={cM}/>
@@ -337,6 +346,14 @@ export default function POPage({sh}){
     {confirmCancel&&<Modal title="ยกเลิก PO" onClose={()=>setConfirmCancel(null)}>
       <div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--red)"}}>{"ยืนยันยกเลิก "+confirmCancel.poNum+"?"}</div>
       <MBtns onCancel={()=>setConfirmCancel(null)} onSave={()=>cancelPO(confirmCancel)} saveLabel="ยกเลิก PO"/>
+    </Modal>}
+
+    {confirmDelPO&&<Modal title="ยืนยันลบ PO" onClose={()=>setConfirmDelPO(null)}>
+      <div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,color:"var(--red)"}}>
+        {"จะลบ "+confirmDelPO.poNum+" ถาวร"}
+        {confirmDelPO.linkedSO&&<div style={{marginTop:6,fontWeight:600}}>{"SO ที่เชื่อมโยง ("+confirmDelPO.linkedSO+") จะถูกลบด้วย"}</div>}
+      </div>
+      <MBtns onCancel={()=>setConfirmDelPO(null)} onSave={()=>deletePO(confirmDelPO)} saveLabel="ลบถาวร"/>
     </Modal>}
 
     {warnMsg&&<Modal title="แจ้งเตือน" onClose={()=>setWarnMsg(null)}>

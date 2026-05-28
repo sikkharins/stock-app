@@ -192,8 +192,7 @@ export default function PromosPage({sh}){
               {t.rewardType==="percent"&&<Field label="ส่วนลด (%)"><input type="number" value={t.rewardValue} onChange={e=>setTier(t.id,"rewardValue",e.target.value)} style={IB} placeholder="เช่น 10"/></Field>}
               {t.rewardType==="fixed"&&<Field label="ส่วนลด (บาท)"><input type="number" value={t.rewardValue} onChange={e=>setTier(t.id,"rewardValue",e.target.value)} style={IB} placeholder="เช่น 500"/></Field>}
               {t.rewardType==="product"&&<Field label="สินค้าแถม">
-                <CustomSelect value={String(t.rewardProductId||"")} onChange={v=>setTier(t.id,"rewardProductId",v)} options={[{value:"",label:"— เลือกสินค้า —"},...products.map(p=>({value:String(p.id),label:pN(p)+" ("+p.brand+")"}))]}/>
-              </Field>}
+                <CustomSelect searchable value={String(t.rewardProductId||"")} onChange={v=>setTier(t.id,"rewardProductId",v)} options={[{value:"",label:"— เลือกสินค้า —"},...products.map(p=>({value:String(p.id),label:pN(p)+" ("+p.brand+")",searchText:p.code||""}))]}/>              </Field>}
             </div>
           </div>)}
         </div>

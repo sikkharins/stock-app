@@ -44,8 +44,8 @@ export default function CatMgr({cats,setCats,onClose}){
                 {isES
                   ? <div style={{display:"flex",alignItems:"center",gap:4}}>
                       <input value={editSubName} onChange={e=>setEditSubName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveSub(cat.id,sub.id)} style={{...IB,width:120,padding:"3px 6px",fontSize:12}} autoFocus/>
-                      <button onClick={()=>saveSub(cat.id,sub.id)} style={{padding:"2px 8px",borderRadius:4,border:"none",background:"var(--green)",color:"#fff",cursor:"pointer",fontSize:11}}>{"✓"}</button>
-                      <button onClick={()=>setEditSubId(null)} style={{padding:"2px 6px",borderRadius:4,border:"1px solid var(--line)",background:"transparent",cursor:"pointer",fontSize:11,color:"var(--dim)"}}>{"✗"}</button>
+                      <button onClick={()=>saveSub(cat.id,sub.id)} style={{padding:"2px 8px",borderRadius:4,border:"none",background:"var(--green)",color:"#fff",cursor:"pointer",fontSize:11}}>{"OK"}</button>
+                      <button onClick={()=>setEditSubId(null)} style={{padding:"2px 6px",borderRadius:4,border:"1px solid var(--line)",background:"transparent",cursor:"pointer",fontSize:11,color:"var(--dim)"}}>{"X"}</button>
                     </div>
                   : <div style={{display:"flex",alignItems:"center",gap:4}}>
                       <span style={{fontSize:13}}>{sub.name}</span>

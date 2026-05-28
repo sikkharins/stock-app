@@ -45,7 +45,7 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
 .btns .pr{background:#007AFF;color:#fff}
 .btns .cl{background:#eee;color:#333}
 </style></head><body>
-<div class="btns no-print"><button class="pr" onclick="window.print()">🖨️ พิมพ์ / บันทึก PDF</button><button class="cl" onclick="window.close()">✕ ปิด</button></div>
+<div class="btns no-print"><button class="pr" onclick="window.print()">พิมพ์ / บันทึก PDF</button><button class="cl" onclick="window.close()">X ปิด</button></div>
 <div class="header"><div><div class="company">TS Electronics</div><div class="sub">ระบบจัดการร้านค้าเครื่องใช้ไฟฟ้า</div></div><div class="date">วันที่พิมพ์: ${d}</div></div>
 <div class="title">${title}</div>
 <div class="content">${html}</div>
@@ -111,7 +111,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
     { label: "ยอดขายรายเดือน", text: "สรุปยอดขายรายเดือนพร้อมกำไร" },
     { label: "แนวโน้มการขาย", text: "วิเคราะห์แนวโน้มการขายเปรียบเทียบรายเดือน" },
     { label: "ลูกค้าซื้อเยอะ", text: "ลูกค้าที่ซื้อมากที่สุดคือใคร" },
-    { label: "📄 สรุปรายงาน", text: "สรุปรายงานภาพรวมธุรกิจ ยอดขาย กำไร สินค้าขายดี ลูกค้าหลัก จัดเป็นตารางให้อ่านง่าย" },
+    { label: "สรุปรายงาน", text: "สรุปรายงานภาพรวมธุรกิจ ยอดขาย กำไร สินค้าขายดี ลูกค้าหลัก จัดเป็นตารางให้อ่านง่าย" },
     { label: "ยอดค้างชำระ", text: "ลูกค้าไหนค้างชำระบ้าง" },
   ];
   const [input, setInput] = useState("");
@@ -361,7 +361,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
       setPendingQuote(null);
     } else if (pendingUpdate) {
       onUpdateProducts(pendingUpdate.updates);
-      addMsg("bot", `แก้ไข ${pendingUpdate.updates.length} รายการเรียบร้อยครับ! ✅`);
+      addMsg("bot", `แก้ไข ${pendingUpdate.updates.length} รายการเรียบร้อยครับ! `);
       speak("แก้ไขเรียบร้อยครับ");
       addActionLog("แก้ไขสินค้า", `${pendingUpdate.updates.length} รายการ — ${pendingUpdate.reason || ""}`);
       setPendingUpdate(null);
@@ -555,8 +555,8 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         </select>
       </div>
 
-      {/* 💬 Chat History Info */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>💬 ประวัติแชท</div>
+      {/* Chat History Info */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>ประวัติแชท</div>
       <div style={{ padding: "8px 0", fontSize: 12, color: "var(--dim)" }}>
         เก็บ {msgs.length - 1} / {settings.chatHistoryLimit || 30} ข้อความ {chatKey ? <span style={{ fontSize: 10, opacity: 0.7 }}>({chatKey})</span> : null}
       </div>
@@ -564,8 +564,8 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         <button onClick={() => { clearChat(); setView("chat"); }} style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--red)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>ล้างประวัติแชท</button>
       </div>
 
-      {/* 🧠 Memory Viewer */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>🧠 ความจำ AI ({aiMemory.length})</div>
+      {/* Memory Viewer */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>ความจำ AI ({aiMemory.length})</div>
       <div style={{ maxHeight: 200, overflowY: "auto", padding: "4px 0" }}>
         {aiMemory.length === 0 && <div style={{ fontSize: 12, color: "var(--dim)", padding: "8px 0" }}>ยังไม่มีข้อมูลความจำ</div>}
         {aiMemory.map((m, i) => (
@@ -574,7 +574,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
               <div style={{ color: "var(--text)" }}>{m.text}</div>
               {m.ts && <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>{new Date(m.ts).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</div>}
             </div>
-            <button onClick={() => setAiMemory(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 14, padding: "0 4px", lineHeight: 1, flexShrink: 0 }} title="ลบ">✕</button>
+            <button onClick={() => setAiMemory(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 14, padding: "0 4px", lineHeight: 1, flexShrink: 0 }} title="ลบ">X</button>
           </div>
         ))}
       </div>
@@ -582,8 +582,8 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         <button onClick={() => { setAiMemory([]); supabase.from("app_data").upsert({ key: "ai_memory", data: [], updated_at: new Date().toISOString() }); }} style={{ width: "100%", padding: "8px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--red)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>ล้างความจำทั้งหมด</button>
       </div>}
 
-      {/* ✅ Action Log Viewer */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>✅ ประวัติคำสั่ง ({aiActionLog.length})</div>
+      {/* Action Log Viewer */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>ประวัติคำสั่ง ({aiActionLog.length})</div>
       <div style={{ maxHeight: 200, overflowY: "auto", padding: "4px 0 12px 0" }}>
         {aiActionLog.length === 0 && <div style={{ fontSize: 12, color: "var(--dim)", padding: "8px 0" }}>ยังไม่มีประวัติคำสั่ง</div>}
         {aiActionLog.map((a, i) => (
@@ -598,8 +598,8 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         ))}
       </div>
 
-      {/* 📦 Product Notes Viewer */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>📦 บันทึกสินค้า ({productNotes.length})</div>
+      {/* Product Notes Viewer */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>บันทึกสินค้า ({productNotes.length})</div>
       <div style={{ maxHeight: 200, overflowY: "auto", padding: "4px 0" }}>
         {productNotes.length === 0 && <div style={{ fontSize: 12, color: "var(--dim)", padding: "8px 0" }}>ยังไม่มีบันทึก — AI จะเพิ่มอัตโนมัติเมื่อพบข้อมูลสำคัญ</div>}
         {productNotes.map((n, i) => {
@@ -610,7 +610,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
               <div style={{ color: "var(--text)" }}>{n.note}</div>
               {n.ts && <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>{new Date(n.ts).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</div>}
             </div>
-            <button onClick={() => setProductNotes(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 14, padding: "0 4px", lineHeight: 1, flexShrink: 0 }} title="ลบ">✕</button>
+            <button onClick={() => setProductNotes(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 14, padding: "0 4px", lineHeight: 1, flexShrink: 0 }} title="ลบ">X</button>
           </div>;
         })}
       </div>
@@ -618,8 +618,8 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         <button onClick={() => { setProductNotes([]); supabase.from("app_data").upsert({ key: "ai_product_notes", data: [], updated_at: new Date().toISOString() }); }} style={{ width: "100%", padding: "8px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--red)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>ล้างบันทึกสินค้าทั้งหมด</button>
       </div>}
 
-      {/* 👤 Customer Notes Viewer */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>👤 บันทึกลูกค้า ({customerNotes.length})</div>
+      {/* Customer Notes Viewer */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>บันทึกลูกค้า ({customerNotes.length})</div>
       <div style={{ maxHeight: 200, overflowY: "auto", padding: "4px 0 12px 0" }}>
         {customerNotes.length === 0 && <div style={{ fontSize: 12, color: "var(--dim)", padding: "8px 0" }}>ยังไม่มีบันทึก — AI จะเพิ่มอัตโนมัติเมื่อพบข้อมูลสำคัญ</div>}
         {customerNotes.map((n, i) => {
@@ -630,7 +630,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
               <div style={{ color: "var(--text)" }}>{n.note}</div>
               {n.ts && <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>{new Date(n.ts).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</div>}
             </div>
-            <button onClick={() => setCustomerNotes(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 14, padding: "0 4px", lineHeight: 1, flexShrink: 0 }} title="ลบ">✕</button>
+            <button onClick={() => setCustomerNotes(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 14, padding: "0 4px", lineHeight: 1, flexShrink: 0 }} title="ลบ">X</button>
           </div>;
         })}
       </div>
@@ -641,7 +641,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
   );
 
   return <>
-    {!kbOpen && <button onClick={() => setOpen(o => !o)} className="ai-fab-btn" style={{...S.fab, ...(open ? {background:"linear-gradient(135deg,#FF3B30,#FF6B6B)",boxShadow:"0 4px 20px rgba(255,59,48,0.4)"} : {})}}>{open ? "✕" : "AI"}</button>}
+    {!kbOpen && <button onClick={() => setOpen(o => !o)} className="ai-fab-btn" style={{...S.fab, ...(open ? {background:"linear-gradient(135deg,#FF3B30,#FF6B6B)",boxShadow:"0 4px 20px rgba(255,59,48,0.4)"} : {})}}>{open ? "X" : "AI"}</button>}
 
     {open && <div className="ai-panel" style={S.panel}>
       <div style={S.header}>
@@ -651,17 +651,17 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
           <div style={{ fontSize: 11, color: "var(--dim)" }}>{view === "chat" ? `${MODEL_OPTIONS.find(m => m.id === settings.model)?.name || "Haiku"} | ${settings.lang === "th" ? "ไทย" : "EN"}` : "ปรับแต่งการทำงาน"}</div>
         </div>
         {isAdmin&&<button onClick={() => setView(view === "chat" ? "settings" : "chat")} style={{ background: "none", border: "none", cursor: "pointer", color: view === "settings" ? "var(--blue)" : "var(--dim)", display: "flex", alignItems: "center", padding: 4 }} title="ตั้งค่า"><GearIcon /></button>}
-        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 20 }}>✕</button>
+        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 20 }}>X</button>
       </div>
 
       {view === "settings" ? renderSettings() : <>
         <div ref={chatRef} style={S.chatArea}>
           {msgs.map((m, i) => (
             m.role === "user"
-              ? <div key={i} style={S.bubble(true)}>{m.image && <img src={m.image} style={{ maxWidth: 180, maxHeight: 140, borderRadius: 8, marginBottom: 6, display: "block" }} />}{m.text || "📷 ส่งรูปภาพ"}</div>
+              ? <div key={i} style={S.bubble(true)}>{m.image && <img src={m.image} style={{ maxWidth: 180, maxHeight: 140, borderRadius: 8, marginBottom: 6, display: "block" }} />}{m.text || "ส่งรูปภาพ"}</div>
               : <div key={i} style={S.bubble(false)}>
                   <div className="ai-md" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(m.text || "")) }} />
-                  {m.text && m.text.length > 80 && <button onClick={() => exportPDF(m.text)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 11, padding: "6px 0 0", fontFamily: "inherit", opacity: 0.7 }}>📄 Export PDF</button>}
+                  {m.text && m.text.length > 80 && <button onClick={() => exportPDF(m.text)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 11, padding: "6px 0 0", fontFamily: "inherit", opacity: 0.7 }}>Export PDF</button>}
                 </div>
           ))}
 
@@ -670,7 +670,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
               const ups = pendingUpdate.updates || [];
               const FIELD_LABELS = { price: "ราคาขาย", cost: "ต้นทุน", stock: "สต็อก", minStock: "สต็อกขั้นต่ำ", name: "ชื่อ (EN)", nameT: "ชื่อ (TH)" };
               return <div style={{ alignSelf: "flex-start", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 12, padding: 12, maxWidth: "90%", fontSize: 12 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--orange)" }}>{"📝 แก้ไขสินค้า (" + ups.length + " รายการ)"}</div>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--orange)" }}>{"แก้ไขสินค้า (" + ups.length + " รายการ)"}</div>
                 {ups.map((u, i) => {
                   const p = products.find(x => x.id === u.productId);
                   return <div key={i} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: i < ups.length - 1 ? "1px solid var(--line)" : "none" }}>
@@ -749,7 +749,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         {pendingImage && <div style={{ padding: "8px 12px", borderTop: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8 }}>
           <img src={pendingImage.preview} style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }} />
           <span style={{ flex: 1, fontSize: 12, color: "var(--dim)" }}>รูปภาพพร้อมส่ง</span>
-          <button onClick={() => setPendingImage(null)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 16, padding: 4 }}>✕</button>
+          <button onClick={() => setPendingImage(null)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 16, padding: 4 }}>X</button>
         </div>}
 
         <div style={S.inputBar}>
@@ -774,7 +774,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
             onClick={() => handleSend()}
             disabled={loading || (!input.trim() && !pendingImage)}
             style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: "var(--blue)", color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading || (!input.trim() && !pendingImage) ? 0.4 : 1 }}
-          >➤</button>
+          >{">"}</button>
         </div>
       </>}
 

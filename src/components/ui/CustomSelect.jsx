@@ -62,7 +62,8 @@ export default function CustomSelect({ value, onChange, options, style, disabled
     const s = search.toLowerCase();
     return options.filter(o => {
       const lbl = typeof o === "string" ? o : o.label;
-      return lbl.toLowerCase().includes(s);
+      const st = typeof o === "object" && o.searchText ? o.searchText : "";
+      return lbl.toLowerCase().includes(s) || st.toLowerCase().includes(s);
     });
   }, [options, search, searchable]);
 
