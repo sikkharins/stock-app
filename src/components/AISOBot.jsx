@@ -4,6 +4,7 @@ import { fmt, todayStr } from "../utils/helpers.js";
 import { supabase } from "../utils/supabase.js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import * as XLSX from "xlsx";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -52,6 +53,57 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
 <div class="footer">สร้างโดย AI ผู้ช่วย — TS Electronics © ${now.getFullYear()}</div>
 </body></html>`);
   w.document.close();
+}
+
+function exportExcel(text) {
+  const tm = text.match(/^#+\s*(.+)/m);
+  const title = tm ? tm[1].trim() : "รายงาน";
+  const lines = text.split("\n");
+  const tables = [];
+  let currentTable = null;
+  let nearestHeader = title;
+  const isSepRow = (cells) => cells.length > 0 && cells.every(c => /^:?-+:?$/.test(c.trim()));
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^#+\s*(.+)/);
+    if (headerMatch) {
+      nearestHeader = headerMatch[1].trim();
+      continue;
+    }
+    const t = line.trim();
+    if (t.startsWith("|") && t.endsWith("|") && t.length > 1) {
+      const cells = t.slice(1, -1).split("|").map(c => c.trim());
+      if (isSepRow(cells)) continue;
+      if (!currentTable) currentTable = { name: nearestHeader || "Sheet", rows: [] };
+      currentTable.rows.push(cells);
+    } else {
+      if (currentTable && currentTable.rows.length > 0) {
+        tables.push(currentTable);
+        currentTable = null;
+      }
+    }
+  }
+  if (currentTable && currentTable.rows.length > 0) tables.push(currentTable);
+
+  const wb = XLSX.utils.book_new();
+  if (tables.length === 0) {
+    const cleanText = text.replace(/```[\s\S]*?```/g, "").split("\n").map(l => l.replace(/^[#*\-_>\s]+/, "").replace(/[*_`]/g, "").trim()).filter(Boolean);
+    const ws = XLSX.utils.aoa_to_sheet(cleanText.map(l => [l]));
+    XLSX.utils.book_append_sheet(wb, ws, "รายงาน");
+  } else {
+    const used = new Set();
+    tables.forEach((t, i) => {
+      let n = (t.name || ("Sheet" + (i + 1))).replace(/[\[\]\*\?\/\\:]/g, "").slice(0, 30);
+      if (!n) n = "Sheet" + (i + 1);
+      let base = n, k = 2;
+      while (used.has(n)) { n = (base + " " + k).slice(0, 30); k++; }
+      used.add(n);
+      const ws = XLSX.utils.aoa_to_sheet(t.rows);
+      XLSX.utils.book_append_sheet(wb, ws, n);
+    });
+  }
+  const safeName = title.replace(/[\\\/:*?"<>|]/g, "").slice(0, 80) || "รายงาน";
+  XLSX.writeFile(wb, safeName + ".xlsx");
 }
 
 const DEFAULTS = { voiceOn: true, speechRate: 1.0, ttsEngine: "google", voice: "th-TH-Neural2-C", model: "claude-haiku-4-5-20251001", lang: "th", customPrompt: "", chatHistoryLimit: 30, allowGeneralChat: true };
@@ -685,7 +737,10 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
               ? <div key={i} style={S.bubble(true)}>{m.image && <img src={m.image} style={{ maxWidth: 180, maxHeight: 140, borderRadius: 8, marginBottom: 6, display: "block" }} />}{m.text || "ส่งรูปภาพ"}</div>
               : <div key={i} style={S.bubble(false)}>
                   <div className="ai-md" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(m.text || "")) }} />
-                  {m.text && m.text.length > 80 && <button onClick={() => exportPDF(m.text)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 11, padding: "6px 0 0", fontFamily: "inherit", opacity: 0.7 }}>Export PDF</button>}
+                  {m.text && m.text.length > 80 && <div style={{ display: "flex", gap: 12, padding: "6px 0 0" }}>
+                    <button onClick={() => exportPDF(m.text)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: 0.7, padding: 0 }}>Export PDF</button>
+                    <button onClick={() => exportExcel(m.text)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: 0.85, padding: 0 }}>Export Excel</button>
+                  </div>}
                 </div>
           ))}
 
