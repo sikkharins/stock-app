@@ -241,7 +241,7 @@ export default function App(){
   },800);return()=>clearTimeout(tm);},[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,loaded]);
 
   useEffect(()=>{
-    const flush=()=>{if(pendingSaveRef.current){pendingSaveRef.current.forEach(([k,v])=>saveData(k,v));}};
+    const flush=()=>{if(pendingSaveRef.current){const pend=pendingSaveRef.current;pend.forEach(([k,v])=>saveData(k,v));saveAllToSupabase(pend,cuRef.current?.id).catch(()=>{});}};
     window.addEventListener("beforeunload",flush);
     document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")flush();});
     return()=>{window.removeEventListener("beforeunload",flush);};
@@ -255,7 +255,7 @@ export default function App(){
 
   const handleTab=nt=>{history.pushState({app:true},"");setTab(nt);setSearch("");setSideOpen(false);setSess(s=>{if(!s)return s;const now=Date.now();const hist=[...s.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}hist.push({tab:nt,enterTime:now,endTime:null,duration:null});return{...s,tabHistory:hist};});};
   const handleLogin=user=>{const ft=[...ALL_TABS,"users"].find(tb=>{const p=user.perms[tb];return p&&(typeof p==="string"?p!=="none":p.access);})||"dashboard";const now=Date.now();setCu(user);setTab(ft);setSess({userId:user.id,username:user.username,role:user.role,salesName:user.salesName||"",supplierName:user.supplierName||"",loginTime:now,loginTimeStr:nowStr(),logoutTime:null,logoutTimeStr:null,totalDuration:null,tabHistory:[{tab:ft,enterTime:now,endTime:null,duration:null}]});};
-  const handleLogout=()=>{if(sess){const now=Date.now();const hist=[...sess.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}setActLogs(p=>[{...sess,logoutTime:now,logoutTimeStr:nowStr(),totalDuration:Math.floor((now-sess.loginTime)/1000),tabHistory:hist},...p].slice(0,200));}signOut().catch(()=>{});Object.keys(localStorage).filter(k=>k.startsWith("v3_")&&k!=="v3_theme"||k==="fab_pos"||k==="ai_bot_settings").forEach(k=>localStorage.removeItem(k));setSess(null);setCu(null);};
+  const handleLogout=()=>{if(sess){const now=Date.now();const hist=[...sess.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}setActLogs(p=>[{...sess,logoutTime:now,logoutTimeStr:nowStr(),totalDuration:Math.floor((now-sess.loginTime)/1000),tabHistory:hist},...p].slice(0,200));}signOut().catch(()=>{});Object.keys(localStorage).filter(k=>k.startsWith("v3_")&&k!=="v3_theme").forEach(k=>localStorage.removeItem(k));setSess(null);setCu(null);};
 
   if(!loaded)return <><style>{THEME_CSS}</style><AppSkeleton/></>;
   if(!cu)return <><style>{THEME_CSS}</style><LoginScreen users={users} onLogin={handleLogin}/></>;
