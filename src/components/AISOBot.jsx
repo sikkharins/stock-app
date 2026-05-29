@@ -166,8 +166,11 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
   }, [chatKey]);
 
   useEffect(() => {
-    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
-  }, [msgs]);
+    const r = requestAnimationFrame(() => {
+      if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    });
+    return () => cancelAnimationFrame(r);
+  }, [msgs, pendingSO, pendingPO, pendingQuote, pendingUpdate]);
 
   // Save chat history (debounced, per-user)
   const saveChatTimer = useRef(null);
