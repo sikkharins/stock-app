@@ -54,7 +54,7 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
   w.document.close();
 }
 
-const DEFAULTS = { voiceOn: true, speechRate: 1.0, ttsEngine: "google", voice: "th-TH-Neural2-C", model: "claude-haiku-4-5-20251001", lang: "th", customPrompt: "", chatHistoryLimit: 30 };
+const DEFAULTS = { voiceOn: true, speechRate: 1.0, ttsEngine: "google", voice: "th-TH-Neural2-C", model: "claude-haiku-4-5-20251001", lang: "th", customPrompt: "", chatHistoryLimit: 30, allowGeneralChat: true };
 const TTS_OPTIONS = [
   { id: "google", name: "Google Neural", desc: "เสียงธรรมชาติ" },
   { id: "browser", name: "Browser", desc: "ฟรี เสียงพื้นฐาน" },
@@ -296,7 +296,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
       ctx.aiActionLog = aiActionLog.slice(0, 15);
       ctx.productNotes = productNotes.slice(0, 50);
       ctx.customerNotes = customerNotes.slice(0, 50);
-      const res = await sendAIMessage(aiMsgsRef.current, ctx, { model: settings.model, lang: settings.lang, customPrompt: settings.customPrompt });
+      const res = await sendAIMessage(aiMsgsRef.current, ctx, { model: settings.model, lang: settings.lang, customPrompt: settings.customPrompt, allowGeneralChat: settings.allowGeneralChat !== false });
       if(ctrl.signal.aborted)return;
       aiMsgsRef.current = [...aiMsgsRef.current, { role: "assistant", content: JSON.stringify(res) }];
       // Extract memory notes from AI
@@ -558,6 +558,16 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
 
       {/* Actions */}
       <div style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 4 }}>อื่น ๆ</div>
+
+      <div style={S.settRow}>
+        <div>
+          <div style={S.settLabel}>ตอบเรื่องนอกร้านค้า</div>
+          <div style={S.settDesc}>ให้ AI ตอบคำถามทั่วไป (สนทนา ความรู้ คำนวณ) ปิดถ้าต้องการให้ตอบแต่เรื่องร้านเท่านั้น</div>
+        </div>
+        <button onClick={() => updateSetting("allowGeneralChat", !settings.allowGeneralChat)} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: settings.allowGeneralChat ? "var(--green)" : "var(--bg2)", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: settings.allowGeneralChat ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+        </button>
+      </div>
 
       <div style={S.settRow}>
         <div>

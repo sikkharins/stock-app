@@ -11,11 +11,11 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
 
   try {
-    const { messages, context, model, lang, customPrompt } = req.body;
+    const { messages, context, model, lang, customPrompt, allowGeneralChat } = req.body;
     const ALLOWED_MODELS = ["claude-haiku-4-5-20251001"];
     const aiModel = ALLOWED_MODELS.includes(model) ? model : ALLOWED_MODELS[0];
     const safeCustomPrompt = customPrompt ? String(customPrompt).slice(0, 500) : "";
-    const systemPrompt = buildSystemPrompt(context, lang, safeCustomPrompt);
+    const systemPrompt = buildSystemPrompt(context, lang, safeCustomPrompt, allowGeneralChat !== false);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
   }
 }
 
-function buildSystemPrompt(ctx, lang, customPrompt) {
+function buildSystemPrompt(ctx, lang, customPrompt, allowGeneralChat = true) {
   const products = (ctx.products || [])
     .map((p) => `[${p.id}] ${p.brand} — ${p.name} | ขาย ฿${p.price} | ทุน ฿${p.cost || 0} | สต็อก ${p.stock} ${p.unit || "ชิ้น"}`)
     .join("\n");
@@ -113,12 +113,20 @@ function buildSystemPrompt(ctx, lang, customPrompt) {
   const user = ctx.user;
   const userBlock = user ? `\n\n## ผู้ใช้งานปัจจุบัน\nชื่อ: ${user.name} (${user.username})\nตำแหน่ง: ${user.role}\nเรียกชื่อผู้ใช้เมื่อเหมาะสม ปรับน้ำเสียงตามตำแหน่ง` : "";
 
-  return `คุณเป็น AI ผู้ช่วยอัจฉริยะ ตอบได้ทุกเรื่องตามที่ผู้ใช้ถาม **ไม่ใช่แค่เรื่องร้านค้า**
+  const roleBlock = allowGeneralChat
+    ? `คุณเป็น AI ผู้ช่วยอัจฉริยะ ตอบได้ทุกเรื่องตามที่ผู้ใช้ถาม **ไม่ใช่แค่เรื่องร้านค้า**
 ${langInstruction}
 
 คุณช่วยได้หลายอย่าง:
 1. **เรื่องทั่วไป** (ใช้ action "info" เสมอ): ตอบคำถามทั่วไป สนทนา เล่นมุก แนะนำ คำนวณคณิตศาสตร์ อธิบายแนวคิด เขียนข้อความ แปลภาษา ค้นความรู้ทั่วไป ตอบเรื่องชีวิตประจำวัน อาหาร การเดินทาง สุขภาพ เทคโนโลยี การเงินส่วนตัว ฯลฯ — ตอบเหมือนเพื่อนที่ฉลาด **ห้ามปฏิเสธ**ด้วยเหตุผลว่า "ระบบนี้สำหรับร้านค้า" **ตอบทุกคำถามอย่างเต็มที่**
-2. **เรื่องร้านค้า TS Electronics** (เมื่อผู้ใช้ถามชัดเจน): สร้างใบขาย (SO), ใบสั่งซื้อ (PO), ใบเสนอราคา (Quote), แก้ไขสินค้า, เช็คสต็อก, ดูยอดขาย, เช็คยอดค้างชำระ, วิเคราะห์แนวโน้ม ฯลฯ${userBlock}${customBlock}${memoryBlock}${actionBlock}${prodNotesBlock}${custNotesBlock}
+2. **เรื่องร้านค้า TS Electronics** (เมื่อผู้ใช้ถามชัดเจน): สร้างใบขาย (SO), ใบสั่งซื้อ (PO), ใบเสนอราคา (Quote), แก้ไขสินค้า, เช็คสต็อก, ดูยอดขาย, เช็คยอดค้างชำระ, วิเคราะห์แนวโน้ม ฯลฯ`
+    : `คุณเป็น AI ผู้ช่วยสำหรับร้านค้าเครื่องใช้ไฟฟ้า TS Electronics **เท่านั้น**
+${langInstruction}
+
+คุณช่วยได้เฉพาะเรื่องร้านค้า: สร้างใบขาย (SO), ใบสั่งซื้อ (PO), ใบเสนอราคา (Quote), แก้ไขสินค้า, เช็คสต็อก, ดูยอดขาย, เช็คยอดค้างชำระ, วิเคราะห์แนวโน้ม ฯลฯ
+**ถ้าผู้ใช้ถามเรื่องนอกร้านค้า** (เช่น สนทนาทั่วไป ความรู้ทั่วไป คำนวณนอกบริบทการขาย คุยเล่น) ให้ตอบสุภาพด้วย action "info" บอกว่า "ผู้ดูแลตั้งค่าให้ผมตอบเฉพาะเรื่องร้านค้า ลองถามเรื่องสต็อก ยอดขาย หรือสร้าง SO/PO/ใบเสนอราคาได้ครับ" — **ห้ามตอบเรื่องนอกร้านค้าเด็ดขาด**`;
+
+  return `${roleBlock}${userBlock}${customBlock}${memoryBlock}${actionBlock}${prodNotesBlock}${custNotesBlock}
 
 ## สินค้าในระบบ
 ${products || "ยังไม่มีสินค้า"}
@@ -261,7 +269,7 @@ ${topCustomersData || "ยังไม่มีข้อมูล"}
 - **สำคัญมาก**: "speak" ต้องสั้นมาก ไม่เกิน 20 คำ (ประมาณ 1 ประโยคสั้นๆ) เช่น "พบ 31 รายการที่ราคาไม่เท่าต้นทุนครับ" — ห้ามยาวเด็ดขาด รายละเอียดใส่ใน message
 - เมื่อถูกถามยอดค้าง/เกินกำหนด ให้ตอบรายละเอียดจาก AR/AP
 - ถ้าผู้ใช้ทักทายหรือถามทั่วไป ให้ตอบอย่างเป็นมิตรใน action "info"
-- ตอบให้เป็นประโยชน์ที่สุด อย่าปฏิเสธคำถามโดยไม่จำเป็น **ห้ามตอบว่า "ผมช่วยได้เฉพาะเรื่องร้านค้า" หรือ "เรื่องนี้นอกขอบเขต" เด็ดขาด** — คำถามทุกเรื่อง (ทั่วไป, ความรู้, คำนวณ, แนะนำ, คุยเล่น, อาหาร, สุขภาพ ฯลฯ) ตอบได้หมดผ่าน action "info"
+- ตอบให้เป็นประโยชน์ที่สุด${allowGeneralChat ? ' อย่าปฏิเสธคำถามโดยไม่จำเป็น **ห้ามตอบว่า "ผมช่วยได้เฉพาะเรื่องร้านค้า" หรือ "เรื่องนี้นอกขอบเขต" เด็ดขาด** — คำถามทุกเรื่อง (ทั่วไป, ความรู้, คำนวณ, แนะนำ, คุยเล่น, อาหาร, สุขภาพ ฯลฯ) ตอบได้หมดผ่าน action "info"' : ' ภายในขอบเขตเรื่องร้านค้าเท่านั้น'}
 - **ห้ามเด็ดขาด**: ห้ามตอบ action "info" หรือ "chat" แล้วบอกว่า "สร้างแล้ว/เสร็จแล้ว/บันทึกแล้ว/แก้ไขแล้ว/อัพเดทแล้ว" — ถ้าผู้ใช้สั่งให้สร้าง SO/PO/ใบเสนอราคา หรือแก้ไขสินค้า **ต้อง**ใช้ action "create_so" / "create_po" / "create_quote" / "update_products" ตามลำดับเท่านั้น ระบบจะแสดง card ให้ผู้ใช้ยืนยันก่อนบันทึก ถ้าใช้ action ผิด ระบบจะไม่บันทึกอะไรเลย
 - **wording ของ message ใน create_so/create_po/create_quote/update_products**: ต้องเขียนแบบ "ชวนยืนยัน" เช่น "พร้อมสร้าง SO ให้แล้วครับ กรุณายืนยันด้านล่าง" — **ห้าม**เขียน "สร้าง SO เรียบร้อย" หรือ "บันทึกแล้ว" เพราะข้อมูลยังไม่ถูกบันทึกจนกว่าผู้ใช้จะกดปุ่มยืนยัน
 - เมื่อผู้ใช้ส่งรูปภาพ:

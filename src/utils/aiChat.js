@@ -2,7 +2,7 @@ export async function sendAIMessage(messages, context, settings = {}) {
   const res = await fetch("/api/ai-chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, context, model: settings.model, lang: settings.lang, customPrompt: settings.customPrompt }),
+    body: JSON.stringify({ messages, context, model: settings.model, lang: settings.lang, customPrompt: settings.customPrompt, allowGeneralChat: settings.allowGeneralChat !== false }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
