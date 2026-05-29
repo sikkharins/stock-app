@@ -124,6 +124,7 @@ const VOICES_EN = [
 const MODEL_OPTIONS = [
   { id: "claude-haiku-4-5-20251001", name: "Haiku", desc: "เร็ว ประหยัด" },
   { id: "claude-sonnet-4-6", name: "Sonnet", desc: "ฉลาดกว่า" },
+  { id: "claude-opus-4-7", name: "Opus", desc: "ฉลาดสุด แพงสุด" },
 ];
 const LANG_OPTIONS = [
   { id: "th", name: "ไทย" },

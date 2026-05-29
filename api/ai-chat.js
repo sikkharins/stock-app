@@ -12,10 +12,11 @@ export default async function handler(req, res) {
 
   try {
     const { messages, context, model, lang, customPrompt, allowGeneralChat } = req.body;
-    const ALLOWED_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-4-6"];
+    const ALLOWED_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-7"];
     const hasImage = Array.isArray(messages) && messages.some(m => Array.isArray(m?.content) && m.content.some(c => c?.type === "image"));
-    // Auto-bump to Sonnet for image inputs (better OCR/handwriting). Otherwise use requested model if allowed, else Haiku.
-    const aiModel = hasImage ? "claude-sonnet-4-6" : (ALLOWED_MODELS.includes(model) ? model : ALLOWED_MODELS[0]);
+    const requested = ALLOWED_MODELS.includes(model) ? model : ALLOWED_MODELS[0];
+    // Auto-bump Haiku → Sonnet for image inputs (better OCR/handwriting). Sonnet/Opus stay as user picked.
+    const aiModel = hasImage && requested === "claude-haiku-4-5-20251001" ? "claude-sonnet-4-6" : requested;
     const safeCustomPrompt = customPrompt ? String(customPrompt).slice(0, 500) : "";
     const systemPrompt = buildSystemPrompt(context, lang, safeCustomPrompt, allowGeneralChat !== false);
 
