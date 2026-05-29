@@ -22,7 +22,7 @@ const STATUS_TABS=[
 ];
 
 export default function POPage({sh}){
-  const{pN,cN,canE,pos,setPOs,sales,setSales,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,isSup,supN,addA}=sh;
+  const{pN,cN,canE,pos,setPOs,sales,setSales,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,isSup,supN,addA,payments,setPayments,setBankTxns,setCheques}=sh;
   const ed=canE("purchase");
   const isAdmin=cu?.role==="Admin";
   const sups=contacts.filter(c=>c.type==="supplier");
@@ -115,6 +115,12 @@ export default function POPage({sh}){
 
   const deletePO=po=>{
     if(po.linkedSO){setSales(p=>p.filter(s=>s.soNum!==po.linkedSO));addA("ลบ SO (พร้อม PO)",po.linkedSO);}
+    const poPays=payments.filter(p=>p.refId===po.poNum&&p.type==="ap");
+    if(poPays.length){
+      setPayments(prev=>prev.filter(p=>!(p.refId===po.poNum&&p.type==="ap")));
+      setBankTxns(prev=>prev.filter(t=>!poPays.some(p=>t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="out")));
+      setCheques(prev=>prev.filter(c=>!poPays.some(p=>p.method==="เช็ค"&&p.chequeNo&&c.chequeNo===p.chequeNo&&c.refId===p.refId)));
+    }
     setPOs(p=>p.filter(x=>x.id!==po.id));
     addA("ลบ PO (Admin)",po.poNum);setConfirmDelPO(null);cM();
   };

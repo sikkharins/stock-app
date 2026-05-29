@@ -13,12 +13,20 @@ const addDays = (dateStr, days) => {
 const diffDays = (a,b) => Math.round((new Date(a)-new Date(b))/(1000*60*60*24));
 
 export default function FinancialCalendar({sh}){
-  const{sales,pos,cheques,payments,contacts,bankAccs,lang}=sh;
+  const{sales,pos,cheques,payments,contacts,bankAccs,lang,setPayments,setBankTxns,setCheques}=sh;
 
   const now = new Date();
   const[year,setYear]=useState(now.getFullYear());
   const[month,setMonth]=useState(now.getMonth());
   const[selDate,setSelDate]=useState(null);
+  const[confirmDel,setConfirmDel]=useState(null);
+
+  const delPay=p=>{
+    setPayments(prev=>prev.filter(x=>x.id!==p.pid));
+    setBankTxns(prev=>prev.filter(t=>!(t.refId===p.ref&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.payDate&&t.type===(p.payType==="ar"?"in":"out"))));
+    if(p.method==="เช็ค"&&p.chequeNo)setCheques(prev=>prev.filter(c=>!(c.chequeNo===p.chequeNo&&c.refId===p.ref)));
+    setConfirmDel(null);setSelDate(null);
+  };
 
   const todayStr = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
 
@@ -55,7 +63,7 @@ export default function FinancialCalendar({sh}){
           else if(diff>0)timing=`ชำระหลังกำหนด ${diff} วัน`;
           else timing="ชำระตรงกำหนด";
         }
-        addEv(p.date,"in",{kind:"actual",ref:p.refId,name:c?.nameT||c?.name||p.refId,amount:+p.amount||0,type:"ar_paid",method:p.method||"",timing,accLabel});
+        addEv(p.date,"in",{kind:"actual",ref:p.refId,name:c?.nameT||c?.name||p.refId,amount:+p.amount||0,type:"ar_paid",method:p.method||"",timing,accLabel,pid:p.id,payType:p.type,payDate:p.date,chequeNo:p.chequeNo});
       } else if(p.type==="ap"){
         const po = poMap[p.refId];
         const s = po?contMap[po.supplierId]:null;
@@ -68,7 +76,7 @@ export default function FinancialCalendar({sh}){
           else if(diff>0)timing=`จ่ายหลังกำหนด ${diff} วัน`;
           else timing="จ่ายตรงกำหนด";
         }
-        addEv(p.date,"out",{kind:"actual",ref:p.refId,name:s?.nameT||s?.name||p.refId,amount:+p.amount||0,type:"ap_paid",method:p.method||"",timing,accLabel});
+        addEv(p.date,"out",{kind:"actual",ref:p.refId,name:s?.nameT||s?.name||p.refId,amount:+p.amount||0,type:"ap_paid",method:p.method||"",timing,accLabel,pid:p.id,payType:p.type,payDate:p.date,chequeNo:p.chequeNo});
       }
     });
 
@@ -244,7 +252,10 @@ export default function FinancialCalendar({sh}){
               {e.timing&&<div style={{fontSize:11,color:timingColor,marginTop:3,fontWeight:500}}>{e.timing}</div>}
               {e.accLabel&&<div style={{fontSize:11,color:"var(--blue)",marginTop:2}}>เข้า: {e.accLabel}</div>}
             </div>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--green)",marginLeft:12,whiteSpace:"nowrap"}}>{"฿"+fmtC2(e.amount)}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:12}}>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--green)",whiteSpace:"nowrap"}}>{"฿"+fmtC2(e.amount)}</div>
+              {e.kind==="actual"&&<button onClick={()=>setConfirmDel(e)} title="ลบรายการ" style={{background:"none",border:"1px solid var(--red)",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontSize:11,color:"var(--red)",fontFamily:"inherit"}}>ลบ</button>}
+            </div>
           </div>;
         })}
       </div>}
@@ -268,7 +279,10 @@ export default function FinancialCalendar({sh}){
               {e.timing&&<div style={{fontSize:11,color:timingColor,marginTop:3,fontWeight:500}}>{e.timing}</div>}
               {e.accLabel&&<div style={{fontSize:11,color:"var(--blue)",marginTop:2}}>ออก: {e.accLabel}</div>}
             </div>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--red)",marginLeft:12,whiteSpace:"nowrap"}}>{"฿"+fmtC2(e.amount)}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:12}}>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--red)",whiteSpace:"nowrap"}}>{"฿"+fmtC2(e.amount)}</div>
+              {e.kind==="actual"&&<button onClick={()=>setConfirmDel(e)} title="ลบรายการ" style={{background:"none",border:"1px solid var(--red)",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontSize:11,color:"var(--red)",fontFamily:"inherit"}}>ลบ</button>}
+            </div>
           </div>;
         })}
       </div>}
@@ -291,5 +305,19 @@ export default function FinancialCalendar({sh}){
         <div style={{width:10,height:10,borderRadius:2,background:"rgba(255,59,48,0.12)"}}/>เงินออก
       </div>
     </div>
+
+    {/* Confirm delete payment */}
+    {confirmDel&&<div onClick={()=>setConfirmDel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:20,width:"min(92vw,380px)"}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:10}}>ลบรายการ{confirmDel.payType==="ar"?"รับเงิน":"จ่ายเงิน"}</div>
+        <div style={{fontSize:13,color:"var(--dim)",marginBottom:6}}>{confirmDel.name} · {confirmDel.ref}</div>
+        <div style={{fontSize:18,fontWeight:700,color:confirmDel.payType==="ar"?"var(--green)":"var(--red)",marginBottom:12}}>{"฿"+fmtC2(confirmDel.amount)}</div>
+        <div style={{background:"rgba(255,59,48,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"10px 12px",fontSize:12,color:"var(--red)",marginBottom:16}}>ลบถาวร — ยอดในบัญชีธนาคารจะถูกปรับคืนด้วย</div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setConfirmDel(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid var(--line)",background:"none",color:"var(--text)",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ยกเลิก</button>
+          <button onClick={()=>delPay(confirmDel)} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"var(--red)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ยืนยันลบ</button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
