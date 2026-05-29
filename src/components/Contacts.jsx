@@ -24,9 +24,9 @@ const mkStaffPerms = () => Object.fromEntries(
 );
 
 export default function ContactPage({sh,ft}){
-  const{cN,pN,canE,contacts,setContacts,search,setSearch,modal,oM,cM,cu,users,sales,quotes,payments,products,pos,brands}=sh;
+  const{cN,pN,canE,canD,contacts,setContacts,search,setSearch,modal,oM,cM,cu,users,sales,quotes,payments,products,pos,brands}=sh;
   const SS=(users||[]).filter(u=>u.salesName).map(u=>u.salesName);
-  const isC=ft==="customer";const tk=isC?"customers":"suppliers";const ed=canE(tk);
+  const isC=ft==="customer";const tk=isC?"customers":"suppliers";const ed=canE(tk);const cd=canD(tk);
   const sf=isC&&cu.role!=="SalesManager"&&cu.salesName;
   const ef={type:ft,name:"",nameT:"",phone:"",email:"",address:"",taxId:"",salesPerson:"",vatReps:[],staff:[]};
   const[form,setForm]=useState(ef);const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -151,7 +151,7 @@ export default function ContactPage({sh,ft}){
         </div>}
         {ed&&<div style={{display:"flex",gap:8,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
           <button onClick={()=>{setFormErrors([]);setForm({vatReps:[],address:"",taxId:"",salesPerson:"",staff:[],...c});oM(mk);}} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 0",borderRadius:6,border:"1px solid var(--blue)",background:"rgba(0,122,255,0.08)",color:"var(--blue)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"แก้ไข"}</button>
-          <button onClick={()=>del(c.id)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 0",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"ลบ"}</button>
+          {cd&&<button onClick={()=>del(c.id)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 0",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"ลบ"}</button>}
         </div>}
       </div>;})}
     </div>

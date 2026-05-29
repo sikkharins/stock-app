@@ -20,8 +20,8 @@ function statusOf(p){
 }
 
 export default function PromosPage({sh}){
-  const{promos,setPromos,products,brands,cats,getCN,canE,canC,modal,oM,cM,pN}=sh;
-  const ed=canE("promos");const cr=canC("promos");
+  const{promos,setPromos,products,brands,cats,getCN,canE,canC,canD,modal,oM,cM,pN}=sh;
+  const ed=canE("promos");const cr=canC("promos");const cd=canD("promos");
   const[form,setForm]=useState(emptyForm());
   const[isEdit,setIsEdit]=useState(false);
   const[delId,setDelId]=useState(null);
@@ -133,7 +133,7 @@ export default function PromosPage({sh}){
           {ed&&<div style={{display:"flex",gap:10,marginTop:10,paddingTop:8,borderTop:"1px solid var(--line)"}}>
             <button onClick={()=>openEdit(p)} style={{fontSize:12,color:"var(--blue)",background:"transparent",border:"none",cursor:"pointer",padding:0}}>แก้ไข</button>
             <button onClick={()=>toggleActive(p.id,!p.active)} style={{fontSize:12,color:p.active?"var(--orange)":"var(--green)",background:"transparent",border:"none",cursor:"pointer",padding:0}}>{p.active?"ปิดใช้งาน":"เปิดใช้งาน"}</button>
-            <button onClick={()=>askDel(p.id)} style={{fontSize:12,color:"var(--red)",background:"transparent",border:"none",cursor:"pointer",padding:0}}>ลบ</button>
+            {cd&&<button onClick={()=>askDel(p.id)} style={{fontSize:12,color:"var(--red)",background:"transparent",border:"none",cursor:"pointer",padding:0}}>ลบ</button>}
           </div>}
         </div>;
       })}

@@ -23,8 +23,8 @@ const stColor=key=>{const s=ALL_STATUSES.find(x=>x.key===key);return s?s.color:"
 const stBg=key=>{const s=ALL_STATUSES.find(x=>x.key===key);return s?s.bg:"var(--hover)";};
 
 export default function DefectivePage({sh}){
-  const{pN,cN,products,contacts,sales,defectives,setDefectives,cnotes,canE,canC,modal,oM,cM}=sh;
-  const ed=canE("defective");
+  const{pN,cN,products,contacts,sales,defectives,setDefectives,cnotes,canE,canC,canD,modal,oM,cM}=sh;
+  const ed=canE("defective");const cd=canD("defective");
   const[filter,setFilter]=useState("all");
   const[search,setSearch]=useState("");
   const[form,setForm]=useState(null);
@@ -216,7 +216,7 @@ export default function DefectivePage({sh}){
       </div>
 
       <div style={{display:"flex",justifyContent:"space-between",marginTop:18}}>
-        <div>{form.id&&ed&&<button onClick={()=>del(form.id)} style={{padding:"6px 13px",borderRadius:7,border:"1px solid var(--red)",color:"var(--red)",background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ลบ</button>}</div>
+        <div>{form.id&&cd&&<button onClick={()=>del(form.id)} style={{padding:"6px 13px",borderRadius:7,border:"1px solid var(--red)",color:"var(--red)",background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ลบ</button>}</div>
         <MBtns onCancel={()=>{cM();setForm(null);}} onSave={save} disabled={!form.productId||!form.customerId||!form.symptom}/>
       </div>
     </Modal>}

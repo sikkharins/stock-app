@@ -12,8 +12,8 @@ import StatCard from "./ui/StatCard.jsx";
 import ExcelImport from "./ExcelImport.jsx";
 
 export default function ProdPage({sh}){
-  const{pN,cN,canE,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
-  const ed=canE("products");
+  const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
+  const ed=canE("products");const cd=canD("products");
   const baseP=isSup?products.filter(p=>p.distributor===supN):products;
   const[fBrand,setFBrand]=useState("");const[fCat,setFCat]=useState("");const[fStat,setFStat]=useState("");
   const[detailPr,setDetailPr]=useState(null);const[sortBy,setSortBy]=useState("brand");
@@ -62,7 +62,7 @@ export default function ProdPage({sh}){
       {ed&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,paddingTop:4,borderTop:"0.5px solid var(--line)"}}>
         <button onClick={()=>{setFormErrors([]);setForm({...pr,categoryId:String(pr.categoryId),subcategoryId:String(pr.subcategoryId),price:String(pr.price),cost:String(pr.cost),stock:String(pr.stock),minStock:String(pr.minStock)});oM("product");}} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--blue)",cursor:"pointer",background:"var(--blue-bg)",color:"var(--blue)",fontFamily:"inherit"}}>แก้ไข</button>
         <button onClick={()=>{setAdjPr(pr);setAdjForm({type:"adjust_in",qty:"",note:""});oM("adjust");}} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--orange)",cursor:"pointer",background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontFamily:"inherit"}}>สต็อก</button>
-        <button onClick={()=>setConfirmDel(pr)} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--red)",cursor:"pointer",background:"rgba(255,59,48,0.12)",color:"var(--red)",fontFamily:"inherit"}}>ลบ</button>
+        {cd&&<button onClick={()=>setConfirmDel(pr)} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--red)",cursor:"pointer",background:"rgba(255,59,48,0.12)",color:"var(--red)",fontFamily:"inherit"}}>ลบ</button>}
       </div>}
     </div>;
   };
@@ -104,7 +104,7 @@ export default function ProdPage({sh}){
       <Btn size="sm" onClick={()=>{setBkCatF({categoryId:"",subcategoryId:""});setBulkAct("category");}}>{"เปลี่ยนหมวด"}</Btn>
       <Btn size="sm" onClick={()=>{setBkMinF("");setBulkAct("minStock");}}>{"เปลี่ยน minStock"}</Btn>
       <Btn size="sm" onClick={()=>{setBkDistF("");setBulkAct("dist");}}>{"เปลี่ยนผู้จัดจำหน่าย"}</Btn>
-      <button onClick={()=>setBulkAct("delete")} style={{fontSize:12,padding:"4px 10px",borderRadius:7,border:"1px solid var(--red)",cursor:"pointer",background:"rgba(255,59,48,0.12)",color:"var(--red)",fontFamily:"inherit",fontWeight:500}}>{"ลบ"}</button>
+      {cd&&<button onClick={()=>setBulkAct("delete")} style={{fontSize:12,padding:"4px 10px",borderRadius:7,border:"1px solid var(--red)",cursor:"pointer",background:"rgba(255,59,48,0.12)",color:"var(--red)",fontFamily:"inherit",fontWeight:500}}>{"ลบ"}</button>}
       <div style={{marginLeft:"auto"}}><Btn size="sm" onClick={()=>{selNone();setBulkMode(false);}}>{"ยกเลิก"}</Btn></div>
     </div>}
     {confirmDel&&<Modal title="ยืนยันลบ" onClose={()=>setConfirmDel(null)}><div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px",marginBottom:16,fontSize:13,color:"var(--red)"}}>{"จะลบ "+confirmDel.brand+" — "+pN(confirmDel)+" ถาวร"}</div><MBtns onCancel={()=>setConfirmDel(null)} onSave={()=>{del(confirmDel.id);setConfirmDel(null);}} saveLabel="ลบ"/></Modal>}

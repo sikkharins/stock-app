@@ -153,7 +153,7 @@ export default function App(){
   const cN=c=>lang==="th"?(c.nameT||c.name):c.name;
   const lowStock=products.filter(p=>p.minStock>0&&p.stock<=p.minStock);
   const gP=k=>{if(!cu)return{access:false};let p=(cu.perms||{})[k];if(!p){if(cu.role==="Admin")return{access:true,read:true,create:true,edit:true,delete:true,approve:true};return{access:false};}let r;if(typeof p==="string"){if(p==="edit")r={access:true,read:true,create:true,edit:true,delete:true};else if(p==="view")r={access:true,read:true};else return{access:false};}else r=p;if(cu.role==="Admin")return{...r,approve:true};return r;};
-  const canA=k=>!!gP(k).access;const canE=k=>!!gP(k).edit;const canC=k=>!!gP(k).create;const canApv=k=>!!gP(k).approve;
+  const canA=k=>!!gP(k).access;const canE=k=>!!gP(k).edit;const canC=k=>!!gP(k).create;const canApv=k=>!!gP(k).approve;const canD=k=>!!gP(k).delete;
   const getCN=id=>{const c=cats.find(x=>x.id===+id);return c?c.name:"-";};
   const addLog=log=>setLogs(p=>[log,...p]);
   const oM=n=>setModal(n);const cM=()=>setModal(null);
@@ -262,7 +262,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
+  const sh={pN,cN,lang,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>

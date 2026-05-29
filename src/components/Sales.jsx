@@ -15,8 +15,8 @@ import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 import QuotesPage from "./Quotes.jsx";
 
 function SOList({sh}){
-  const{pN,cN,canC,canApv,sales,setSales,pos,setPOs,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques}=sh;
-  const ed=canC("sales");const isSU=cu.role==="SalesManager"?"":cu.salesName||"";
+  const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques}=sh;
+  const ed=canC("sales");const cd=canD("sales");const isSU=cu.role==="SalesManager"?"":cu.salesName||"";
   const custs=contacts.filter(c=>c.type==="customer"&&(!isSU||c.salesPerson===isSU));
   const myCI=isSU?custs.map(c=>c.id):null;
 
@@ -177,7 +177,7 @@ function SOList({sh}){
         {hasApv&&so.status==="pending_special_approval"&&<button onClick={()=>setApproveSO(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--purple)",background:"rgba(175,82,222,0.12)",color:"var(--purple)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>อนุมัติ</button>}
         {ed&&(so.status==="pending_delivery"||so.status==="pending_special_approval")&&<button onClick={()=>openEdit(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>แก้ไข</button>}
         {ed&&so.status==="pending_delivery"&&<button onClick={()=>{setConfirmSO(so);oM("confirmD");}} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--green)",background:"rgba(52,199,89,0.12)",color:"var(--green)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>จัดส่ง</button>}
-        {ed&&(!so.linkedPO||cu?.role==="Admin")&&<button onClick={()=>setDelSO(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
+        {cd&&(!so.linkedPO||cu?.role==="Admin")&&<button onClick={()=>setDelSO(so)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
       </td>
     </tr>;})}</tbody></table></div>
 

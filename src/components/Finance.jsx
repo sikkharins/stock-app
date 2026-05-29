@@ -16,8 +16,8 @@ const DEF_PERMS={receive:true,clearCheque:true,payEPP:true,transferOut:true};
 const hasPerm=(acc,key)=>{const p=acc.perms;if(!p)return true;if(key==="payEPP")return p.payEPP!==undefined?!!p.payEPP:p.payOnline!==undefined?!!p.payOnline:true;if(key==="transferOut")return p.transferOut!==undefined?!!p.transferOut:true;return p[key]!==undefined?!!p[key]:true;};
 
 export default function FinPage({sh}){
-  const{cN,pN,contacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes}=sh;
-  const ed=canE("finance");
+  const{cN,pN,contacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes}=sh;
+  const ed=canE("finance");const cd=canD("finance");
   const[sub,setSub]=useState("ap");const[viewProfile,setViewProfile]=useState(null);
   const[payForm,setPayForm]=useState({refId:"",type:"",amount:"",method:"โอนเงิน",date:todayStr(),note:""});
   const[fSt,setFSt]=useState("all");
@@ -305,7 +305,7 @@ export default function FinPage({sh}){
           </div>
           {ed&&<div style={{display:"flex",gap:6,marginTop:8}}>
             <button onClick={()=>{setAccForm({name:acc.name,bank:acc.bank,accNo:acc.accNo||"",perms:{receive:hasPerm(acc,"receive"),clearCheque:hasPerm(acc,"clearCheque"),transferOut:hasPerm(acc,"transferOut"),payEPP:hasPerm(acc,"payEPP")}});setEditAcc(acc);oM("addAcc");}} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit"}}>แก้ไข</button>
-            <button onClick={()=>setDelAcc(acc)} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--red)",background:"transparent",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>
+            {cd&&<button onClick={()=>setDelAcc(acc)} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--red)",background:"transparent",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
           </div>}
         </div>;})}
       </div>
@@ -327,7 +327,7 @@ export default function FinPage({sh}){
           <td style={{padding:"8px"}}>{t.from||"—"}</td>
           <td style={{padding:"8px",color:"var(--blue)",fontSize:12}}>{t.refId||"—"}</td>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{t.note||"—"}</td>
-          <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ed&&<button onClick={()=>setConfirmDelTxn(t)} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>
+          <td style={{padding:"8px",whiteSpace:"nowrap"}}>{cd&&<button onClick={()=>setConfirmDelTxn(t)} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>
         </tr>;})}
       </tbody></table></div>
     </>}
@@ -485,7 +485,7 @@ export default function FinPage({sh}){
               <td style={{padding:"6px 12px",fontSize:11,color:"var(--dim)"}}>{acc?acc.name+" — "+acc.bank:p.method==="เช็ค"&&p.chequeNo?"เช็ค #"+p.chequeNo+(p.chequeBank?" ("+p.chequeBank+")":""):"—"}</td>
               <td style={{padding:"6px 12px",textAlign:"right",fontWeight:600,color:"var(--green)"}}>{"฿"+fmt(p.amount)}</td>
               <td style={{padding:"6px 12px",color:"var(--dim)"}}>{p.note||"—"}</td>
-              {ed&&<td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>{!isCN&&<><button onClick={()=>{setViewSO(null);openEditPay(p,so.custName);}} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",marginRight:4}}>แก้ไข</button><button onClick={()=>setConfirmDelPay({pay:p})} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button></>}</td>}
+              {ed&&<td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>{!isCN&&<><button onClick={()=>{setViewSO(null);openEditPay(p,so.custName);}} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",marginRight:4}}>แก้ไข</button>{cd&&<button onClick={()=>setConfirmDelPay({pay:p})} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</>}</td>}
             </tr>;})}</tbody></table>
           </div>
         </>}
@@ -527,7 +527,7 @@ export default function FinPage({sh}){
               <td style={{padding:"6px 12px"}}>{p.method}</td>
               <td style={{padding:"6px 12px",textAlign:"right",fontWeight:600,color:"var(--green)"}}>{"฿"+fmt(p.amount)}</td>
               <td style={{padding:"6px 12px",color:"var(--dim)"}}>{p.note||"—"}</td>
-              {ed&&<td style={{padding:"6px 8px",whiteSpace:"nowrap"}}><button onClick={()=>{setViewPO(null);openEditPay(p,po.supName);}} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",marginRight:4}}>แก้ไข</button><button onClick={()=>setConfirmDelPay({pay:p})} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button></td>}
+              {ed&&<td style={{padding:"6px 8px",whiteSpace:"nowrap"}}><button onClick={()=>{setViewPO(null);openEditPay(p,po.supName);}} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",marginRight:4}}>แก้ไข</button>{cd&&<button onClick={()=>setConfirmDelPay({pay:p})} style={{padding:"2px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>}
             </tr>)}</tbody></table>
           </div>
         </>}
@@ -572,7 +572,7 @@ export default function FinPage({sh}){
         :<Field label="หมายเหตุ"><input value={chqForm.note} onChange={e=>setChqForm(f=>({...f,note:e.target.value}))} style={IB}/></Field>}
         {chqForm.id?<Field label="หมายเหตุ"><input value={chqForm.note||""} onChange={e=>setChqForm(f=>({...f,note:e.target.value}))} style={IB}/></Field>:null}
       </div>
-      {chqForm.id&&<div style={{marginTop:12,textAlign:"right"}}><button onClick={()=>{setCheques(p=>p.filter(c=>c.id!==chqForm.id));cM();}} style={{padding:"4px 12px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบเช็ค</button></div>}
+      {chqForm.id&&cd&&<div style={{marginTop:12,textAlign:"right"}}><button onClick={()=>{setCheques(p=>p.filter(c=>c.id!==chqForm.id));cM();}} style={{padding:"4px 12px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบเช็ค</button></div>}
       <MBtns onCancel={cM} onSave={saveChq}/>
     </Modal>}
 
@@ -865,7 +865,7 @@ export default function FinPage({sh}){
 
         <Field label="หมายเหตุ"><input value={billForm.note} onChange={e=>setBillForm(f=>({...f,note:e.target.value}))} style={IB}/></Field>
       </>}
-      {billForm.id&&<div style={{marginTop:12,textAlign:"right"}}><button onClick={()=>{if(confirm("ยืนยันลบใบวางบิล "+billForm.billNum+" ? ข้อมูลจะไม่สามารถกู้คืนได้"))delBill();}} style={{padding:"4px 12px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบใบวางบิล</button></div>}
+      {billForm.id&&cd&&<div style={{marginTop:12,textAlign:"right"}}><button onClick={()=>{if(confirm("ยืนยันลบใบวางบิล "+billForm.billNum+" ? ข้อมูลจะไม่สามารถกู้คืนได้"))delBill();}} style={{padding:"4px 12px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบใบวางบิล</button></div>}
       <MBtns onCancel={cM} onSave={saveBill}/>
     </Modal>}
 
@@ -970,7 +970,7 @@ export default function FinPage({sh}){
           <Field label="เหตุผล"><input value={cnForm.reason||""} onChange={e=>setCnForm(f=>({...f,reason:e.target.value}))} style={IB} placeholder={cnForm.type==="promo"?"เช่น โปรส่งท้ายปี":"เหตุผลการคืน"}/></Field>
           <Field label="หมายเหตุ"><input value={cnForm.note||""} onChange={e=>setCnForm(f=>({...f,note:e.target.value}))} style={IB}/></Field>
         </div>
-        {isEdit&&<div style={{marginTop:12,textAlign:"right"}}><button onClick={()=>{
+        {isEdit&&cd&&<div style={{marginTop:12,textAlign:"right"}}><button onClick={()=>{
           const orig=cnotes.find(c=>c.id===cnForm.id);
           if(orig&&orig.type==="return"&&orig.items){for(const it of orig.items){const pr=products.find(p=>p.id===it.productId);const bef=pr?pr.stock:0;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock-it.qty}:p));addLog(mkLog(it.productId,"cn_cancel",it.qty,bef,Math.max(0,bef-it.qty),orig.cnNum,"ยกเลิก CN",cu?.username));}}
           setCNotes(p=>p.filter(c=>c.id!==cnForm.id));cM();
@@ -1023,7 +1023,7 @@ export default function FinPage({sh}){
             <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{cn.reason||"-"}</td>
             <td style={{padding:"8px",textAlign:"right"}}><div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
               {ed&&<button onClick={()=>openEditScn(cn)} style={{padding:"4px 10px",fontSize:11,borderRadius:5,border:"1px solid var(--line)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit"}}>แก้ไข</button>}
-              {ed&&<button onClick={()=>setConfirmDelScn(cn.id)} style={{padding:"4px 10px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
+              {cd&&<button onClick={()=>setConfirmDelScn(cn.id)} style={{padding:"4px 10px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
             </div></td>
           </tr>)}
         </tbody></table></div>}

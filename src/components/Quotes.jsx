@@ -39,8 +39,8 @@ const emptyForm = () => ({
 });
 
 export default function QuotesPage({sh}){
-  const{pN,cN,canC,canE,quotes,setQuotes,sales,setSales,products,contacts,search,setSearch,modal,oM,cM,cu,addA}=sh;
-  const ed = canC("sales");
+  const{pN,cN,canC,canE,canD,quotes,setQuotes,sales,setSales,products,contacts,search,setSearch,modal,oM,cM,cu,addA}=sh;
+  const ed = canC("sales");const cd = canD("sales");
   const isSU = cu.role==="SalesManager"?"":cu.salesName||"";
   const custs = contacts.filter(c => c.type==="customer" && (!isSU || c.salesPerson===isSU));
   const myCI = isSU ? custs.map(c=>c.id) : null;
@@ -252,7 +252,7 @@ export default function QuotesPage({sh}){
               {ed&&qt.status==="sent"&&!exp&&<span onClick={()=>approveQT(qt.id)} style={{cursor:"pointer",color:"var(--green)",fontSize:12,marginRight:6}}>อนุมัติ</span>}
               {ed&&qt.status==="approved"&&!exp&&<span onClick={()=>{setConfirmConv(qt);oM("confirmConv");}} style={{cursor:"pointer",color:"var(--purple)",fontSize:12,fontWeight:600,marginRight:6}}>{"→ SO"}</span>}
               {ed&&!["converted","cancelled"].includes(qt.status)&&<span onClick={()=>setConfirmCan(qt)} style={{cursor:"pointer",color:"var(--red)",fontSize:12,marginRight:6}}>ยกเลิก</span>}
-              {ed&&["draft","cancelled"].includes(qt.status)&&<span onClick={()=>deleteQT(qt.id)} style={{cursor:"pointer",color:"var(--red)",fontSize:12}}>ลบ</span>}
+              {cd&&["draft","cancelled"].includes(qt.status)&&<span onClick={()=>deleteQT(qt.id)} style={{cursor:"pointer",color:"var(--red)",fontSize:12}}>ลบ</span>}
             </td>
           </tr>;
         })}</tbody>
