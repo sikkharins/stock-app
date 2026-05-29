@@ -41,8 +41,8 @@ export default async function handler(req, res) {
     const data = await response.json();
     res.status(200).json(data);
   } catch (e) {
-    console.error("AI chat error:", e.message);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("AI chat error:", e.message, e.stack);
+    res.status(500).json({ error: e.message || "Internal server error" });
   }
 }
 

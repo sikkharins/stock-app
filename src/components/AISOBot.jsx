@@ -340,11 +340,13 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
     } catch (e) {
       if(ctrl.signal.aborted)return;
       const m = e.message || "";
-      const friendly = m.includes("Overloaded") || m.includes("overloaded") ? "ระบบ AI มีผู้ใช้จำนวนมาก กรุณาลองใหม่อีกครั้ง"
+      const matched = m.includes("Overloaded") || m.includes("overloaded") ? "ระบบ AI มีผู้ใช้จำนวนมาก กรุณาลองใหม่อีกครั้ง"
         : m.includes("rate_limit") ? "เรียก AI บ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่"
         : m.includes("invalid_api_key") || m.includes("authentication") ? "API Key ไม่ถูกต้อง กรุณาแจ้ง Admin"
         : m.includes("Failed to fetch") || m.includes("NetworkError") ? "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบอินเทอร์เน็ต"
-        : "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง";
+        : null;
+      const friendly = matched || ("เกิดข้อผิดพลาด: " + (m || "ไม่ทราบสาเหตุ"));
+      console.error("AI bot error:", e);
       addMsg("bot", friendly);
     }
     setLoading(false);
