@@ -448,7 +448,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
   };
 
   const S = {
-    fab: { position: "fixed", width: 52, height: 52, borderRadius: "50%", background: "linear-gradient(135deg,#007AFF,#5856D6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 800, letterSpacing: "-0.5px", cursor: "pointer", boxShadow: "0 4px 20px rgba(0,122,255,0.4)", zIndex: 9999, border: "none", transition: "transform 0.2s", fontFamily: "inherit" },
+    fab: { position: "fixed", bottom: 20, right: 16, width: 52, height: 52, borderRadius: "50%", background: "linear-gradient(135deg,#007AFF,#5856D6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 800, letterSpacing: "-0.5px", cursor: "pointer", boxShadow: "0 4px 20px rgba(0,122,255,0.4)", zIndex: 9999, border: "none", transition: "transform 0.2s", fontFamily: "inherit" },
     panel: { position: "fixed", bottom: 82, right: 16, width: 380, maxWidth: "calc(100vw - 20px)", height: 520, maxHeight: "calc(100vh - 120px)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 16, boxShadow: "0 12px 40px rgba(0,0,0,0.3)", zIndex: 9998, display: "flex", flexDirection: "column", overflow: "hidden" },
     header: { padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 10 },
     chatArea: { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10 },
@@ -801,7 +801,6 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         .ai-md code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
         .ai-md h1,.ai-md h2,.ai-md h3 { margin: 8px 0 4px 0; font-size: 14px; }
         .ai-md hr { border: none; border-top: 1px solid var(--line); margin: 8px 0; }
-        .ai-fab-btn { bottom: 20px; right: 16px; }
         @media (max-width: 600px) {
           .ai-panel { inset: 0 !important; width: 100% !important; height: 100% !important; max-height: 100vh !important; max-width: 100% !important; border-radius: 0 !important; border: none !important; }
           .ai-fab-btn { bottom: 12px; right: 12px; width: 44px !important; height: 44px !important; font-size: 14px !important; }
