@@ -43,7 +43,7 @@ export default function FinPage({sh}){
   const cnTot=cn=>{if(cn.type==="promo")return +cn.amount||0;const items=cn.items||[];if(cn.type!=="defective"&&cn.soNum){const so=sales.find(s=>s.soNum===cn.soNum);if(so&&so.discountAmt>0){const sub=(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);const r=sub>0?(sub-so.discountAmt)/sub:1;const raw=items.reduce((s,it)=>{const si=(so.items||[]).find(x=>x.productId===it.productId);return s+it.qty*(si?si.price*r:it.price);},0);return round2(raw);}}return items.reduce((s,i)=>s+i.qty*i.price,0);};
 
   const apList=useMemo(()=>pos.filter(po=>po.status==="received").map(po=>{const sup=contacts.find(c=>c.id===po.supplierId);const total=po.items.reduce((s,i)=>s+i.qty*i.cost,0);const paid=payments.filter(p=>p.refId===po.poNum&&p.type==="ap").reduce((s,p)=>s+(+p.amount||0),0);const rem=total-paid;return{...po,supName:sup?cN(sup):"-",total,paid,cnDeduct:0,remaining:rem,status2:paid===0?"unpaid":rem<=0?"paid":"partial"};}),[pos,contacts,payments]);
-  const arList=useMemo(()=>sales.filter(so=>so.status==="completed").map(so=>{const cust=contacts.find(c=>c.id===so.customerId);const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0)+(so.vatAmount||0);const paid=soPays.reduce((s,p)=>s+(+p.amount||0),0);const rem=tot-paid;
+  const arList=useMemo(()=>sales.filter(so=>so.status==="completed").map(so=>{const cust=contacts.find(c=>c.id===so.customerId);const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0);const paid=soPays.reduce((s,p)=>s+(+p.amount||0),0);const rem=tot-paid;
     let dueDate=null,overdue=false;
     if(so.date){const days=so.payType==="credit"&&so.creditDays>0?so.creditDays:7;const d=new Date(so.date);d.setDate(d.getDate()+days);dueDate=d.toISOString().slice(0,10);overdue=rem>0&&dueDate<todayStr();}
     const st2=paid===0?"unpaid":rem<=0?"paid":soPays.length>0&&soPays.every(p=>p.method==="หักลดหนี้")?"cn_credit":"partial";
@@ -349,7 +349,7 @@ export default function FinPage({sh}){
           <td style={{padding:"8px",fontWeight:500,color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>setViewBill(b)}>{b.billNum}</td>
           <td style={{padding:"8px"}}>{cust?cN(cust):"—"}</td>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{toBE(b.date)}</td>
-          <td style={{padding:"8px",fontSize:12}}>{(b.soNums||[]).map((sn,i)=>{const so=sales.find(s=>s.soNum===sn);return<span key={sn}>{i>0&&", "}<span style={{color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>{if(so){const cust=contacts.find(c=>c.id===so.customerId);const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0)+(so.vatAmount||0);const paid=payments.filter(p=>p.refId===so.soNum&&p.type==="ar").reduce((s,p)=>s+(+p.amount||0),0);setViewSO({...so,custName:cust?cN(cust):"—",total:tot,paid,remaining:tot-paid});}}}>{sn}</span></span>;})}</td>
+          <td style={{padding:"8px",fontSize:12}}>{(b.soNums||[]).map((sn,i)=>{const so=sales.find(s=>s.soNum===sn);return<span key={sn}>{i>0&&", "}<span style={{color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>{if(so){const cust=contacts.find(c=>c.id===so.customerId);const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0);const paid=payments.filter(p=>p.refId===so.soNum&&p.type==="ar").reduce((s,p)=>s+(+p.amount||0),0);setViewSO({...so,custName:cust?cN(cust):"—",total:tot,paid,remaining:tot-paid});}}}>{sn}</span></span>;})}</td>
           <td style={{padding:"8px"}}>{"฿"+fmt(b.soTotal)}</td>
           <td style={{padding:"8px",color:"var(--red)"}}>{"- ฿"+fmt(b.cnTotal)}</td>
           <td style={{padding:"8px",fontWeight:600}}>{"฿"+fmt(b.net)}</td>
@@ -382,7 +382,7 @@ export default function FinPage({sh}){
           <td style={{padding:"8px",fontWeight:500,color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>setViewCN(cn)}>{cn.cnNum}</td>
           <td style={{padding:"8px"}}><span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:tp.bg,color:tp.color}}>{tp.label}</span></td>
           <td style={{padding:"8px"}}>{cust?cN(cust):"—"}</td>
-          <td style={{padding:"8px",fontSize:12}}>{cn.soNum?<span style={{color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>{const so=sales.find(s=>s.soNum===cn.soNum);if(so){const cu2=contacts.find(c=>c.id===so.customerId);const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0)+(so.vatAmount||0);const pd=payments.filter(p=>p.refId===so.soNum&&p.type==="ar").reduce((s,p)=>s+(+p.amount||0),0);setViewSO({...so,custName:cu2?cN(cu2):"—",total:tot,paid:pd,remaining:tot-pd});}}}>{cn.soNum}</span>:"—"}</td>
+          <td style={{padding:"8px",fontSize:12}}>{cn.soNum?<span style={{color:"var(--blue)",cursor:"pointer",textDecoration:"underline"}} onClick={()=>{const so=sales.find(s=>s.soNum===cn.soNum);if(so){const cu2=contacts.find(c=>c.id===so.customerId);const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0);const pd=payments.filter(p=>p.refId===so.soNum&&p.type==="ar").reduce((s,p)=>s+(+p.amount||0),0);setViewSO({...so,custName:cu2?cN(cu2):"—",total:tot,paid:pd,remaining:tot-pd});}}}>{cn.soNum}</span>:"—"}</td>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{toBE(cn.date)}</td>
           <td style={{padding:"8px",fontWeight:600,color:"var(--red)"}}>{"฿"+fmt(tot)}</td>
           <td style={{padding:"8px"}}>{usedBill?<span style={{fontSize:11}}><span style={{padding:"2px 8px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)",fontWeight:500}}>ใช้แล้ว</span><span style={{marginLeft:6,color:"var(--blue)",fontWeight:500,cursor:"pointer"}} onClick={()=>{setSub("billing");setViewBill(usedBill);}}>{usedBill.billNum}</span></span>:<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)"}}>ยังไม่ได้ใช้</span>}</td>
@@ -731,7 +731,7 @@ export default function FinPage({sh}){
     })()}
 
     {viewBill&&(()=>{const b=viewBill;const cust=contacts.find(c=>c.id===b.customerId);
-      const soDetails=(b.soNums||[]).map(soNum=>{const so=sales.find(s=>s.soNum===soNum);if(!so)return{soNum,items:[],total:0};const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0)+(so.vatAmount||0);return{soNum,items:so.items,total:tot,date:so.date,payType:so.payType,creditDays:so.creditDays};});
+      const soDetails=(b.soNums||[]).map(soNum=>{const so=sales.find(s=>s.soNum===soNum);if(!so)return{soNum,items:[],total:0};const tot=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0);return{soNum,items:so.items,total:tot,date:so.date,payType:so.payType,creditDays:so.creditDays};});
       const cnDetails=(b.cnIds||[]).map(cnId=>{const cn=cnotes.find(c=>c.id===cnId);if(!cn)return null;const tp=CN_TYPES.find(t=>t.key===cn.type)||CN_TYPES[0];const tot=cnTot(cn);return{...cn,tp,tot};}).filter(Boolean);
       return<Modal title={"รายละเอียดใบวางบิล — "+b.billNum} onClose={()=>setViewBill(null)} wide>
         <div className="detail-grid-3" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px 20px",marginBottom:16,padding:"12px 16px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)"}}>
@@ -896,7 +896,7 @@ export default function FinPage({sh}){
             const refSo=sales.find(s=>s.soNum===refSoNum);
             if(refSo){
               const soSub=(refSo.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
-              const soTotal=soSub-(refSo.discountAmt||0)+(refSo.vatAmount||0);
+              const soTotal=soSub-(refSo.discountAmt||0);
               const cnItems=(cnForm.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
               if(cnItems>soTotal+0.01){setWarnMsg("ยอด CN (฿"+fmt(cnItems)+") เกินยอด SO ต้นฉบับ (฿"+fmt(soTotal)+")");return;}
               for(const ci of(cnForm.items||[])){const si=(refSo.items||[]).find(x=>x.productId===ci.productId);if(!si){setWarnMsg("สินค้าไม่อยู่ใน SO ต้นฉบับ");return;}if(ci.qty>si.qty){setWarnMsg("จำนวน CN ("+ci.qty+") เกินจำนวนใน SO ("+si.qty+")");return;}}
