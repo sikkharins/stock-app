@@ -45,10 +45,11 @@ export default function FinancialCalendar({sh}){
       const accLabel = acc?`${acc.name} — ${acc.bank}`:"";
       if(p.type==="ar"){
         const so = soMap[p.refId];
-        const c = so?contMap[so.customerId]:null;
-        // คำนวณว่าชำระก่อน/หลัง/ตรงกำหนด
+        // ถ้า payment.date < so.date แสดงว่า payment นี้เป็นของ SO เก่าที่ถูกลบไปแล้ว (soNum ถูกนำมาใช้ซ้ำ)
+        const isStalePmt = so && so.date && p.date < so.date;
+        const c = (!isStalePmt && so)?contMap[so.customerId]:null;
         let timing="";
-        if(so&&so.date){
+        if(!isStalePmt && so && so.date){
           const days2 = so.payType==="credit"&&so.creditDays>0?so.creditDays:7;
           const dueDate2 = addDays(so.date,days2);
           const diff = diffDays(p.date,dueDate2); // + = ช้า, - = เร็ว
@@ -59,9 +60,11 @@ export default function FinancialCalendar({sh}){
         addEv(p.date,"in",{kind:"actual",ref:p.refId,name:c?.nameT||c?.name||p.refId,amount:+p.amount||0,type:"ar_paid",method:p.method||"",timing,accLabel});
       } else if(p.type==="ap"){
         const po = poMap[p.refId];
-        const s = po?contMap[po.supplierId]:null;
+        // ถ้า payment.date < po.date แสดงว่า payment นี้เป็นของ PO เก่าที่ถูกลบไปแล้ว
+        const isStalePo = po && po.date && p.date < po.date;
+        const s = (!isStalePo && po)?contMap[po.supplierId]:null;
         let timing="";
-        if(po&&po.date){
+        if(!isStalePo && po && po.date){
           const baseDate2=po.deliveryDate||po.date;
           const dueDate2=addDays(baseDate2,po.creditDays||0);
           const diff=diffDays(p.date,dueDate2);
@@ -77,7 +80,8 @@ export default function FinancialCalendar({sh}){
     // เงินเข้า: AR ค้างชำระ → แสดงที่วันครบกำหนด
     sales.filter(so=>so.status==="completed").forEach(so=>{
       const tot = so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0)+(so.vatAmount||0);
-      const paid = payments.filter(p=>p.refId===so.soNum&&p.type==="ar").reduce((s,p)=>s+(+p.amount||0),0);
+      // เฉพาะ payment ที่เกิดหลัง SO สร้าง (ป้องกัน soNum ซ้ำหลังลบ)
+      const paid = payments.filter(p=>p.refId===so.soNum&&p.type==="ar"&&p.date>=so.date).reduce((s,p)=>s+(+p.amount||0),0);
       const rem = tot - paid;
       if(rem<=0)return;
       const days = so.payType==="credit"&&so.creditDays>0?so.creditDays:7;
@@ -94,7 +98,8 @@ export default function FinancialCalendar({sh}){
     // เงินออก: AP ค้างจ่าย → แสดงที่วันครบกำหนด
     pos.filter(po=>po.status==="received").forEach(po=>{
       const tot = po.items.reduce((s,i)=>s+(i.qty||0)*(i.cost||0),0);
-      const paid = payments.filter(p=>p.refId===po.poNum&&p.type==="ap").reduce((s,p)=>s+(+p.amount||0),0);
+      // เฉพาะ payment ที่เกิดหลัง PO สร้าง (ป้องกัน poNum ซ้ำหลังลบ)
+      const paid = payments.filter(p=>p.refId===po.poNum&&p.type==="ap"&&p.date>=po.date).reduce((s,p)=>s+(+p.amount||0),0);
       const rem = tot - paid;
       if(rem<=0)return;
       const baseDate = po.deliveryDate||po.date;
