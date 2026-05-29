@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 
 const MONTH_TH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+const MONTH_TH_SHORT = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+const fmtShortDate = ds => { if(!ds) return ""; const d = new Date(ds+"T00:00:00"); return d.getDate()+" "+MONTH_TH_SHORT[d.getMonth()]; };
 const DOW_TH = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 const fmtC = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:0});
 const fmtC2 = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -84,13 +86,22 @@ export default function FinancialCalendar({sh}){
     // เงินเข้า: AR ค้างชำระ → แสดงที่วันครบกำหนด
     sales.filter(so=>so.status==="completed").forEach(so=>{
       const tot = so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0);
-      const paid = payments.filter(p=>p.refId===so.soNum&&p.type==="ar").reduce((s,p)=>s+(+p.amount||0),0);
+      const soPays = payments.filter(p=>p.refId===so.soNum&&p.type==="ar");
+      const paid = soPays.reduce((s,p)=>s+(+p.amount||0),0);
       const rem = tot - paid;
-      if(rem<=0)return;
       const days = so.payType==="credit"&&so.creditDays>0?so.creditDays:7;
       const dueDate = addDays(so.date, days);
       const c = contMap[so.customerId];
-      addEv(dueDate,"in",{kind:"pending",ref:so.soNum,name:c?.nameT||c?.name||"-",amount:rem,type:"ar"});
+      if(rem>0){
+        addEv(dueDate,"in",{kind:"pending",ref:so.soNum,name:c?.nameT||c?.name||"-",amount:rem,type:"ar"});
+        return;
+      }
+      // ชำระครบแล้ว — ถ้าวันจ่ายล่าสุดไม่ตรงกับ due date แจ้งบน due date ว่ายอดถูกย้ายไป
+      if(soPays.length===0)return;
+      const lastPayDate = soPays.map(p=>p.date).filter(Boolean).sort().slice(-1)[0];
+      if(!lastPayDate||lastPayDate===dueDate)return;
+      const dayDiff = diffDays(lastPayDate,dueDate); // ลบ = ก่อน, บวก = หลัง
+      addEv(dueDate,"in",{kind:"moved",ref:so.soNum,name:c?.nameT||c?.name||"-",amount:0,type:"ar_moved",movedTo:lastPayDate,dayDiff,movedAmount:tot});
     });
 
     // เงินเข้า: เช็ครับ pending
@@ -101,13 +112,22 @@ export default function FinancialCalendar({sh}){
     // เงินออก: AP ค้างจ่าย → แสดงที่วันครบกำหนด
     pos.filter(po=>po.status==="received").forEach(po=>{
       const tot = po.items.reduce((s,i)=>s+(i.qty||0)*(i.cost||0),0);
-      const paid = payments.filter(p=>p.refId===po.poNum&&p.type==="ap").reduce((s,p)=>s+(+p.amount||0),0);
+      const poPays = payments.filter(p=>p.refId===po.poNum&&p.type==="ap");
+      const paid = poPays.reduce((s,p)=>s+(+p.amount||0),0);
       const rem = tot - paid;
-      if(rem<=0)return;
       const baseDate = po.deliveryDate||po.date;
       const dueDate = addDays(baseDate, po.creditDays||0);
       const s = contMap[po.supplierId];
-      addEv(dueDate,"out",{kind:"pending",ref:po.poNum,name:s?.nameT||s?.name||"-",amount:rem,type:"ap"});
+      if(rem>0){
+        addEv(dueDate,"out",{kind:"pending",ref:po.poNum,name:s?.nameT||s?.name||"-",amount:rem,type:"ap"});
+        return;
+      }
+      // จ่ายครบแล้ว — ถ้าวันจ่ายล่าสุดไม่ตรงกับ due date แจ้งบน due date ว่ายอดถูกย้ายไป
+      if(poPays.length===0)return;
+      const lastPayDate = poPays.map(p=>p.date).filter(Boolean).sort().slice(-1)[0];
+      if(!lastPayDate||lastPayDate===dueDate)return;
+      const dayDiff = diffDays(lastPayDate,dueDate); // ลบ = ก่อน, บวก = หลัง
+      addEv(dueDate,"out",{kind:"moved",ref:po.poNum,name:s?.nameT||s?.name||"-",amount:0,type:"ap_moved",movedTo:lastPayDate,dayDiff,movedAmount:tot});
     });
 
     // Monthly totals
@@ -115,8 +135,8 @@ export default function FinancialCalendar({sh}){
     let ai=0,ao=0,pi=0,po2=0;
     Object.entries(map).forEach(([d,ev])=>{
       if(!d.startsWith(prefix))return;
-      ev.in.forEach(e=>{if(e.kind==="actual")ai+=e.amount;else pi+=e.amount;});
-      ev.out.forEach(e=>{if(e.kind==="actual")ao+=e.amount;else po2+=e.amount;});
+      ev.in.forEach(e=>{if(e.kind==="moved")return;if(e.kind==="actual")ai+=e.amount;else pi+=e.amount;});
+      ev.out.forEach(e=>{if(e.kind==="moved")return;if(e.kind==="actual")ao+=e.amount;else po2+=e.amount;});
     });
     return{eventMap:map,actualIn:ai,actualOut:ao,pendingIn:pi,pendingOut:po2};
   },[sales,pos,cheques,payments,contMap,soMap,poMap,year,month]);
@@ -133,10 +153,8 @@ export default function FinancialCalendar({sh}){
   const dateStr = d=>d?year+"-"+String(month+1).padStart(2,"0")+"-"+String(d).padStart(2,"0"):null;
 
   const selEv = selDate?eventMap[selDate]||{in:[],out:[]}:{in:[],out:[]};
-  const selIn = selEv.in.reduce((s,e)=>s+e.amount,0);
-  const selOut = selEv.out.reduce((s,e)=>s+e.amount,0);
-  const selActualIn = selEv.in.filter(e=>e.kind==="actual").reduce((s,e)=>s+e.amount,0);
-  const selPendingIn = selEv.in.filter(e=>e.kind==="pending").reduce((s,e)=>s+e.amount,0);
+  const selIn = selEv.in.filter(e=>e.kind!=="moved").reduce((s,e)=>s+e.amount,0);
+  const selOut = selEv.out.filter(e=>e.kind!=="moved").reduce((s,e)=>s+e.amount,0);
 
   const cellBase={minHeight:76,borderRadius:8,padding:"6px 7px",cursor:"pointer",position:"relative",transition:"background 0.12s",boxSizing:"border-box"};
 
@@ -146,7 +164,16 @@ export default function FinancialCalendar({sh}){
     if(t==="ar")return{label:"AR ค้าง",bg:"rgba(255,149,0,0.12)",color:"var(--orange)"};
     if(t==="cheque")return{label:"เช็ค",bg:"rgba(255,149,0,0.14)",color:"var(--orange)"};
     if(t==="ap")return{label:"AP ค้าง",bg:"rgba(255,59,48,0.1)",color:"var(--red)"};
+    if(t==="ar_moved")return{label:"AR ย้ายแล้ว",bg:"var(--hover)",color:"var(--dim)"};
+    if(t==="ap_moved")return{label:"AP ย้ายแล้ว",bg:"var(--hover)",color:"var(--dim)"};
     return{label:t,bg:"var(--hover)",color:"var(--dim)"};
+  };
+
+  const movedText = e => {
+    const when = fmtShortDate(e.movedTo);
+    const d = Math.abs(e.dayDiff||0);
+    if((e.dayDiff||0)<0) return "ยอดย้ายไปลงวันที่ "+when+" (ชำระก่อน "+d+" วัน)";
+    return "ยอดย้ายไปลงวันที่ "+when+" (ชำระหลังกำหนด "+d+" วัน)";
   };
 
   return <div>
@@ -195,11 +222,11 @@ export default function FinancialCalendar({sh}){
           if(!day)return <div key={"e"+idx}/>;
           const ds=dateStr(day);
           const ev=eventMap[ds]||{in:[],out:[]};
-          const totalIn2=ev.in.reduce((s,e)=>s+e.amount,0);
-          const totalOut2=ev.out.reduce((s,e)=>s+e.amount,0);
+          const totalIn2=ev.in.filter(e=>e.kind!=="moved").reduce((s,e)=>s+e.amount,0);
+          const totalOut2=ev.out.filter(e=>e.kind!=="moved").reduce((s,e)=>s+e.amount,0);
           const hasActualIn=ev.in.some(e=>e.kind==="actual");
           const hasPendingIn=ev.in.some(e=>e.kind==="pending");
-          const hasOut=ev.out.length>0;
+          const hasMoved=ev.in.some(e=>e.kind==="moved")||ev.out.some(e=>e.kind==="moved");
           const isToday=ds===todayStr;
           const isSel=ds===selDate;
           const dow=idx%7;
@@ -215,6 +242,7 @@ export default function FinancialCalendar({sh}){
             {totalOut2>0&&<div style={{fontSize:10,fontWeight:600,color:"var(--red)",background:"rgba(255,59,48,0.1)",borderRadius:4,padding:"2px 4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               -฿{fmtC(totalOut2)}
             </div>}
+            {hasMoved&&<div title="มียอดถูกย้ายไปวันอื่น" style={{position:"absolute",top:4,right:5,fontSize:10,color:"var(--dim)",fontWeight:600}}>↗</div>}
           </div>;
         })}
       </div>
@@ -236,10 +264,21 @@ export default function FinancialCalendar({sh}){
       {selEv.in.length>0&&<div>
         <div style={{padding:"10px 16px 6px",display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(52,199,89,0.05)"}}>
           <div style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>เงินเข้า</div>
-          <div style={{fontSize:13,fontWeight:700,color:"var(--green)"}}>{"฿"+fmtC2(selIn)}</div>
+          {selIn>0&&<div style={{fontSize:13,fontWeight:700,color:"var(--green)"}}>{"฿"+fmtC2(selIn)}</div>}
         </div>
         {selEv.in.map((e,i)=>{
           const tl=typeLabel(e.type);
+          if(e.kind==="moved"){
+            const movedColor=(e.dayDiff||0)<0?"var(--green)":"var(--red)";
+            return <div key={i} style={{padding:"9px 16px",borderTop:"0.5px solid var(--line)",opacity:0.85}}>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--dim)"}}>{e.name}</div>
+              <div style={{fontSize:11,color:"var(--dim)",marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{background:tl.bg,color:tl.color,borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600}}>{tl.label}</span>
+                <span>{e.ref}</span>
+              </div>
+              <div style={{fontSize:11,color:movedColor,marginTop:3,fontWeight:500}}>{movedText(e)}</div>
+            </div>;
+          }
           const timingColor=e.timing?.includes("ก่อน")?"var(--green)":e.timing?.includes("หลัง")?"var(--red)":"var(--dim)";
           return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"9px 16px",borderTop:"0.5px solid var(--line)"}}>
             <div style={{flex:1,minWidth:0}}>
@@ -263,10 +302,21 @@ export default function FinancialCalendar({sh}){
       {selEv.out.length>0&&<div style={{borderTop:selEv.in.length>0?"1px solid var(--line)":"none"}}>
         <div style={{padding:"10px 16px 6px",display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(255,59,48,0.05)"}}>
           <div style={{fontSize:12,fontWeight:700,color:"var(--red)"}}>เงินออก</div>
-          <div style={{fontSize:13,fontWeight:700,color:"var(--red)"}}>{"฿"+fmtC2(selOut)}</div>
+          {selOut>0&&<div style={{fontSize:13,fontWeight:700,color:"var(--red)"}}>{"฿"+fmtC2(selOut)}</div>}
         </div>
         {selEv.out.map((e,i)=>{
           const tl=typeLabel(e.type);
+          if(e.kind==="moved"){
+            const movedColor=(e.dayDiff||0)<0?"var(--green)":"var(--red)";
+            return <div key={i} style={{padding:"9px 16px",borderTop:"0.5px solid var(--line)",opacity:0.85}}>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--dim)"}}>{e.name}</div>
+              <div style={{fontSize:11,color:"var(--dim)",marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{background:tl.bg,color:tl.color,borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600}}>{tl.label}</span>
+                <span>{e.ref}</span>
+              </div>
+              <div style={{fontSize:11,color:movedColor,marginTop:3,fontWeight:500}}>{movedText(e)}</div>
+            </div>;
+          }
           const timingColor=e.timing?.includes("ก่อน")?"var(--green)":e.timing?.includes("หลัง")?"var(--red)":"var(--dim)";
           return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"9px 16px",borderTop:"0.5px solid var(--line)"}}>
             <div style={{flex:1,minWidth:0}}>
