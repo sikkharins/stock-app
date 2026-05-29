@@ -106,7 +106,7 @@ function exportExcel(text) {
   XLSX.writeFile(wb, safeName + ".xlsx");
 }
 
-const DEFAULTS = { voiceOn: true, speechRate: 1.0, ttsEngine: "google", voice: "th-TH-Neural2-C", model: "claude-haiku-4-5-20251001", lang: "th", customPrompt: "", chatHistoryLimit: 30, allowGeneralChat: true };
+const DEFAULTS = { voiceOn: true, speechRate: 1.0, ttsEngine: "google", voice: "th-TH-Neural2-C", model: "claude-haiku-4-5-20251001", lang: "th", customPrompt: "", chatHistoryLimit: 30, allowGeneralChat: true, useThaiOCR: true };
 const TTS_OPTIONS = [
   { id: "google", name: "Google Neural", desc: "เสียงธรรมชาติ" },
   { id: "browser", name: "Browser", desc: "ฟรี เสียงพื้นฐาน" },
@@ -329,9 +329,31 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
 
     let content;
     if (hasImage) {
+      let ocrText = "";
+      if (settings.useThaiOCR !== false) {
+        try {
+          const ocrRes = await fetch("/api/akson-ocr", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ base64: pendingImage.base64, mediaType: pendingImage.mediaType }),
+            signal: ctrl.signal,
+          });
+          if (ocrRes.ok) {
+            const data = await ocrRes.json();
+            ocrText = (data.text || "").trim();
+          } else {
+            const err = await ocrRes.json().catch(() => ({}));
+            console.warn("Thai OCR failed:", err.error || ocrRes.statusText);
+          }
+        } catch (e) { if(!ctrl.signal.aborted) console.warn("Thai OCR error:", e.message); }
+      }
+      const basePrompt = t || "ดูรูปนี้ให้หน่อย ช่วยหาสินค้าที่ตรงกันในระบบ หรืออ่านข้อความในรูป";
+      const finalText = ocrText
+        ? `${basePrompt}\n\n[Thai OCR (AksonOCR) อ่านข้อความในรูปได้:\n${ocrText}\n]\nใช้ข้อความนี้ประกอบกับรูปเพื่อวิเคราะห์ ถ้า OCR กับรูปขัดกัน ให้เชื่อรูปก่อนและแจ้งผู้ใช้`
+        : basePrompt;
       content = [
         { type: "image", source: { type: "base64", media_type: pendingImage.mediaType, data: pendingImage.base64 } },
-        { type: "text", text: t || "ดูรูปนี้ให้หน่อย ช่วยหาสินค้าที่ตรงกันในระบบ หรืออ่านข้อความในรูป" }
+        { type: "text", text: finalText }
       ];
       setPendingImage(null);
     } else {
@@ -619,6 +641,16 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         </div>
         <button onClick={() => updateSetting("allowGeneralChat", !settings.allowGeneralChat)} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: settings.allowGeneralChat ? "var(--green)" : "var(--bg2)", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
           <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: settings.allowGeneralChat ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+        </button>
+      </div>
+
+      <div style={S.settRow}>
+        <div>
+          <div style={S.settLabel}>ใช้ Thai OCR (AksonOCR)</div>
+          <div style={S.settDesc}>เปิดเพื่อใช้ OCR เฉพาะภาษาไทยอ่านรูปก่อนส่งให้ AI (แม่นกับลายมือ/เอกสารไทย) ปิดถ้าอยากให้ AI อ่านรูปเองอย่างเดียว</div>
+        </div>
+        <button onClick={() => updateSetting("useThaiOCR", !settings.useThaiOCR)} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: settings.useThaiOCR ? "var(--green)" : "var(--bg2)", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: settings.useThaiOCR ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
         </button>
       </div>
 
