@@ -467,7 +467,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const max = 800;
+        const max = 1600;
         let w = img.width, h = img.height;
         if (w > max || h > max) {
           if (w > h) { h = Math.round(h * max / w); w = max; }
@@ -475,7 +475,7 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
         }
         canvas.width = w; canvas.height = h;
         canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
         setPendingImage({ base64: dataUrl.split(",")[1], mediaType: "image/jpeg", preview: dataUrl });
       };
       img.src = reader.result;

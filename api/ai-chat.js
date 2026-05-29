@@ -12,8 +12,10 @@ export default async function handler(req, res) {
 
   try {
     const { messages, context, model, lang, customPrompt, allowGeneralChat } = req.body;
-    const ALLOWED_MODELS = ["claude-haiku-4-5-20251001"];
-    const aiModel = ALLOWED_MODELS.includes(model) ? model : ALLOWED_MODELS[0];
+    const ALLOWED_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-4-6"];
+    const hasImage = Array.isArray(messages) && messages.some(m => Array.isArray(m?.content) && m.content.some(c => c?.type === "image"));
+    // Auto-bump to Sonnet for image inputs (better OCR/handwriting). Otherwise use requested model if allowed, else Haiku.
+    const aiModel = hasImage ? "claude-sonnet-4-6" : (ALLOWED_MODELS.includes(model) ? model : ALLOWED_MODELS[0]);
     const safeCustomPrompt = customPrompt ? String(customPrompt).slice(0, 500) : "";
     const systemPrompt = buildSystemPrompt(context, lang, safeCustomPrompt, allowGeneralChat !== false);
 
@@ -274,7 +276,12 @@ ${topCustomersData || "ยังไม่มีข้อมูล"}
 - **wording ของ message ใน create_so/create_po/create_quote/update_products**: ต้องเขียนแบบ "ชวนยืนยัน" เช่น "พร้อมสร้าง SO ให้แล้วครับ กรุณายืนยันด้านล่าง" — **ห้าม**เขียน "สร้าง SO เรียบร้อย" หรือ "บันทึกแล้ว" เพราะข้อมูลยังไม่ถูกบันทึกจนกว่าผู้ใช้จะกดปุ่มยืนยัน
 - เมื่อผู้ใช้ส่งรูปภาพ:
   • รูปสินค้า → ระบุยี่ห้อ รุ่น ลักษณะ แล้วจับคู่กับสินค้าในระบบ ถ้าไม่ตรง ให้แนะนำตัวใกล้เคียง พร้อมแสดงราคาและสต็อก
-  • ลายมือเขียน/โน้ต → อ่านข้อความ ตีความ ถ้าเป็นรายการสั่งซื้อให้ถามยืนยันก่อนสร้าง SO/PO
+  • ลายมือเขียนภาษาไทย/โน้ต → **อ่านอย่างระมัดระวัง** ภาษาไทยลายมือมีความท้าทาย:
+    - อ่านทีละบรรทัด มองหา context (รายการสินค้า, ตัวเลข, ชื่อลูกค้า) เพื่อช่วยตีความ
+    - เทียบกับ "สินค้าในระบบ"/"ลูกค้าในระบบ" ด้านบน — ถ้าใกล้เคียงให้ระบุชื่อจริงในระบบ + ID
+    - **ถ้าตัวอักษรไม่ชัดให้ระบุชัดเจน** ว่า "อ่านได้ว่า X (ไม่แน่ใจ)" และ**ขอผู้ใช้ยืนยัน**ก่อนสร้าง SO/PO
+    - แสดงสิ่งที่อ่านได้ทั้งหมดในรูปแบบตารางหรือรายการ ให้ผู้ใช้ตรวจง่ายๆ
+    - ห้ามเดาตัวเลขจำนวน/ราคาเองถ้าไม่ชัด — ขอผู้ใช้พิมพ์ยืนยัน
   • ใบเสร็จ/ใบแจ้งหนี้/เอกสาร → อ่านรายละเอียดและสรุปข้อมูลสำคัญ
   • รูปอื่น → อธิบายสิ่งที่เห็นอย่างเป็นประโยชน์
 - วิเคราะห์: ดูจาก "ยอดขายรายเดือน" "สินค้าขายดี" "ลูกค้าซื้อมากที่สุด" ด้านบน
