@@ -122,7 +122,7 @@ export default function DashPage({sh}){
       {w("profit")&&<StatCard label="กำไร" value={"฿"+fmt(profit)} color={profit>=0?"var(--green)":"var(--red)"} accentBg={profit>=0?"rgba(52,199,89,0.12)":"rgba(255,59,48,0.12)"}/>}
     </div>}
 
-    {w("stock_value")&&myTS>0&&<StockValueDonut products={myP} cats={cats}/>}
+    {w("stock_value")&&myTS>0&&<StockValueDonut products={myP} cats={cats} cu={cu}/>}
 
     {w("low_stock")&&myLS.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",marginBottom:"1.5rem",boxShadow:"var(--shadow)"}}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
