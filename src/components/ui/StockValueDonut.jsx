@@ -2,13 +2,15 @@
 // Drop into: src/components/ui/StockValueDonut.jsx
 // Usage in Dashboard.jsx:
 //   import StockValueDonut from "./ui/StockValueDonut.jsx";
-//   <StockValueDonut products={products} cats={cats} pN={pN} />
+//   <StockValueDonut products={products} cats={cats} theme={theme} />
 //
-// No new dependencies. Reads stock value = stock × cost, grouped by category & brand.
+// No new dependencies. Reads stock value = stock × price, grouped by category & brand.
 
 import { useState, useEffect, useRef } from "react";
 
 const fmt = (n) => Math.round(n).toLocaleString("en-US");
+// compact format for the donut center so big values never overflow the hole
+const fmtC = (n) => { n=Math.round(n); if(n>=1e6) return (n/1e6).toFixed(2)+"M"; if(n>=1e3) return (n/1e3).toFixed(0)+"K"; return n.toLocaleString("en-US"); };
 
 // Palette — reuse your STOCK colors or these
 const COLORS = ["#3b82f6","#34d399","#f59e0b","#ef4444","#a78bfa","#ec4899","#f97316","#6b7280","#14b8a6","#eab308"];
@@ -21,10 +23,12 @@ function arcPath(cx, cy, rO, rI, a0, a1){
   return `M ${sx} ${sy} A ${rO} ${rO} 0 ${large} 0 ${ex} ${ey} L ${ix} ${iy} A ${rI} ${rI} 0 ${large} 1 ${jx} ${jy} Z`;
 }
 function useCountUp(target, dur, dep){
-  const [v,setV]=useState(0);
-  useEffect(()=>{ let raf,t0; const ease=t=>1-Math.pow(1-t,3);
-    const step=ts=>{ if(!t0)t0=ts; const p=Math.min(1,(ts-t0)/dur); setV(target*ease(p)); if(p<1)raf=requestAnimationFrame(step); };
-    raf=requestAnimationFrame(step); return ()=>cancelAnimationFrame(raf);
+  const [v,setV]=useState(target);
+  useEffect(()=>{ let raf,t0,done=false; const ease=t=>1-Math.pow(1-t,3);
+    const step=ts=>{ if(!t0)t0=ts; const p=Math.min(1,(ts-t0)/dur); setV(target*ease(p)); if(p<1)raf=requestAnimationFrame(step); else done=true; };
+    setV(0); raf=requestAnimationFrame(step);
+    const fb=setTimeout(()=>{ if(!done) setV(target); }, dur+500); // fallback if rAF is throttled/suspended
+    return ()=>{ cancelAnimationFrame(raf); clearTimeout(fb); };
   },[target,dep]); return v;
 }
 
@@ -99,10 +103,12 @@ export default function StockValueDonut({ products, cats, theme="dark" }){
     window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); },[]);
 
   const CX=200,CY=200,RO=170,RI=112,GAP=2;
-  const [prog,setProg]=useState(0);
-  useEffect(()=>{ let raf,t0; const ease=t=>1-Math.pow(1-t,4); setProg(0);
-    const step=ts=>{ if(!t0)t0=ts; const p=Math.min(1,(ts-t0)/1100); setProg(ease(p)); if(p<1)raf=requestAnimationFrame(step); };
-    raf=requestAnimationFrame(step); return ()=>cancelAnimationFrame(raf); },[mode]);
+  const [prog,setProg]=useState(1);
+  useEffect(()=>{ let raf,t0,done=false; const ease=t=>1-Math.pow(1-t,4); setProg(0);
+    const step=ts=>{ if(!t0)t0=ts; const p=Math.min(1,(ts-t0)/1100); setProg(ease(p)); if(p<1)raf=requestAnimationFrame(step); else done=true; };
+    raf=requestAnimationFrame(step);
+    const fb=setTimeout(()=>{ if(!done) setProg(1); }, 1600); // ensure the ring always finishes drawing
+    return ()=>{ cancelAnimationFrame(raf); clearTimeout(fb); }; },[mode]);
 
   let acc=0;
   const segs=data.map(d=>{ const span=pctOf(d.value)/100*360; const s={...d,a0:acc,a1:acc+span,mid:acc+span/2}; acc+=span; return s; });
@@ -118,20 +124,34 @@ export default function StockValueDonut({ products, cats, theme="dark" }){
   const accentGrad = theme==="light" ? "linear-gradient(135deg,#0a84ff,#5ac8fa)" : `linear-gradient(135deg,${C.cyan},#3b82f6)`;
 
   return (
-    <div style={{background:`linear-gradient(180deg,${C.panel},${C.panelGrad})`,border:`1px solid ${C.line}`,borderRadius:18,padding:"22px 24px",color:C.text,fontFamily:"'Inter','Noto Sans Thai',system-ui,sans-serif",boxShadow:theme==="light"?"0 1px 3px rgba(0,0,0,0.06),0 0 0 0.5px rgba(0,0,0,0.04)":"none"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+    <div className="svd-card" style={{background:`linear-gradient(180deg,${C.panel},${C.panelGrad})`,border:`1px solid ${C.line}`,borderRadius:18,padding:"22px 24px",color:C.text,fontFamily:"'Inter','Noto Sans Thai',system-ui,sans-serif",boxShadow:theme==="light"?"0 1px 3px rgba(0,0,0,0.06),0 0 0 0.5px rgba(0,0,0,0.04)":"none"}}>
+      <style>{`
+        .svd-card{ container-type:inline-size; }
+        @container (max-width:560px){
+          .svd-row{ grid-template-columns:1fr !important; gap:14px !important; }
+          .svd-donut{ max-width:240px !important; }
+        }
+        /* viewport fallback for browsers without container queries */
+        @supports not (container-type:inline-size){
+          @media (max-width:720px){
+            .svd-row{ grid-template-columns:1fr !important; gap:14px !important; }
+            .svd-donut{ max-width:240px !important; }
+          }
+        }
+      `}</style>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap",rowGap:10}}>
         <div style={{fontSize:15,fontWeight:700,letterSpacing:"-0.01em"}}>สัดส่วนมูลค่าสต็อก</div>
         <div style={{marginLeft:"auto"}}>
           <div ref={segRef} style={{display:"flex",background:C.panel2,border:`1px solid ${C.line}`,borderRadius:10,padding:3,position:"relative"}}>
             <div ref={pillRef} style={{position:"absolute",top:3,bottom:3,borderRadius:7,background:accentGrad,transition:"left .35s cubic-bezier(.34,1.56,.64,1),width .35s",zIndex:0}}/>
-            <button onClick={()=>setMode("cat")} style={{position:"relative",zIndex:1,padding:"6px 14px",border:0,background:"transparent",color:mode==="cat"?C.onAccent:C.dim,font:"inherit",fontSize:12.5,fontWeight:600,cursor:"pointer",borderRadius:7}}>ตามหมวด</button>
-            <button onClick={()=>setMode("brand")} style={{position:"relative",zIndex:1,padding:"6px 14px",border:0,background:"transparent",color:mode==="brand"?C.onAccent:C.dim,font:"inherit",fontSize:12.5,fontWeight:600,cursor:"pointer",borderRadius:7}}>ตามยี่ห้อ</button>
+            <button onClick={()=>setMode("cat")} style={{position:"relative",zIndex:1,padding:"6px 14px",border:0,background:"transparent",color:mode==="cat"?C.onAccent:C.dim,font:"inherit",fontSize:12.5,fontWeight:600,cursor:"pointer",borderRadius:7,whiteSpace:"nowrap"}}>ตามหมวด</button>
+            <button onClick={()=>setMode("brand")} style={{position:"relative",zIndex:1,padding:"6px 14px",border:0,background:"transparent",color:mode==="brand"?C.onAccent:C.dim,font:"inherit",fontSize:12.5,fontWeight:600,cursor:"pointer",borderRadius:7,whiteSpace:"nowrap"}}>ตามยี่ห้อ</button>
           </div>
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:28,alignItems:"center"}} className="svd-row">
-        <div style={{position:"relative",width:340,height:340,margin:"0 auto"}}>
+      <div className="svd-row" style={{display:"grid",gridTemplateColumns:"minmax(0,340px) 1fr",gap:28,alignItems:"center"}}>
+        <div className="svd-donut" style={{position:"relative",width:"100%",maxWidth:340,aspectRatio:"1 / 1",margin:"0 auto"}}>
           <svg viewBox="0 0 400 400" style={{display:"block",width:"100%",height:"100%",overflow:"visible"}}>
             <defs>{segs.map(s=>(<filter key={s.key} id={"svdg-"+s.key} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>))}</defs>
             <circle cx={CX} cy={CY} r={(RO+RI)/2} fill="none" stroke={C.track} strokeWidth={RO-RI}/>
@@ -146,7 +166,7 @@ export default function StockValueDonut({ products, cats, theme="dark" }){
           </svg>
           <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",pointerEvents:"none",textAlign:"center"}}>
             <div style={{fontSize:11,color:C.faint,letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:600}}>{focused?(pinned?"📌 ":"")+focused.name:"รวมทั้งหมด"}</div>
-            <div style={{fontSize:30,fontWeight:700,letterSpacing:"-0.03em",marginTop:4,fontVariantNumeric:"tabular-nums"}}><span style={{color:C.cyan,fontSize:17}}>฿</span>{fmt(centerVal)}</div>
+            <div style={{fontSize:"clamp(22px,7vw,30px)",fontWeight:700,letterSpacing:"-0.03em",marginTop:4,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}><span style={{color:C.cyan,fontSize:"0.6em"}}>฿</span>{fmtC(centerVal)}</div>
             {focused
               ? <div style={{fontSize:13,fontWeight:600,marginTop:6,padding:"2px 10px",borderRadius:99,background:C.panel2,border:`1px solid ${focused.color}55`,color:focused.color}}>{pctOf(focused.value).toFixed(1)}%</div>
               : <div style={{fontSize:12.5,color:C.dim,marginTop:6}}>{data.length} {mode==="cat"?"หมวด":"ยี่ห้อ"}</div>}
@@ -169,7 +189,6 @@ export default function StockValueDonut({ products, cats, theme="dark" }){
           })}
         </div>
       </div>
-
     </div>
   );
 }
