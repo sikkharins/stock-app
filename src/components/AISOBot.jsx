@@ -759,8 +759,8 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
           <div style={{ fontWeight: 600, fontSize: 14 }}>{view === "chat" ? "AI ผู้ช่วย" : "ตั้งค่า AI"}</div>
           <div style={{ fontSize: 11, color: "var(--dim)" }}>{view === "chat" ? `${MODEL_OPTIONS.find(m => m.id === settings.model)?.name || "Haiku"} | ${settings.lang === "th" ? "ไทย" : "EN"}` : "ปรับแต่งการทำงาน"}</div>
         </div>
-        {isAdmin&&<button onClick={() => setView(view === "chat" ? "settings" : "chat")} style={{ background: "none", border: "none", cursor: "pointer", color: view === "settings" ? "var(--blue)" : "var(--dim)", display: "flex", alignItems: "center", padding: 4 }} title="ตั้งค่า"><GearIcon /></button>}
-        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 20 }}>X</button>
+        {isAdmin&&<button onClick={() => setView(view === "chat" ? "settings" : "chat")} style={{ background: "none", border: "none", cursor: "pointer", color: view === "settings" ? "var(--blue)" : "var(--dim)", display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, padding: 0, borderRadius: 8, flexShrink: 0 }} title="ตั้งค่า"><GearIcon /></button>}
+        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: 22, fontWeight: 500, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: 8, flexShrink: 0 }} aria-label="ปิด">X</button>
       </div>
 
       {view === "settings" ? renderSettings() : <>
