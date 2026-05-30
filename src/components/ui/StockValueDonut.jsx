@@ -50,8 +50,8 @@ function buildData(products, cats, mode){
   return arr.map((d,i)=>({ ...d, color:COLORS[i%COLORS.length] }));
 }
 
-// Build brand → subcategory breakdown
-function buildBrandSubData(products, cats){
+// Build brand → subcategory breakdown (exported for Products page)
+export function buildBrandSubData(products, cats){
   const brands = {};
   products.forEach(p=>{
     const val = (p.stock||0) * (p.price||0);
@@ -78,51 +78,10 @@ function buildBrandSubData(products, cats){
   }));
 }
 
-function BrandSubBreakdown({ products, cats, C, expanded, setExpanded }){
-  const brandData = buildBrandSubData(products, cats);
-  const grandTotal = brandData.reduce((s,b) => s + b.total, 0) || 1;
-  const toggle = (name) => setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
-
-  return (
-    <div style={{borderTop:`1px solid ${C.line}`,marginTop:20,paddingTop:18}}>
-      <div style={{fontSize:14,fontWeight:700,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
-        <span>มูลค่าสต็อกแยกยี่ห้อ × หมวดย่อย</span>
-        <span style={{fontSize:11,color:C.dim,fontWeight:400}}>(กดเพื่อดูรายละเอียด)</span>
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:4}}>
-        {brandData.map(b => {
-          const isOpen = expanded[b.name];
-          const pct = (b.total / grandTotal * 100).toFixed(1);
-          return <div key={b.name}>
-            <div onClick={() => toggle(b.name)} style={{display:"grid",gridTemplateColumns:"20px 1fr auto auto",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,cursor:"pointer",background:isOpen?C.panel2:"transparent",border:`1px solid ${isOpen?C.line:"transparent"}`,transition:"all .15s"}}>
-              <span style={{fontSize:12,color:C.dim,transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)",display:"inline-block"}}>▶</span>
-              <span style={{fontSize:13.5,fontWeight:600,color:C.text}}>{b.name}</span>
-              <span style={{fontSize:12,color:C.dim,fontVariantNumeric:"tabular-nums"}}>{pct}%</span>
-              <span style={{fontSize:13.5,fontWeight:700,color:b.color,fontVariantNumeric:"tabular-nums",minWidth:100,textAlign:"right"}}>฿{fmt(b.total)}</span>
-            </div>
-            {isOpen && <div style={{paddingLeft:32,paddingRight:12,paddingBottom:6}}>
-              {b.subs.map(sub => {
-                const subPct = (sub.value / b.total * 100).toFixed(1);
-                return <div key={sub.name} style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",alignItems:"center",gap:10,padding:"6px 8px",borderBottom:`1px solid ${C.line}22`}}>
-                  <span style={{fontSize:12.5,color:C.text}}>{sub.name}</span>
-                  <span style={{fontSize:11,color:C.dim}}>{sub.items} รายการ</span>
-                  <span style={{fontSize:11,color:C.dim,fontVariantNumeric:"tabular-nums"}}>{subPct}%</span>
-                  <span style={{fontSize:12.5,fontWeight:600,color:C.text,fontVariantNumeric:"tabular-nums",minWidth:90,textAlign:"right"}}>฿{fmt(sub.value)}</span>
-                </div>;
-              })}
-            </div>}
-          </div>;
-        })}
-      </div>
-    </div>
-  );
-}
-
 export default function StockValueDonut({ products, cats, theme="dark" }){
   const [mode,setMode]=useState("cat");
   const [active,setActive]=useState(null);
   const [pinned,setPinned]=useState(null);
-  const [expanded,setExpanded]=useState({});
   const pillRef=useRef(null), segRef=useRef(null);
 
   const data = buildData(products, cats, mode);
@@ -211,8 +170,6 @@ export default function StockValueDonut({ products, cats, theme="dark" }){
         </div>
       </div>
 
-      {/* Brand × Subcategory Breakdown */}
-      <BrandSubBreakdown products={products} cats={cats} C={C} expanded={expanded} setExpanded={setExpanded}/>
     </div>
   );
 }

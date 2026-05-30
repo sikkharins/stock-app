@@ -9,13 +9,14 @@ import Sel from "./ui/Sel.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
 import CatMgr from "./CategoryManager.jsx";
 import StatCard from "./ui/StatCard.jsx";
+import { buildBrandSubData } from "./ui/StockValueDonut.jsx";
 import ExcelImport from "./ExcelImport.jsx";
 
 export default function ProdPage({sh}){
   const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
   const ed=canE("products");const cd=canD("products");
   const baseP=isSup?products.filter(p=>p.distributor===supN):products;
-  const[fBrand,setFBrand]=useState("");const[fCat,setFCat]=useState("");const[fStat,setFStat]=useState("");
+  const[fBrand,setFBrand]=useState("");const[fCat,setFCat]=useState("");const[fStat,setFStat]=useState("");const[bsExpanded,setBsExpanded]=useState({});const[showBreakdown,setShowBreakdown]=useState(false);
   const[detailPr,setDetailPr]=useState(null);const[sortBy,setSortBy]=useState("brand");
   const filtered=useMemo(()=>baseP.filter(pr=>{if(fBrand&&pr.brand!==fBrand)return false;if(fCat&&pr.categoryId!==+fCat)return false;if(fStat&&getSS(pr.id,sales).key!==fStat)return false;if(search&&!((pN(pr)||"").toLowerCase().includes(search.toLowerCase())||(pr.code||"").toLowerCase().includes(search.toLowerCase())||(pr.brand||"").toLowerCase().includes(search.toLowerCase())))return false;return true;}),[baseP,fBrand,fCat,fStat,search,sales,pN]);
   const sorted=useMemo(()=>{const arr=[...filtered];if(sortBy==="name")arr.sort((a,b)=>pN(a).localeCompare(pN(b)));else if(sortBy==="price_asc")arr.sort((a,b)=>a.price-b.price);else if(sortBy==="price_desc")arr.sort((a,b)=>b.price-a.price);else if(sortBy==="stock_asc")arr.sort((a,b)=>a.stock-b.stock);else if(sortBy==="stock_desc")arr.sort((a,b)=>b.stock-a.stock);else if(sortBy==="last_sold")arr.sort((a,b)=>(getSS(a.id,sales).days??9999)-(getSS(b.id,sales).days??9999));return arr;},[filtered,sortBy]);
@@ -34,7 +35,7 @@ export default function ProdPage({sh}){
   const selAll=()=>setSel(new Set(sorted.map(p=>p.id)));const selNone=()=>setSel(new Set());
   const selProds=useMemo(()=>products.filter(p=>sel.has(p.id)),[products,sel]);
   const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
-  const stats=useMemo(()=>{const total=baseP.length;const stockVal=baseP.reduce((s,p)=>s+p.stock*p.cost,0);const low=baseP.filter(p=>p.minStock>0&&p.stock<=p.minStock).length;const totalRes=Object.values(reservedMap).reduce((s,v)=>s+v,0);return{total,stockVal,low,totalRes};},[baseP,reservedMap]);
+  const stats=useMemo(()=>{const total=baseP.length;const stockVal=baseP.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);const low=baseP.filter(p=>p.minStock>0&&p.stock<=p.minStock).length;const totalRes=Object.values(reservedMap).reduce((s,v)=>s+v,0);return{total,stockVal,low,totalRes};},[baseP,reservedMap]);
   const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");if(errs.length){setFormErrors(errs);return;}setFormErrors([]);const item={...form,id:form.id||Date.now(),categoryId:+form.categoryId,subcategoryId:+form.subcategoryId,price:+form.price,cost:+form.cost,stock:+form.stock,minStock:+form.minStock};if(form.id){const b=products.find(x=>x.id===form.id);if(b){if(b.price!==item.price)addPH(item.id,"price",b.price,item.price);if(b.cost!==item.cost)addPH(item.id,"cost",b.cost,item.cost);if(b.stock!==item.stock){const d=item.stock-b.stock;addLog(mkLog(item.id,d>0?"adjust_in":"adjust_out",Math.abs(d),b.stock,item.stock,"Edit","แก้ไข",cu.username));}addA("แก้ไขสินค้า",item.code);}}else addA("เพิ่มสินค้า",item.code);setProducts(p=>form.id?p.map(x=>x.id===form.id?item:x):[...p,item]);cM();};
   const saveAdj=()=>{if(!adjPr||!adjForm.qty||+adjForm.qty<=0)return;const q=+adjForm.qty,b=adjPr.stock,a=adjForm.type==="adjust_in"?b+q:Math.max(0,b-q);setProducts(p=>p.map(x=>x.id===adjPr.id?{...x,stock:a}:x));addLog(mkLog(adjPr.id,adjForm.type,q,b,a,"Manual",adjForm.note,cu.username));addA("ปรับสต็อก",adjPr.code);cM();setAdjPr(null);};
   const del=id=>{const pr=products.find(p=>p.id===id);if(pr)addA("ลบสินค้า",pr.code);setProducts(p=>p.filter(x=>x.id!==id));};
@@ -72,6 +73,42 @@ export default function ProdPage({sh}){
       <StatCard label="มูลค่าสต็อก" value={"฿"+fmt(stats.stockVal)} color="var(--green)"/>
       <StatCard label="สต็อกต่ำ" value={stats.low} color={stats.low>0?"var(--red)":"var(--dim)"}/>
       <StatCard label="จองอยู่" value={stats.totalRes+" ชิ้น"} color="var(--orange)"/>
+    </div>
+    {/* Brand × Subcategory Breakdown */}
+    <div style={{marginBottom:16}}>
+      <button onClick={()=>setShowBreakdown(v=>!v)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:8,border:"1px solid var(--line)",background:"var(--panel)",color:"var(--text)",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+        <span style={{transition:"transform .2s",transform:showBreakdown?"rotate(90deg)":"rotate(0deg)",display:"inline-block"}}>▶</span>
+        มูลค่าสต็อกแยกยี่ห้อ × หมวดย่อย
+      </button>
+      {showBreakdown&&(()=>{
+        const brandData=buildBrandSubData(baseP,cats);
+        const grandTotal=brandData.reduce((s,b)=>s+b.total,0)||1;
+        return <div style={{marginTop:10,background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:16}}>
+          {brandData.map(b=>{
+            const isOpen=bsExpanded[b.name];
+            const pct=(b.total/grandTotal*100).toFixed(1);
+            return <div key={b.name}>
+              <div onClick={()=>setBsExpanded(prev=>({...prev,[b.name]:!prev[b.name]}))} style={{display:"grid",gridTemplateColumns:"20px 1fr auto auto",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,cursor:"pointer",background:isOpen?"var(--hover)":"transparent",border:isOpen?"1px solid var(--line)":"1px solid transparent",transition:"all .15s"}}>
+                <span style={{fontSize:12,color:"var(--dim)",transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)",display:"inline-block"}}>▶</span>
+                <span style={{fontSize:13.5,fontWeight:600}}>{b.name}</span>
+                <span style={{fontSize:12,color:"var(--dim)",fontVariantNumeric:"tabular-nums"}}>{pct}%</span>
+                <span style={{fontSize:13.5,fontWeight:700,color:b.color,fontVariantNumeric:"tabular-nums",minWidth:100,textAlign:"right"}}>{"฿"+fmt(b.total)}</span>
+              </div>
+              {isOpen&&<div style={{paddingLeft:32,paddingRight:12,paddingBottom:6}}>
+                {b.subs.map(sub=>{
+                  const subPct=(sub.value/b.total*100).toFixed(1);
+                  return <div key={sub.name} style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",alignItems:"center",gap:10,padding:"6px 8px",borderBottom:"1px solid var(--line)"}}>
+                    <span style={{fontSize:12.5}}>{sub.name}</span>
+                    <span style={{fontSize:11,color:"var(--dim)"}}>{sub.items+" รายการ"}</span>
+                    <span style={{fontSize:11,color:"var(--dim)",fontVariantNumeric:"tabular-nums"}}>{subPct}%</span>
+                    <span style={{fontSize:12.5,fontWeight:600,fontVariantNumeric:"tabular-nums",minWidth:90,textAlign:"right"}}>{"฿"+fmt(sub.value)}</span>
+                  </div>;
+                })}
+              </div>}
+            </div>;
+          })}
+        </div>;
+      })()}
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
       {STOCK_STATUS.map(s=>{const cnt=baseP.filter(pr=>getSS(pr.id,sales).key===s.key).length;return <div key={s.key} onClick={()=>setFStat(fStat===s.key?"":s.key)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fStat===s.key?s.bg:"var(--bg)",border:"1.5px solid "+(fStat===s.key?s.color:"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:500,color:fStat===s.key?s.color:"var(--dim)"}}><span>{s.icon}</span><span>{s.label}</span><span style={{background:fStat===s.key?s.color+"22":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})}
