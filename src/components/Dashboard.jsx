@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import StatCard from "./ui/StatCard.jsx";
+import StockValueDonut from "./StockValueDonut.jsx";
 import { fmt, toBE } from "../utils/helpers.js";
 import { MOVE_TYPES, ALL_WIDGET_KEYS } from "../utils/constants.js";
 
@@ -26,7 +27,7 @@ function StatusBadge({map,status}){
 }
 
 export default function DashPage({sh}){
-  const{pN,cN,products,lowStock,sales,pos,logs,contacts,targets,isSup,supN,cu,handleTab,defectives}=sh;
+  const{pN,cN,products,lowStock,sales,pos,logs,contacts,targets,isSup,supN,cu,handleTab,defectives,cats}=sh;
   const isSales=!!cu.salesName&&cu.role!=="SalesManager";
   const widgets=cu.dashboardWidgets||ALL_WIDGET_KEYS;
   const w=key=>widgets.includes(key);
@@ -120,6 +121,8 @@ export default function DashPage({sh}){
       {w("sales_total")&&<StatCard label="ยอดขายรวม" value={"฿"+fmt(mySales)} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>}
       {w("profit")&&<StatCard label="กำไร" value={"฿"+fmt(profit)} color={profit>=0?"var(--green)":"var(--red)"} accentBg={profit>=0?"rgba(52,199,89,0.12)":"rgba(255,59,48,0.12)"}/>}
     </div>}
+
+    {w("stock_value")&&myTS>0&&<StockValueDonut products={myP} cats={cats}/>}
 
     {w("low_stock")&&myLS.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",marginBottom:"1.5rem",boxShadow:"var(--shadow)"}}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
