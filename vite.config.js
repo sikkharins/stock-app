@@ -23,9 +23,9 @@ export default defineConfig(({ mode }) => {
       includeAssets: ['favicon.svg', 'logo.jpg', 'icons.svg'],
       manifest: {
         id: '/',
-        name: 'TS Electronics - ระบบจัดการสต็อก',
-        short_name: 'TS Stock',
-        description: 'ระบบจัดการสต็อกสินค้า TS Electronics',
+        name: 'TS Electronic - ระบบจัดการสต็อก',
+        short_name: 'TS Electronic',
+        description: 'ระบบจัดการสต็อกสินค้า TS Electronic',
         theme_color: '#0071e3',
         background_color: '#f5f5f7',
         display: 'standalone',
@@ -38,8 +38,8 @@ export default defineConfig(({ mode }) => {
           { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         screenshots: [
-          { src: 'icons/screenshot-desktop.png', sizes: '1280x720', type: 'image/png', form_factor: 'wide', label: 'TS Electronics Dashboard' },
-          { src: 'icons/screenshot-mobile.png', sizes: '390x844', type: 'image/png', form_factor: 'narrow', label: 'TS Electronics Mobile' },
+          { src: 'icons/screenshot-desktop.png', sizes: '1280x720', type: 'image/png', form_factor: 'wide', label: 'TS Electronic Dashboard' },
+          { src: 'icons/screenshot-mobile.png', sizes: '390x844', type: 'image/png', form_factor: 'narrow', label: 'TS Electronic Mobile' },
         ],
       },
       workbox: {
