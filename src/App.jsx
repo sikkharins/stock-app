@@ -23,6 +23,7 @@ const UserPage = lazy(() => import("./components/Users.jsx"));
 const DefectivePage = lazy(() => import("./components/DefectiveProducts.jsx"));
 const BackupManager = lazy(() => import("./components/BackupManager.jsx"));
 const AISOBot = lazy(() => import("./components/AISOBot.jsx"));
+const FabCustomizer = lazy(() => import("./components/FabCustomizer.jsx"));
 const SalesOverviewPage = lazy(() => import("./components/SalesOverview.jsx"));
 const FinancialCalendarPage = lazy(() => import("./components/FinancialCalendar.jsx"));
 
@@ -74,7 +75,14 @@ export default function App(){
   const[cats,setCats]=useState(initCats);const[brands,setBrands]=useState(initBrands);
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
-  const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[fabOpen,setFabOpen]=useState(false);
+  const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[fabOpen,setFabOpen]=useState(false);const[showFabCustomizer,setShowFabCustomizer]=useState(false);
+  // Per-user FAB customization (label, fontSize, color, size, items order/visibility/rename)
+  const [fabCustom,setFabCustom]=useState({});
+  const fabSizeRef = useRef(44);
+  useEffect(()=>{fabSizeRef.current=fabCustom?.size||44;},[fabCustom?.size]);
+  // Load per-user customization when user logs in
+  useEffect(()=>{if(!cu?.id){setFabCustom({});return;}try{const s=localStorage.getItem(`fab_custom_${cu.id}`);setFabCustom(s?JSON.parse(s):{});}catch{setFabCustom({});}},[cu?.id]);
+  const updateFabCustom=useCallback((next)=>{setFabCustom(next);if(cu?.id)localStorage.setItem(`fab_custom_${cu.id}`,JSON.stringify(next));},[cu?.id]);
   // Draggable FAB (AssistiveTouch style)
   const fabRef=useRef(null);const fabDrag=useRef({dragging:false,startX:0,startY:0,startLeft:0,startTop:0,moved:false});
   const [fabPos,setFabPos]=useState(()=>{try{const s=JSON.parse(localStorage.getItem("fab_pos"));const sz=44;if(s&&s.x!=null&&s.x>=0&&s.y>=0&&s.x<=window.innerWidth-sz&&s.y<=window.innerHeight-sz)return s;}catch{}return{x:null,y:null};});
@@ -82,8 +90,8 @@ export default function App(){
   const fabIdleTimer=useRef(null);
   const resetFabIdle=useCallback(()=>{setFabTouched(true);clearTimeout(fabIdleTimer.current);fabIdleTimer.current=setTimeout(()=>setFabTouched(false),3000);},[]);
   const onFabPointerDown=useCallback((e)=>{const t=e.touches?e.touches[0]:e;const el=fabRef.current;if(!el)return;const r=el.getBoundingClientRect();fabDrag.current={dragging:true,startX:t.clientX,startY:t.clientY,startLeft:r.left,startTop:r.top,moved:false};resetFabIdle();},[resetFabIdle]);
-  const onFabPointerMove=useCallback((e)=>{const d=fabDrag.current;if(!d.dragging)return;const t=e.touches?e.touches[0]:e;const dx=t.clientX-d.startX,dy=t.clientY-d.startY;if(Math.abs(dx)>5||Math.abs(dy)>5)d.moved=true;if(!d.moved)return;e.preventDefault();const sz=44;const nx=Math.max(0,Math.min(window.innerWidth-sz,d.startLeft+dx));const ny=Math.max(0,Math.min(window.innerHeight-sz,d.startTop+dy));setFabPos({x:nx,y:ny});},[]);
-  const onFabPointerUp=useCallback(()=>{const d=fabDrag.current;d.dragging=false;if(d.moved&&fabPos.x!=null){const sz=44;const snapX=fabPos.x<window.innerWidth/2?8:window.innerWidth-sz-8;const snapped={x:snapX,y:fabPos.y};setFabPos(snapped);localStorage.setItem("fab_pos",JSON.stringify(snapped));}resetFabIdle();},[fabPos,resetFabIdle]);
+  const onFabPointerMove=useCallback((e)=>{const d=fabDrag.current;if(!d.dragging)return;const t=e.touches?e.touches[0]:e;const dx=t.clientX-d.startX,dy=t.clientY-d.startY;if(Math.abs(dx)>5||Math.abs(dy)>5)d.moved=true;if(!d.moved)return;e.preventDefault();const sz=fabSizeRef.current;const nx=Math.max(0,Math.min(window.innerWidth-sz,d.startLeft+dx));const ny=Math.max(0,Math.min(window.innerHeight-sz,d.startTop+dy));setFabPos({x:nx,y:ny});},[]);
+  const onFabPointerUp=useCallback(()=>{const d=fabDrag.current;d.dragging=false;if(d.moved&&fabPos.x!=null){const sz=fabSizeRef.current;const snapX=fabPos.x<window.innerWidth/2?8:window.innerWidth-sz-8;const snapped={x:snapX,y:fabPos.y};setFabPos(snapped);localStorage.setItem("fab_pos",JSON.stringify(snapped));}resetFabIdle();},[fabPos,resetFabIdle]);
   useEffect(()=>{window.addEventListener("mousemove",onFabPointerMove);window.addEventListener("mouseup",onFabPointerUp);window.addEventListener("touchmove",onFabPointerMove,{passive:false});window.addEventListener("touchend",onFabPointerUp);return()=>{window.removeEventListener("mousemove",onFabPointerMove);window.removeEventListener("mouseup",onFabPointerUp);window.removeEventListener("touchmove",onFabPointerMove);window.removeEventListener("touchend",onFabPointerUp);};},[onFabPointerMove,onFabPointerUp]);
   const[pullY,setPullY]=useState(0);const[refreshing,setRefreshing]=useState(false);const pullStart=useRef(null);const mainRef=useRef(null);
   const doRefresh=useCallback(async()=>{setRefreshing(true);try{const sbData=await loadAllFromSupabase();if(sbData)applyData(sbData,false);}catch(e){console.warn("Refresh error:",e.message);}setRefreshing(false);setPullY(0);},[]);
@@ -366,27 +374,45 @@ export default function App(){
     {showBackup&&<Suspense fallback={null}><BackupManager onClose={()=>setShowBackup(false)} cu={cu} products={products} contacts={contacts} pos={pos} sales={sales} quotes={quotes} cats={cats} brands={brands} users={users} logs={logs} payments={payments} actLogs={actLogs} targets={targets} audit={audit} priceHist={priceHist} setProducts={setProducts} setContacts={setContacts} setPOs={setPOs} setSales={setSales} setQuotes={setQuotes} setCats={setCats} setBrands={setBrands} setUsers={setUsers} setLogs={setLogs} setPayments={setPayments} setActLogs={setActLogs} setTargets={setTargets} setAudit={setAudit} setPriceHist={setPriceHist}/></Suspense>}
 
     {(()=>{
-      const acts=[
-        canC("sales")&&{label:"สร้างใบขาย",icon:"SO",tab:"sales",mk:"addSO"},
-        canC("products")&&{label:"เพิ่มสินค้า",icon:"+",tab:"products",mk:"product"},
-        canC("purchase")&&!isSup&&{label:"สร้าง PO",icon:"PO",tab:"purchase",mk:"addPO"},
-        canC("quotes")&&{label:"ใบเสนอราคา",icon:"QT",tab:"quotes",mk:"addQT"},
+      const baseActs=[
+        canC("sales")&&{key:"addSO",label:"สร้างใบขาย",icon:"SO",tab:"sales",mk:"addSO"},
+        canC("products")&&{key:"product",label:"เพิ่มสินค้า",icon:"+",tab:"products",mk:"product"},
+        canC("purchase")&&!isSup&&{key:"addPO",label:"สร้าง PO",icon:"PO",tab:"purchase",mk:"addPO"},
+        canC("quotes")&&{key:"addQT",label:"ใบเสนอราคา",icon:"QT",tab:"quotes",mk:"addQT"},
+        canA("finance")&&{key:"navFinance",label:"การเงิน",icon:"$",tab:"finance",mk:null},
+        canA("sales_overview")&&{key:"navSalesOverview",label:"ภาพรวมเซลล์",icon:"◎",tab:"sales_overview",mk:null},
+        canA("financial_calendar")&&{key:"navFinCal",label:"ปฏิทินการเงิน",icon:"◫",tab:"financial_calendar",mk:null},
+        canA("reports")&&{key:"navReports",label:"รายงาน",icon:"◑",tab:"reports",mk:null},
       ].filter(Boolean);
+      if(!baseActs.length)return null;
+      // Apply per-user customization: filter by visibility, reorder, override icon/label/color/fontSize
+      const customItems=fabCustom?.items||[];
+      const fromCustom=customItems.map(c=>{const b=baseActs.find(x=>x.key===c.key);if(!b||c.visible===false)return null;return{...b,label:c.label??b.label,icon:c.icon??b.icon,color:c.color,fontSize:c.fontSize};}).filter(Boolean);
+      const missing=baseActs.filter(b=>!customItems.some(c=>c.key===b.key));
+      const acts=[...fromCustom,...missing];
       if(!acts.length)return null;
-      const doAct=a=>{handleTab(a.tab);setQuickCreate(a.mk);setFabOpen(false);};
+      const fabSize=fabCustom?.size||44;
+      const fabLabel=fabCustom?.label||"+";
+      const fabFontSize=fabCustom?.fontSize||24;
+      const fabColor=fabCustom?.color||"rgba(255,255,255,0.7)";
+      const doAct=a=>{handleTab(a.tab);setQuickCreate(a.mk||null);setFabOpen(false);};
       const fabStyle=fabPos.x!=null?{position:"fixed",left:fabPos.x,top:fabPos.y,zIndex:9995}:{position:"fixed",bottom:88,right:16,zIndex:9995};
       const isRight=fabPos.x!=null?fabPos.x>window.innerWidth/2:true;
       const menuAlign=isRight?{right:0,alignItems:"flex-end"}:{left:0,alignItems:"flex-start"};
       return <>
         {fabOpen&&<div onClick={()=>setFabOpen(false)} style={{position:"fixed",inset:0,zIndex:9990}}/>}
         <div ref={fabRef} style={{...fabStyle,transition:"opacity 0.4s"}}>
-          {fabOpen&&<div style={{position:"absolute",bottom:52,...menuAlign,display:"flex",flexDirection:"column",gap:6}}>
-            {acts.map((a,i)=><button key={i} onClick={()=>doAct(a)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(30,30,30,0.75)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",boxShadow:"0 4px 20px rgba(0,0,0,0.3)",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",animation:`fab-pop 0.2s ${i*0.04}s both`}}>
-              <span style={{fontSize:15}}>{a.icon}</span>{a.label}
-            </button>)}
+          {fabOpen&&<div style={{position:"absolute",bottom:fabSize+8,...menuAlign,display:"flex",flexDirection:"column",gap:6}}>
+            {acts.map((a,i)=>{const itemFs=a.fontSize||13;const itemColor=a.color||"rgba(255,255,255,0.85)";return <button key={a.key||i} onClick={()=>doAct(a)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(30,30,30,0.75)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",boxShadow:"0 4px 20px rgba(0,0,0,0.3)",color:itemColor,fontSize:itemFs,fontWeight:500,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",animation:`fab-pop 0.2s ${i*0.04}s both`}}>
+              <span style={{fontSize:itemFs+2}}>{a.icon}</span>{a.label}
+            </button>;})}
+            {cu&&<button onClick={()=>{setFabOpen(false);setShowFabCustomizer(true);}} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderRadius:10,border:"1px dashed rgba(255,255,255,0.15)",background:"rgba(30,30,30,0.5)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",color:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",animation:`fab-pop 0.2s ${acts.length*0.04}s both`}}>
+              <span style={{fontSize:13}}>⚙</span>ปรับแต่งปุ่ม
+            </button>}
           </div>}
-          <button onMouseDown={onFabPointerDown} onTouchStart={onFabPointerDown} onClick={()=>{if(!fabDrag.current.moved)setFabOpen(o=>!o);}} style={{width:44,height:44,borderRadius:"50%",border:"1px solid rgba(255,255,255,0.1)",background:"rgba(40,40,40,0.6)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",color:"rgba(255,255,255,0.7)",fontSize:24,fontWeight:300,cursor:"grab",boxShadow:"0 2px 12px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.25s",transform:fabOpen?"rotate(45deg)":"none",touchAction:"none"}}>+</button>
+          <button onMouseDown={onFabPointerDown} onTouchStart={onFabPointerDown} onClick={()=>{if(!fabDrag.current.moved)setFabOpen(o=>!o);}} style={{width:fabSize,height:fabSize,borderRadius:"50%",border:"1px solid rgba(255,255,255,0.1)",background:"rgba(40,40,40,0.6)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",color:fabColor,fontSize:fabFontSize,fontWeight:300,cursor:"grab",boxShadow:"0 2px 12px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.25s, width 0.15s, height 0.15s",transform:fabOpen?"rotate(45deg)":"none",touchAction:"none",lineHeight:1}}>{fabLabel}</button>
         </div>
+        {showFabCustomizer&&<Suspense fallback={null}><FabCustomizer value={fabCustom} onChange={updateFabCustom} onClose={()=>setShowFabCustomizer(false)} baseActs={baseActs}/></Suspense>}
       </>;
     })()}
 
