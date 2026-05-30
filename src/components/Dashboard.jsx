@@ -37,7 +37,7 @@ export default function DashPage({sh}){
     const mp=isSup?products.filter(p=>p.distributor===supN):products;
     const ls=isSup?mp.filter(p=>p.minStock>0&&p.stock<=p.minStock):lowStock;
     const ms=isSales?sales.filter(so=>ci.includes(so.customerId)):sales;
-    const ts=mp.reduce((s,p)=>s+p.stock*p.cost,0);
+    const ts=mp.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);
     const sl=ms.reduce((s,so)=>s+so.items.reduce((a,i)=>a+i.qty*i.price,0)-(so.discountAmt||0),0);
     const pr=ms.reduce((s,so)=>s+so.items.reduce((a,i)=>{const p=products.find(x=>x.id===i.productId);return a+i.qty*(i.price-(p?p.cost:0));},0),0);
     return{myCI:ci,myP:mp,myLS:ls,myS:ms,myTS:ts,mySales:sl,profit:pr};
