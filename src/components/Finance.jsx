@@ -239,15 +239,25 @@ export default function FinPage({sh}){
       {sub==="ar"&&<td style={{padding:"8px",fontSize:12}}>{it.payType==="credit"?<span style={{background:"var(--blue-bg)",color:"var(--blue)",borderRadius:4,padding:"2px 8px",fontSize:11}}>{"เครดิต "+it.creditDays+" วัน"}</span>:<span style={{background:"rgba(52,199,89,0.12)",color:"var(--green)",borderRadius:4,padding:"2px 8px",fontSize:11}}>เงินสด 7 วัน</span>}</td>}
       {sub==="ar"&&<td style={{padding:"8px",fontSize:12}}>{it.dueDate?(()=>{const days=it.overdue?Math.ceil((new Date(todayStr())-new Date(it.dueDate))/(1000*60*60*24)):0;const agColor=days>60?"#b00":days>30?"var(--red)":"var(--orange)";return<span style={{fontWeight:500,color:it.overdue?agColor:"var(--text)"}}>{toBE(it.dueDate)}{it.overdue&&<span style={{marginLeft:4,fontSize:10,background:days>30?"rgba(176,0,0,0.12)":"rgba(255,59,48,0.12)",color:agColor,borderRadius:4,padding:"1px 6px",fontWeight:600}}>{"เกิน "+days+" วัน"}</span>}</span>;})():<span style={{color:"var(--faint)"}}>—</span>}</td>}
       <td style={{padding:"8px"}}>{"฿"+fmt(it.total)}</td><td style={{padding:"8px",color:"var(--green)"}}>{"฿"+fmt(it.paid)}</td>{sub==="ap"&&<td style={{padding:"8px",color:it.cnDeduct>0?"var(--orange)":"var(--faint)"}}>{it.cnDeduct>0?"฿"+fmt(it.cnDeduct):"-"}</td>}<td style={{padding:"8px",color:it.remaining>0?"var(--red)":"var(--green)",fontWeight:600}}>{"฿"+fmt(Math.max(0,it.remaining))}</td>
-      <td style={{padding:"8px",minWidth:140}}>{(()=>{
+      <td style={{padding:"8px",minWidth:180}}>{(()=>{
         const refNum=sub==="ap"?it.poNum:it.soNum;
         const pays=payments.filter(p=>p.refId===refNum&&p.type===sub);
         if(pays.length===0&&(it.cnDeduct||0)===0)return <span style={{fontSize:11,color:"var(--faint)"}}>—</span>;
-        const agg={};
-        pays.forEach(p=>{const m=p.method||"อื่นๆ";if(!agg[m])agg[m]={amount:0,count:0};agg[m].amount+=+p.amount||0;agg[m].count+=1;});
-        if(sub==="ap"&&(it.cnDeduct||0)>0){agg["หักลดหนี้"]={amount:it.cnDeduct,count:1};}
         const methodColor=m=>m==="เช็ค"?{c:"var(--purple)",b:"rgba(175,82,222,0.14)"}:m==="โอนเงิน"||m==="โอนเงินออก"?{c:"var(--blue)",b:"var(--blue-bg)"}:m==="เงินสด"?{c:"var(--green)",b:"rgba(52,199,89,0.12)"}:m==="หักลดหนี้"?{c:"var(--orange)",b:"rgba(255,149,0,0.14)"}:m==="จ่ายEPP"?{c:"var(--teal)",b:"rgba(90,200,250,0.14)"}:{c:"var(--dim)",b:"var(--hover)"};
-        return <div style={{display:"flex",flexDirection:"column",gap:3}}>{Object.entries(agg).map(([m,v])=>{const col=methodColor(m);return <div key={m} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}><span style={{padding:"1px 7px",borderRadius:99,background:col.b,color:col.c,fontWeight:500,whiteSpace:"nowrap"}}>{m}{v.count>1?" ×"+v.count:""}</span><span style={{color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>{"฿"+fmt(v.amount)}</span></div>;})}</div>;
+        const detailOf=p=>{
+          if(p.method==="เช็ค"&&p.chequeNo)return "#"+p.chequeNo+(p.chequeBank?" • "+p.chequeBank.replace(/\s*\([^)]*\)/,""):"");
+          if((p.method==="โอนเงิน"||p.method==="โอนเงินออก"||p.method==="จ่ายEPP")&&p.accId){const a=bankAccs.find(x=>x.id===p.accId);return a?"→ "+a.name+(a.bank?" "+a.bank:""):"";}
+          if(p.method==="หักลดหนี้"&&p.billId){const bl=billings.find(b=>b.id===p.billId);if(bl){const cnNums=(bl.cnIds||[]).map(id=>{const cn=cnotes.find(c=>c.id===id);return cn?cn.cnNum:null;}).filter(Boolean);return cnNums.length?"CN: "+cnNums.join(", "):"ใบ "+bl.billNum;}return "";}
+          return "";
+        };
+        return <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {pays.map(p=>{const col=methodColor(p.method||"อื่นๆ");const det=detailOf(p);return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,flexWrap:"wrap"}}>
+            <span style={{padding:"1px 7px",borderRadius:99,background:col.b,color:col.c,fontWeight:500,whiteSpace:"nowrap"}}>{p.method||"อื่นๆ"}</span>
+            <span style={{color:"var(--text)",fontVariantNumeric:"tabular-nums",fontWeight:500}}>{"฿"+fmt(+p.amount||0)}</span>
+            {det&&<span style={{color:"var(--dim)",fontSize:10}}>{det}</span>}
+          </div>;})}
+          {sub==="ap"&&(it.cnDeduct||0)>0&&(()=>{const col=methodColor("หักลดหนี้");return <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}><span style={{padding:"1px 7px",borderRadius:99,background:col.b,color:col.c,fontWeight:500,whiteSpace:"nowrap"}}>หักลดหนี้</span><span style={{color:"var(--text)",fontVariantNumeric:"tabular-nums",fontWeight:500}}>{"฿"+fmt(it.cnDeduct)}</span></div>;})()}
+        </div>;
       })()}</td>
       {sub==="ar"&&<td style={{padding:"8px"}}>{bl?<span style={{fontSize:11,cursor:"pointer"}} onClick={()=>{setSub("billing");setViewBill(bl);}}><span style={{padding:"2px 8px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)",fontWeight:500}}>วางบิลแล้ว</span><span style={{marginLeft:4,color:"var(--blue)",fontWeight:500}}>{bl.billNum}</span></span>:<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)"}}>ยังไม่วางบิล</span>}</td>}
       <td style={{padding:"8px",whiteSpace:"nowrap"}}><div style={{display:"flex",gap:4}}>{ed&&it.status2!=="paid"&&<button onClick={()=>openPay(it)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--green)",background:"rgba(52,199,89,0.12)",color:"var(--green)",cursor:"pointer",fontFamily:"inherit"}}>{sub==="ap"?"+ จ่าย":"+ รับ"}</button>}{ed&&it.paid>0&&<button onClick={()=>setViewPayHist(it)} style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit"}}>ประวัติ</button>}</div></td>
