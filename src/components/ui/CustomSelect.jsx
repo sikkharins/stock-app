@@ -69,6 +69,8 @@ export default function CustomSelect({ value, onChange, options, style, disabled
 
   const label = options.find(o => (typeof o === "string" ? o : o.value) === value);
   const displayLabel = label ? (typeof label === "string" ? label : label.label) : value || "เลือก...";
+  const displayColor = label && typeof label === "object" ? label.color : null;
+  const displayIcon = label && typeof label === "object" ? label.icon : null;
 
   return (
     <div ref={ref} style={{ position: "relative", ...style }}>
@@ -83,7 +85,9 @@ export default function CustomSelect({ value, onChange, options, style, disabled
           ...(style?.width ? { width: style.width } : {}),
         }}
       >
-        {displayLabel}
+        {displayIcon && <img src={displayIcon} style={{width:18,height:18,borderRadius:4,objectFit:"contain",marginRight:6,flexShrink:0}} alt=""/>}
+        {!displayIcon && displayColor && <span style={{width:16,height:16,borderRadius:"50%",background:displayColor,marginRight:6,flexShrink:0,border:"1px solid rgba(128,128,128,0.2)"}}/>}
+        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{displayLabel}</span>
         <svg style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} width="12" height="8" viewBox="0 0 12 8">
           <path d="M1 1l5 5 5-5" stroke="var(--dim)" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -112,6 +116,8 @@ export default function CustomSelect({ value, onChange, options, style, disabled
             {filteredOptions.map((o, i) => {
               const val = typeof o === "string" ? o : o.value;
               const lbl = typeof o === "string" ? o : o.label;
+              const oIcon = typeof o === "object" ? o.icon : null;
+              const oColor = typeof o === "object" ? o.color : null;
               const active = val === value;
               return (
                 <div
@@ -122,10 +128,13 @@ export default function CustomSelect({ value, onChange, options, style, disabled
                     color: "var(--text)", fontFamily: "inherit",
                     background: active ? "var(--blue-bg)" : "transparent",
                     borderRadius: i === 0 && !searchable ? "7px 7px 0 0" : i === filteredOptions.length - 1 ? "0 0 7px 7px" : 0,
+                    display: "flex", alignItems: "center", gap: 8,
                   }}
                   onMouseEnter={e => { if (!active) e.currentTarget.style.background = "var(--hover)"; }}
                   onMouseLeave={e => { e.currentTarget.style.background = active ? "var(--blue-bg)" : "transparent"; }}
                 >
+                  {oIcon && <img src={oIcon} style={{width:18,height:18,borderRadius:4,objectFit:"contain",flexShrink:0}} alt=""/>}
+                  {!oIcon && oColor && <span style={{width:16,height:16,borderRadius:"50%",background:oColor,flexShrink:0,border:"1px solid rgba(128,128,128,0.2)"}}/>}
                   {lbl}
                 </div>
               );

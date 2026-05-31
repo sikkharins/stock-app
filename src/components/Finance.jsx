@@ -12,7 +12,19 @@ import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 const TB={padding:"10px 20px",fontSize:13,border:"none",marginBottom:"-2px",background:"transparent",cursor:"pointer",fontFamily:"inherit"};
 const CHQ_ST=[{key:"pending",label:"รอขึ้นเงิน",color:"var(--orange)",bg:"rgba(255,149,0,0.14)"},{key:"deposited",label:"นำฝากแล้ว",color:"var(--blue)",bg:"var(--blue-bg)"},{key:"cleared",label:"เคลียร์แล้ว",color:"var(--green)",bg:"rgba(52,199,89,0.12)"},{key:"bounced",label:"เด้ง",color:"var(--red)",bg:"rgba(255,59,48,0.12)"}];
 const CN_TYPES=[{key:"return",label:"คืนสินค้า",color:"var(--blue)",bg:"var(--blue-bg)"},{key:"defective",label:"สินค้าชำรุด",color:"var(--orange)",bg:"rgba(255,149,0,0.14)"},{key:"promo",label:"โปรโมชั่น",color:"var(--purple)",bg:"rgba(175,82,222,0.14)"}];
-const THAI_BANKS=["ธนาคารกรุงเทพ (Bangkok Bank)","ธนาคารกสิกรไทย (KBank)","ธนาคารกรุงไทย (Krungthai)","ธนาคารไทยพาณิชย์ (SCB)","ธนาคารกรุงศรีอยุธยา (Krungsri)","ธนาคารทหารไทยธนชาต (ttb)","ธนาคารซีไอเอ็มบีไทย (CIMB)","ธนาคารยูโอบี (UOB)","ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)","ธนาคารออมสิน"];
+const THAI_BANKS=[
+  {value:"ธนาคารกรุงเทพ (Bangkok Bank)",label:"ธนาคารกรุงเทพ (BBL)",color:"#1e3a7b",icon:"/icons/banks/bbl.svg"},
+  {value:"ธนาคารกสิกรไทย (KBank)",label:"ธนาคารกสิกรไทย (KBank)",color:"#138f2d",icon:"/icons/banks/kbank.svg"},
+  {value:"ธนาคารกรุงไทย (Krungthai)",label:"ธนาคารกรุงไทย (KTB)",color:"#1ba5e1",icon:"/icons/banks/ktb.svg"},
+  {value:"ธนาคารไทยพาณิชย์ (SCB)",label:"ธนาคารไทยพาณิชย์ (SCB)",color:"#4e2a82",icon:"/icons/banks/scb.svg"},
+  {value:"ธนาคารกรุงศรีอยุธยา (Krungsri)",label:"ธนาคารกรุงศรีอยุธยา (BAY)",color:"#fec43b",icon:"/icons/banks/bay.svg"},
+  {value:"ธนาคารทหารไทยธนชาต (ttb)",label:"ธนาคารทหารไทยธนชาต (ttb)",color:"#fc4f1f",icon:"/icons/banks/ttb.svg"},
+  {value:"ธนาคารซีไอเอ็มบีไทย (CIMB)",label:"ธนาคารซีไอเอ็มบีไทย (CIMB)",color:"#7b0046",icon:"/icons/banks/cimb.svg"},
+  {value:"ธนาคารยูโอบี (UOB)",label:"ธนาคารยูโอบี (UOB)",color:"#0b3979",icon:"/icons/banks/uob.svg"},
+  {value:"ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)",label:"ธ.ก.ส. (BAAC)",color:"#4b9b1d",icon:"/icons/banks/baac.svg"},
+  {value:"ธนาคารออมสิน",label:"ธนาคารออมสิน (GSB)",color:"#eb198d",icon:"/icons/banks/gsb.svg"},
+];
+const BANK_OPTS=[{value:"",label:"เลือกธนาคาร"},...THAI_BANKS];
 const DEF_PERMS={receive:true,clearCheque:true,payEPP:true,transferOut:true};
 const hasPerm=(acc,key)=>{const p=acc.perms;if(!p)return true;if(key==="payEPP")return p.payEPP!==undefined?!!p.payEPP:p.payOnline!==undefined?!!p.payOnline:true;if(key==="transferOut")return p.transferOut!==undefined?!!p.transferOut:true;return p[key]!==undefined?!!p[key]:true;};
 
@@ -552,7 +564,7 @@ export default function FinPage({sh}){
         {payForm.type==="ar"&&payForm.method==="โอนเงิน"&&<Field label="เข้าบัญชี"><CustomSelect value={String(payForm.accId||"")} onChange={v=>setPayForm(f=>({...f,accId:+v}))} options={bankAccs.filter(a=>hasPerm(a,"receive")).map(a=>({value:String(a.id),label:a.name+" — "+a.bank}))}/></Field>}
         {payForm.type==="ar"&&payForm.method==="เช็ค"&&<>
           <Field label="เลขที่เช็ค *"><input value={payForm.chequeNo} onChange={e=>setPayForm(f=>({...f,chequeNo:e.target.value}))} style={IB} placeholder="เลขที่เช็ค"/></Field>
-          <Field label="ธนาคาร"><select value={payForm.chequeBank} onChange={e=>setPayForm(f=>({...f,chequeBank:e.target.value}))} style={IB}><option value="">เลือกธนาคาร</option>{THAI_BANKS.map(b=><option key={b} value={b}>{b}</option>)}</select></Field>
+          <Field label="ธนาคาร"><CustomSelect value={payForm.chequeBank} onChange={v=>setPayForm(f=>({...f,chequeBank:v}))} options={BANK_OPTS}/></Field>
           <Field label="วันครบกำหนด"><ThaiDateInput value={payForm.chequeDue} onChange={e=>setPayForm(f=>({...f,chequeDue:e.target.value}))}/></Field>
         </>}
         <Field label="หมายเหตุ"><input value={payForm.note} onChange={e=>setPayForm(f=>({...f,note:e.target.value}))} style={IB}/></Field>
@@ -563,7 +575,7 @@ export default function FinPage({sh}){
     {modal==="addChq"&&ed&&<Modal title={chqForm.id?"แก้ไขเช็ค":"เพิ่มเช็ค"} onClose={cM}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <Field label="เลขที่เช็ค"><input value={chqForm.chequeNo} onChange={e=>setChqForm(f=>({...f,chequeNo:e.target.value}))} style={IB}/></Field>
-        <Field label="ธนาคาร"><select value={chqForm.bank} onChange={e=>setChqForm(f=>({...f,bank:e.target.value}))} style={IB}><option value="">เลือกธนาคาร</option>{THAI_BANKS.map(b=><option key={b} value={b}>{b}</option>)}</select></Field>
+        <Field label="ธนาคาร"><CustomSelect value={chqForm.bank} onChange={v=>setChqForm(f=>({...f,bank:v}))} options={BANK_OPTS}/></Field>
         <Field label="จำนวน (฿)"><input type="number" value={chqForm.amount} onChange={e=>setChqForm(f=>({...f,amount:e.target.value}))} style={IB}/></Field>
         <Field label="วันที่รับ"><ThaiDateInput value={chqForm.date} onChange={e=>setChqForm(f=>({...f,date:e.target.value}))}/></Field>
         <Field label="วันครบกำหนด"><ThaiDateInput value={chqForm.dueDate} onChange={e=>setChqForm(f=>({...f,dueDate:e.target.value}))}/></Field>
@@ -668,7 +680,7 @@ export default function FinPage({sh}){
             {ln.method==="โอนเงิน"&&<Field label="เข้าบัญชี"><CustomSelect value={String(ln.accId||"")} onChange={v=>updBatchLine(i,"accId",+v)} options={bankAccs.filter(a=>hasPerm(a,"receive")).map(a=>({value:String(a.id),label:a.name+" — "+a.bank}))}/></Field>}
             {ln.method==="เช็ค"&&<>
               <Field label="เลขที่เช็ค *"><input value={ln.chequeNo} onChange={e=>updBatchLine(i,"chequeNo",e.target.value)} style={IB}/></Field>
-              <Field label="ธนาคาร"><select value={ln.chequeBank} onChange={e=>updBatchLine(i,"chequeBank",e.target.value)} style={IB}><option value="">เลือกธนาคาร</option>{THAI_BANKS.map(b=><option key={b} value={b}>{b}</option>)}</select></Field>
+              <Field label="ธนาคาร"><CustomSelect value={ln.chequeBank} onChange={v=>updBatchLine(i,"chequeBank",v)} options={BANK_OPTS}/></Field>
               <Field label="วันครบกำหนด"><ThaiDateInput value={ln.chequeDue} onChange={e=>updBatchLine(i,"chequeDue",e.target.value)}/></Field>
             </>}
           </div>
