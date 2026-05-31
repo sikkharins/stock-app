@@ -268,10 +268,16 @@ export default function FinPage({sh}){
           <td style={{padding:"8px",fontSize:12}}>{c.dueDate?<span style={{fontWeight:500,color:overdue?"var(--red)":"var(--text)"}}>{toBE(c.dueDate)}{overdue&&<span style={{marginLeft:4,fontSize:10,background:"rgba(255,59,48,0.12)",color:"var(--red)",borderRadius:4,padding:"1px 6px"}}>เกินกำหนด</span>}</span>:"—"}</td>
           <td style={{padding:"8px"}}>{c.from||"—"}</td>
           <td style={{padding:"8px",color:"var(--blue)",fontSize:12}}>{c.refId||"—"}</td>
-          <td style={{padding:"8px"}}><span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:st.bg,color:st.color}}>{st.label}</span>{c.depositAccId&&(c.status==="deposited"||c.status==="cleared")&&(()=>{const da=bankAccs.find(a=>a.id===c.depositAccId);return da?<span style={{fontSize:10,color:"var(--dim)",marginLeft:4}}>{"→ "+da.name}</span>:null;})()}{c.depositDate&&c.status==="deposited"&&<span style={{fontSize:10,color:"var(--faint)",marginLeft:4}}>{toBE(c.depositDate)}</span>}</td>
+          <td style={{padding:"8px"}}><span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:st.bg,color:st.color}}>{st.label}</span>{c.depositAccId&&(c.status==="deposited"||c.status==="cleared")&&(()=>{const da=bankAccs.find(a=>a.id===c.depositAccId);return da?<span style={{fontSize:10,color:"var(--dim)",marginLeft:4}}>{"→ "+da.name}</span>:null;})()}{c.depositDate&&c.status==="deposited"&&<span style={{fontSize:10,color:"var(--faint)",marginLeft:4}}>{toBE(c.depositDate)}</span>}{c.status==="bounced"&&c.bounceResolve&&(()=>{
+            if(c.bounceResolve==="new_cheque")return <span style={{fontSize:10,color:"var(--blue)",marginLeft:6,padding:"1px 6px",borderRadius:99,background:"var(--blue-bg)",border:"1px solid var(--blue)"}}>{"↻ เช็คใหม่ "+(c.bounceNewChqNo||"")}</span>;
+            if(c.bounceResolve==="transfer"){const da=bankAccs.find(a=>a.id===c.bounceTxnAccId);return <span style={{fontSize:10,color:"var(--green)",marginLeft:6,padding:"1px 6px",borderRadius:99,background:"rgba(52,199,89,0.12)",border:"1px solid var(--green)"}}>{"✓ โอนแล้ว"+(da?" → "+da.name:"")}</span>;}
+            if(c.bounceResolve==="none")return <span style={{fontSize:10,color:"var(--orange)",marginLeft:6,padding:"1px 6px",borderRadius:99,background:"rgba(255,149,0,0.14)",border:"1px solid var(--orange)"}}>⚠ ยังไม่แก้</span>;
+            return null;
+          })()}</td>
           <td style={{padding:"8px",whiteSpace:"nowrap"}}>{ed&&<button onClick={()=>openChqEdit(c)} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--dim)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>แก้ไข</button>}
           {ed&&c.status==="pending"&&<><button onClick={()=>setChqConfirm({id:c.id,action:"deposited",chequeNo:c.chequeNo,amount:c.amount,accId:(bankAccs.find(a=>a.id===3)||bankAccs[0])?.id||3,depositDate:todayStr()})} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>นำฝาก</button><button onClick={()=>setBounceConfirm({id:c.id,chequeNo:c.chequeNo,amount:c.amount,from:c.from,refId:c.refId,resolve:"none",newChequeNo:"",newBank:"",newDueDate:"",txnAccId:(bankAccs.find(a=>a.id===3)||bankAccs[0])?.id||3,txnDate:todayStr()})} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>เด้ง</button></>}
           {ed&&c.status==="deposited"&&<><button onClick={()=>setChqConfirm({id:c.id,action:"cleared",chequeNo:c.chequeNo,amount:c.amount})} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:"1px solid var(--green)",background:"rgba(52,199,89,0.12)",color:"var(--green)",cursor:"pointer",marginRight:4,fontFamily:"inherit"}}>เคลียร์</button><button onClick={()=>setBounceConfirm({id:c.id,chequeNo:c.chequeNo,amount:c.amount,from:c.from,refId:c.refId,resolve:"none",newChequeNo:"",newBank:"",newDueDate:"",txnAccId:(bankAccs.find(a=>a.id===3)||bankAccs[0])?.id||3,txnDate:todayStr()})} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>เด้ง</button></>}
+          {ed&&c.status==="bounced"&&(!c.bounceResolve||c.bounceResolve==="none")&&<button onClick={()=>setBounceConfirm({id:c.id,chequeNo:c.chequeNo,amount:c.amount,from:c.from,refId:c.refId,resolve:"new_cheque",newChequeNo:"",newBank:"",newDueDate:"",txnAccId:(bankAccs.find(a=>a.id===3)||bankAccs[0])?.id||3,txnDate:todayStr(),resolveOnly:true})} style={{padding:"3px 8px",fontSize:11,borderRadius:6,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.14)",color:"var(--orange)",cursor:"pointer",fontFamily:"inherit"}}>แก้ไขเด้ง</button>}
           </td>
         </tr>;})}
       </tbody></table></div>
@@ -320,12 +326,15 @@ export default function FinPage({sh}){
         </div>
         <MBtns onCancel={()=>setBounceConfirm(null)} onSave={()=>{
           if(bounceConfirm.resolve==="new_cheque"&&(!bounceConfirm.newChequeNo||!bounceConfirm.newDueDate)){setWarnMsg("กรุณากรอกเลขที่เช็คใหม่และวันครบกำหนด");return;}
-          updateChqStatus(bounceConfirm.id,"bounced");
+          const newChqId=Date.now();const newTxnId=Date.now()+1;
+          const extra={bounceResolve:bounceConfirm.resolve,bounceDate:todayStr()};
+          if(bounceConfirm.resolve==="new_cheque"){extra.bounceNewChqId=newChqId;extra.bounceNewChqNo=bounceConfirm.newChequeNo;}
+          if(bounceConfirm.resolve==="transfer"){extra.bounceTxnId=newTxnId;extra.bounceTxnAccId=bounceConfirm.txnAccId;extra.bounceTxnDate=bounceConfirm.txnDate;}
+          updateChqStatus(bounceConfirm.id,"bounced",extra);
           if(bounceConfirm.resolve==="new_cheque"){
-            const old=cheques.find(c=>c.id===bounceConfirm.id);
-            setCheques(p=>[...p,{id:Date.now(),chequeNo:bounceConfirm.newChequeNo,bank:bounceConfirm.newBank,amount:bounceConfirm.amount,receiveDate:todayStr(),dueDate:bounceConfirm.newDueDate,from:bounceConfirm.from||"",refId:bounceConfirm.refId||"",note:"แทนเช็คเด้ง "+bounceConfirm.chequeNo,status:"pending"}]);
+            setCheques(p=>[...p,{id:newChqId,chequeNo:bounceConfirm.newChequeNo,bank:bounceConfirm.newBank,amount:bounceConfirm.amount,receiveDate:todayStr(),dueDate:bounceConfirm.newDueDate,from:bounceConfirm.from||"",refId:bounceConfirm.refId||"",note:"แทนเช็คเด้ง "+bounceConfirm.chequeNo,status:"pending"}]);
           }else if(bounceConfirm.resolve==="transfer"){
-            setBankTxns(p=>[...p,{id:Date.now(),accId:bounceConfirm.txnAccId,type:"in",amount:bounceConfirm.amount,date:bounceConfirm.txnDate,from:bounceConfirm.from||"ลูกค้า",refId:bounceConfirm.refId||"",note:"โอนแทนเช็คเด้ง "+bounceConfirm.chequeNo}]);
+            setBankTxns(p=>[...p,{id:newTxnId,accId:bounceConfirm.txnAccId,type:"in",amount:bounceConfirm.amount,date:bounceConfirm.txnDate,from:bounceConfirm.from||"ลูกค้า",refId:bounceConfirm.refId||"",note:"โอนแทนเช็คเด้ง "+bounceConfirm.chequeNo}]);
           }
           setBounceConfirm(null);
         }} saveLabel="ยืนยัน"/>
