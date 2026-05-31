@@ -166,12 +166,35 @@ export default function EventDetail({ event, sh, onClose }) {
 // ========== Sub-components ==========
 
 function PackForm({ sh, data, onClose, onSave }) {
-  const { products, pN } = sh;
-  const [form, setForm] = useState(data);
+  const { products, pN, brands = [], cats = [] } = sh;
+  const [form, setForm] = useState({ ...data, brands: data.brands || [], categoryIds: data.categoryIds || [] });
   const addItem = () => setForm(f => ({ ...f, items: [...(f.items || []), { productId: "", qty: 1 }] }));
   const setItem = (idx, k, v) => setForm(f => ({ ...f, items: f.items.map((x, i) => i === idx ? { ...x, [k]: v } : x) }));
   const delItem = (idx) => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
+  const toggleBrand = (b) => setForm(f => ({ ...f, brands: f.brands.includes(b) ? f.brands.filter(x => x !== b) : [...f.brands, b] }));
+  const toggleCat = (id) => setForm(f => ({ ...f, categoryIds: f.categoryIds.includes(id) ? f.categoryIds.filter(x => x !== id) : [...f.categoryIds, id] }));
   const valid = form.name && form.packCode && (form.items || []).every(it => it.productId && +it.qty > 0);
+
+  // Filter products by selected brands/categories
+  const filteredProducts = useMemo(() => products.filter(p => {
+    if ((form.brands || []).length && !form.brands.includes(p.brand)) return false;
+    if ((form.categoryIds || []).length && !form.categoryIds.includes(p.categoryId)) return false;
+    return true;
+  }), [products, form.brands, form.categoryIds]);
+
+  // Always include already-selected products (even if filtered out)
+  const productOpts = useMemo(() => {
+    const opts = filteredProducts.map(p => ({ value: String(p.id), label: pN(p) + " (" + p.brand + ")", searchText: p.code || "" }));
+    (form.items || []).forEach(it => {
+      if (it.productId && !opts.some(o => o.value === String(it.productId))) {
+        const p = products.find(x => x.id === +it.productId);
+        if (p) opts.push({ value: String(p.id), label: pN(p) + " (" + p.brand + ") • นอกตัวกรอง", searchText: p.code || "" });
+      }
+    });
+    return [{ value: "", label: "เลือกสินค้า..." }, ...opts];
+  }, [filteredProducts, form.items, products, pN]);
+
+  const chip = { display: "inline-block", fontSize: 11, fontWeight: 500, borderRadius: 5, padding: "4px 10px", marginRight: 4, marginBottom: 3, cursor: "pointer", border: "1px solid transparent" };
 
   return <Modal title="Pack" onClose={onClose}>
     <div style={{ display: "grid", gap: 12 }}>
@@ -183,19 +206,42 @@ function PackForm({ sh, data, onClose, onSave }) {
         <Field label="ราคาขาย (฿)"><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: +e.target.value || 0 }))} style={IB} /></Field>
         <Field label="คูปองต่อ pack"><input type="number" value={form.couponsPerPack} onChange={e => setForm(f => ({ ...f, couponsPerPack: +e.target.value || 0 }))} style={IB} /></Field>
       </div>
+
+      {/* Brand chips */}
+      <div>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>ยี่ห้อที่อยู่ใน Pack <span style={{ fontWeight: 400, color: "var(--faint)" }}>(ว่าง = ทุกยี่ห้อ)</span></div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 100, overflowY: "auto", padding: 4 }}>
+          {brands.map(b => {
+            const sel = (form.brands || []).includes(b);
+            return <span key={b} onClick={() => toggleBrand(b)} style={{ ...chip, color: sel ? "var(--blue)" : "var(--dim)", background: sel ? "var(--blue-bg)" : "var(--hover)", border: sel ? "1px solid var(--blue)" : "1px solid transparent" }}>{b}</span>;
+          })}
+        </div>
+      </div>
+
+      {/* Category chips */}
+      <div>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>หมวดสินค้าที่อยู่ใน Pack <span style={{ fontWeight: 400, color: "var(--faint)" }}>(ว่าง = ทุกหมวด)</span></div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 100, overflowY: "auto", padding: 4 }}>
+          {cats.map(c => {
+            const sel = (form.categoryIds || []).includes(c.id);
+            return <span key={c.id} onClick={() => toggleCat(c.id)} style={{ ...chip, color: sel ? "var(--orange)" : "var(--dim)", background: sel ? "rgba(255,149,0,0.14)" : "var(--hover)", border: sel ? "1px solid var(--orange)" : "1px solid transparent" }}>{c.name}</span>;
+          })}
+        </div>
+      </div>
+
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)" }}>สินค้าใน Pack</div>
+          <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)" }}>สินค้าใน Pack <span style={{ fontWeight: 400, color: "var(--faint)" }}>{"(" + filteredProducts.length + " ตัวเลือก)"}</span></div>
           <button onClick={addItem} style={{ fontSize: 12, color: "var(--blue)", background: "transparent", border: "none", cursor: "pointer" }}>+ เพิ่มสินค้า</button>
         </div>
         {(form.items || []).map((it, i) => <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px auto", gap: 8, marginBottom: 6, alignItems: "end" }}>
-          <CustomSelect searchable value={String(it.productId)} onChange={v => setItem(i, "productId", v)} options={[{ value: "", label: "เลือกสินค้า..." }, ...products.map(p => ({ value: String(p.id), label: pN(p) + " (" + p.brand + ")", searchText: p.code || "" }))]} />
+          <CustomSelect searchable value={String(it.productId)} onChange={v => setItem(i, "productId", v)} options={productOpts} />
           <input type="number" min="1" value={it.qty} onChange={e => setItem(i, "qty", +e.target.value || 1)} style={IB} />
           {form.items.length > 1 && <button onClick={() => delItem(i)} style={{ fontSize: 11, color: "var(--red)", background: "transparent", border: "none", cursor: "pointer", padding: "0 6px" }}>×</button>}
         </div>)}
       </div>
     </div>
-    <MBtns onCancel={onClose} onSave={() => onSave({ ...form, items: form.items.map(it => ({ productId: +it.productId, qty: +it.qty })) })} saveLabel="บันทึก" disabled={!valid} />
+    <MBtns onCancel={onClose} onSave={() => onSave({ ...form, brands: form.brands || [], categoryIds: form.categoryIds || [], items: form.items.map(it => ({ productId: +it.productId, qty: +it.qty })) })} saveLabel="บันทึก" disabled={!valid} />
   </Modal>;
 }
 
