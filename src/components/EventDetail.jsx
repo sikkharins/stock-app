@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { IB } from "../utils/constants.js";
 import { fmt, todayStr, toBE } from "../utils/helpers.js";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -27,16 +27,42 @@ export default function EventDetail({ event, sh, onClose }) {
     updateEvent({ name: setupForm.name, description: setupForm.description, startDate: setupForm.startDate, endDate: setupForm.endDate || "", status: setupForm.status });
   };
 
-  // Compute progress per customer (used in Tab 4)
+  // Compute earned packs per pack-condition (condition-based)
+  const computePackProgress = (custId, pack) => {
+    const validSOs = (sales || []).filter(s =>
+      s.customerId === custId &&
+      ["completed", "pending_delivery"].includes(s.status) &&
+      (!event.startDate || s.date >= event.startDate) &&
+      (!event.endDate || s.date <= event.endDate)
+    );
+    let total = 0;
+    validSOs.forEach(so => {
+      (so.items || []).forEach(it => {
+        const prod = products.find(p => p.id === +it.productId);
+        if (!prod) return;
+        if ((pack.brands || []).length && !pack.brands.includes(prod.brand)) return;
+        if ((pack.categoryIds || []).length && !pack.categoryIds.includes(prod.categoryId)) return;
+        if ((pack.productIds || []).length && !pack.productIds.includes(prod.id)) return;
+        total += pack.measureBy === "qty" ? (+it.qty || 0) : (+it.qty || 0) * (+it.price || 0);
+      });
+    });
+    const threshold = +pack.threshold || 0;
+    const earned = threshold > 0 ? Math.floor(total / threshold) : 0;
+    const coupons = earned * (+pack.couponsPerPack || 0);
+    return { total, earned, coupons, threshold, soCount: validSOs.length };
+  };
+
+  // Aggregate progress across all packs for a customer
   const computeProgress = (custId) => {
-    const validSOs = (sales || []).filter(s => s.customerId === custId && s.eventId === event.id && ["completed", "pending_delivery"].includes(s.status));
-    let bought = 0, coupons = 0;
-    validSOs.forEach(so => (so.eventPackPurchases || []).forEach(p => {
-      bought += +p.qty || 0;
-      const pack = (event.packs || []).find(x => x.id === p.packId);
-      coupons += (pack?.couponsPerPack || 0) * (+p.qty || 0);
-    }));
-    return { bought, coupons, soCount: validSOs.length };
+    let bought = 0, coupons = 0, soCount = 0;
+    const perPack = (event.packs || []).map(pack => {
+      const r = computePackProgress(custId, pack);
+      bought += r.earned;
+      coupons += r.coupons;
+      soCount = Math.max(soCount, r.soCount);
+      return { pack, ...r };
+    });
+    return { bought, coupons, soCount, perPack };
   };
 
   const rewardRemaining = (rw) => (rw.totalQty || 0) - ((event.awards || []).filter(a => a.rewardId === rw.id).reduce((s, a) => s + (+a.qty || 0), 0));
@@ -74,30 +100,40 @@ export default function EventDetail({ event, sh, onClose }) {
 
     {/* TAB 2: Packs */}
     {tab === "packs" && <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, color: "var(--dim)" }}>Pack คือชุดสินค้าที่ขายให้ลูกค้า แต่ละ pack มีจำนวนคูปองต่างกัน</div>
-        {ed && <button onClick={() => setSubModal({ type: "pack", data: { id: Date.now(), packCode: "", name: "", price: 0, couponsPerPack: 1, items: [{ productId: "", qty: 1 }] } })} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--blue)", background: "var(--blue-bg)", color: "var(--blue)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>+ เพิ่ม Pack</button>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 12, color: "var(--dim)" }}>Pack = เงื่อนไขซื้อ — ลูกค้าซื้อครบเงื่อนไขจะได้คูปอง (นับซ้ำได้)</div>
+        {ed && <button onClick={() => setSubModal({ type: "pack", data: { id: Date.now(), packCode: "", name: "", couponsPerPack: 1, measureBy: "amount", threshold: 0, brands: [], categoryIds: [], productIds: [] } })} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--blue)", background: "var(--blue-bg)", color: "var(--blue)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>+ เพิ่ม Pack</button>}
       </div>
       {(event.packs || []).length === 0 ? <div style={{ textAlign: "center", color: "var(--faint)", padding: "2rem", background: "var(--bg)", borderRadius: 8 }}>ยังไม่มี Pack</div> :
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
-          {(event.packs || []).map(pk => <div key={pk.id} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{pk.name || "(ไม่มีชื่อ)"}</div>
-                <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "monospace" }}>{pk.packCode}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 10 }}>
+          {(event.packs || []).map(pk => {
+            const catNames = (pk.categoryIds || []).map(id => { const c = cats.find(x => x.id === id); return c ? c.name : null; }).filter(Boolean);
+            const prodNames = (pk.productIds || []).map(id => { const p = products.find(x => x.id === id); return p ? pN(p) : null; }).filter(Boolean);
+            const measureLabel = pk.measureBy === "qty" ? fmt(pk.threshold || 0) + " ชิ้น" : "฿" + fmt(pk.threshold || 0);
+            return <div key={pk.id} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{pk.name || "(ไม่มีชื่อ)"}</div>
+                  <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "monospace" }}>{pk.packCode}</div>
+                </div>
+                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: "rgba(175,82,222,0.14)", color: "var(--purple)", fontWeight: 600, whiteSpace: "nowrap" }}>{(pk.couponsPerPack || 0) + " คูปอง"}</span>
               </div>
-              <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: "rgba(175,82,222,0.14)", color: "var(--purple)", fontWeight: 600, whiteSpace: "nowrap" }}>{(pk.couponsPerPack || 0) + " คูปอง"}</span>
-            </div>
-            <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 6 }}>{"ราคา ฿" + fmt(pk.price || 0)}</div>
-            <div style={{ marginBottom: 8, paddingTop: 6, borderTop: "1px dashed var(--line)" }}>
-              <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 4 }}>สินค้าใน pack</div>
-              {(pk.items || []).map((it, i) => { const p = products.find(x => x.id === +it.productId); return <div key={i} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", marginBottom: 2 }}><span style={{ color: "var(--text)" }}>{p ? pN(p) : "(ไม่พบ)"}</span><span style={{ color: "var(--dim)", fontWeight: 500 }}>× {it.qty}</span></div>; })}
-            </div>
-            {ed && <div style={{ display: "flex", gap: 8, paddingTop: 8, borderTop: "1px solid var(--line)" }}>
-              <button onClick={() => setSubModal({ type: "pack", data: { ...pk, items: pk.items.map(x => ({ ...x })) } })} style={{ fontSize: 11, color: "var(--blue)", background: "transparent", border: "none", cursor: "pointer" }}>แก้ไข</button>
-              <button onClick={() => setConfirmAct({ title: "ลบ Pack", msg: "ลบ " + (pk.name || pk.packCode) + " ?", onOk: () => updateEvent({ packs: (event.packs || []).filter(x => x.id !== pk.id) }) })} style={{ fontSize: 11, color: "var(--red)", background: "transparent", border: "none", cursor: "pointer" }}>ลบ</button>
-            </div>}
-          </div>)}
+              <div style={{ background: "var(--bg)", borderRadius: 6, padding: "8px 10px", marginBottom: 8, fontSize: 12 }}>
+                <div style={{ color: "var(--dim)", fontSize: 10, marginBottom: 2, fontWeight: 600 }}>ครบเงื่อนไข</div>
+                <div style={{ fontWeight: 600, color: "var(--text)" }}>{measureLabel}</div>
+              </div>
+              <div style={{ paddingTop: 6, borderTop: "1px dashed var(--line)", display: "flex", flexDirection: "column", gap: 5 }}>
+                {(pk.brands || []).length > 0 && <div style={{ fontSize: 11 }}><span style={{ color: "var(--faint)" }}>ยี่ห้อ: </span>{pk.brands.map(b => <span key={b} style={{ display: "inline-block", fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--blue-bg)", color: "var(--blue)", marginRight: 4, fontWeight: 500 }}>{b}</span>)}</div>}
+                {catNames.length > 0 && <div style={{ fontSize: 11 }}><span style={{ color: "var(--faint)" }}>หมวด: </span>{catNames.map(n => <span key={n} style={{ display: "inline-block", fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "rgba(255,149,0,0.14)", color: "var(--orange)", marginRight: 4, fontWeight: 500 }}>{n}</span>)}</div>}
+                {prodNames.length > 0 && <div style={{ fontSize: 11 }}><span style={{ color: "var(--faint)" }}>{"เจาะจง " + prodNames.length + " รุ่น: "}</span><span style={{ fontSize: 10, color: "var(--purple)" }}>{prodNames.slice(0, 2).join(", ") + (prodNames.length > 2 ? " +" + (prodNames.length - 2) + " รุ่น" : "")}</span></div>}
+                {(pk.brands || []).length === 0 && catNames.length === 0 && prodNames.length === 0 && <div style={{ fontSize: 11, color: "var(--faint)", fontStyle: "italic" }}>ทุกสินค้า (ไม่กรอง)</div>}
+              </div>
+              {ed && <div style={{ display: "flex", gap: 8, paddingTop: 8, marginTop: 8, borderTop: "1px solid var(--line)" }}>
+                <button onClick={() => setSubModal({ type: "pack", data: { ...pk } })} style={{ fontSize: 11, color: "var(--blue)", background: "transparent", border: "none", cursor: "pointer" }}>แก้ไข</button>
+                <button onClick={() => setConfirmAct({ title: "ลบ Pack", msg: "ลบ " + (pk.name || pk.packCode) + " ?", onOk: () => updateEvent({ packs: (event.packs || []).filter(x => x.id !== pk.id) }) })} style={{ fontSize: 11, color: "var(--red)", background: "transparent", border: "none", cursor: "pointer" }}>ลบ</button>
+              </div>}
+            </div>;
+          })}
         </div>
       }
     </div>}
@@ -167,49 +203,59 @@ export default function EventDetail({ event, sh, onClose }) {
 
 function PackForm({ sh, data, onClose, onSave }) {
   const { products, pN, brands = [], cats = [] } = sh;
-  const [form, setForm] = useState({ ...data, brands: data.brands || [], categoryIds: data.categoryIds || [] });
-  const addItem = () => setForm(f => ({ ...f, items: [...(f.items || []), { productId: "", qty: 1 }] }));
-  const setItem = (idx, k, v) => setForm(f => ({ ...f, items: f.items.map((x, i) => i === idx ? { ...x, [k]: v } : x) }));
-  const delItem = (idx) => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
+  const [form, setForm] = useState({
+    measureBy: "amount", threshold: 0, productIds: [],
+    ...data,
+    brands: data.brands || [], categoryIds: data.categoryIds || [],
+    productIds: data.productIds || [],
+  });
   const toggleBrand = (b) => setForm(f => ({ ...f, brands: f.brands.includes(b) ? f.brands.filter(x => x !== b) : [...f.brands, b] }));
   const toggleCat = (id) => setForm(f => ({ ...f, categoryIds: f.categoryIds.includes(id) ? f.categoryIds.filter(x => x !== id) : [...f.categoryIds, id] }));
-  const valid = form.name && form.packCode && (form.items || []).every(it => it.productId && +it.qty > 0);
+  const toggleProd = (id) => setForm(f => ({ ...f, productIds: f.productIds.includes(id) ? f.productIds.filter(x => x !== id) : [...f.productIds, id] }));
+  const valid = form.name && form.packCode && +form.threshold > 0 && +form.couponsPerPack >= 0;
 
-  // Filter products by selected brands/categories
+  // Filter products by selected brands/categories (for the multi-pick picker)
   const filteredProducts = useMemo(() => products.filter(p => {
     if ((form.brands || []).length && !form.brands.includes(p.brand)) return false;
     if ((form.categoryIds || []).length && !form.categoryIds.includes(p.categoryId)) return false;
     return true;
   }), [products, form.brands, form.categoryIds]);
 
-  // Always include already-selected products (even if filtered out)
-  const productOpts = useMemo(() => {
-    const opts = filteredProducts.map(p => ({ value: String(p.id), label: pN(p) + " (" + p.brand + ")", searchText: p.code || "" }));
-    (form.items || []).forEach(it => {
-      if (it.productId && !opts.some(o => o.value === String(it.productId))) {
-        const p = products.find(x => x.id === +it.productId);
-        if (p) opts.push({ value: String(p.id), label: pN(p) + " (" + p.brand + ") • นอกตัวกรอง", searchText: p.code || "" });
-      }
-    });
-    return [{ value: "", label: "เลือกสินค้า..." }, ...opts];
-  }, [filteredProducts, form.items, products, pN]);
-
   const chip = { display: "inline-block", fontSize: 11, fontWeight: 500, borderRadius: 5, padding: "4px 10px", marginRight: 4, marginBottom: 3, cursor: "pointer", border: "1px solid transparent" };
 
-  return <Modal title="Pack" onClose={onClose}>
+  return <Modal title="Pack (เงื่อนไขซื้อ)" onClose={onClose}>
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
         <Field label="รหัส" req><input value={form.packCode} onChange={e => setForm(f => ({ ...f, packCode: e.target.value }))} style={IB} placeholder="PK01" /></Field>
-        <Field label="ชื่อ" req><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={IB} placeholder="Pack A" /></Field>
+        <Field label="ชื่อเงื่อนไข" req><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={IB} placeholder="เช่น LG ครบ 500K" /></Field>
       </div>
+
+      {/* Measure + threshold */}
+      <div>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>วัดผลด้วย</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+          {[{ k: "amount", lbl: "ยอดเงิน (บาท)" }, { k: "qty", lbl: "จำนวนสินค้า (ชิ้น)" }].map(opt => {
+            const sel = form.measureBy === opt.k;
+            return <label key={opt.k} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", borderRadius: 8, border: "1.5px solid " + (sel ? "var(--blue)" : "var(--line)"), background: sel ? "var(--blue-bg)" : "var(--panel)", cursor: "pointer" }}>
+              <input type="radio" name="meas" checked={sel} onChange={() => setForm(f => ({ ...f, measureBy: opt.k }))} />
+              <span style={{ fontSize: 13, color: sel ? "var(--blue)" : "var(--text)", fontWeight: sel ? 600 : 400 }}>{opt.lbl}</span>
+            </label>;
+          })}
+        </div>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Field label="ราคาขาย (฿)"><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: +e.target.value || 0 }))} style={IB} /></Field>
-        <Field label="คูปองต่อ pack"><input type="number" value={form.couponsPerPack} onChange={e => setForm(f => ({ ...f, couponsPerPack: +e.target.value || 0 }))} style={IB} /></Field>
+        <Field label={form.measureBy === "qty" ? "ครบ (ชิ้น)" : "ครบ (฿)"} req><input type="number" value={form.threshold} onChange={e => setForm(f => ({ ...f, threshold: +e.target.value || 0 }))} style={IB} placeholder={form.measureBy === "qty" ? "10" : "500000"} /></Field>
+        <Field label="คูปองต่อ pack ที่ครบ"><input type="number" value={form.couponsPerPack} onChange={e => setForm(f => ({ ...f, couponsPerPack: +e.target.value || 0 }))} style={IB} placeholder="5" /></Field>
+      </div>
+
+      <div style={{ background: "var(--blue-bg)", border: "1px solid var(--blue)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "var(--blue)" }}>
+        ตัวอย่าง: ซื้อสินค้าที่กรองครบ <strong>{(form.measureBy === "qty" ? fmt(form.threshold) + " ชิ้น" : "฿" + fmt(form.threshold))}</strong> → ได้ <strong>{form.couponsPerPack || 0} คูปอง</strong> (นับซ้ำได้ — ซื้อ 2 เท่า ได้คูปอง 2 เท่า)
       </div>
 
       {/* Brand chips */}
       <div>
-        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>ยี่ห้อที่อยู่ใน Pack <span style={{ fontWeight: 400, color: "var(--faint)" }}>(ว่าง = ทุกยี่ห้อ)</span></div>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>ยี่ห้อที่นับ <span style={{ fontWeight: 400, color: "var(--faint)" }}>(ว่าง = ทุกยี่ห้อ)</span></div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 100, overflowY: "auto", padding: 4 }}>
           {brands.map(b => {
             const sel = (form.brands || []).includes(b);
@@ -220,7 +266,7 @@ function PackForm({ sh, data, onClose, onSave }) {
 
       {/* Category chips */}
       <div>
-        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>หมวดสินค้าที่อยู่ใน Pack <span style={{ fontWeight: 400, color: "var(--faint)" }}>(ว่าง = ทุกหมวด)</span></div>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>หมวดสินค้าที่นับ <span style={{ fontWeight: 400, color: "var(--faint)" }}>(ว่าง = ทุกหมวด)</span></div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 100, overflowY: "auto", padding: 4 }}>
           {cats.map(c => {
             const sel = (form.categoryIds || []).includes(c.id);
@@ -229,19 +275,19 @@ function PackForm({ sh, data, onClose, onSave }) {
         </div>
       </div>
 
+      {/* Specific products picker (optional) */}
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)" }}>สินค้าใน Pack <span style={{ fontWeight: 400, color: "var(--faint)" }}>{"(" + filteredProducts.length + " ตัวเลือก)"}</span></div>
-          <button onClick={addItem} style={{ fontSize: 12, color: "var(--blue)", background: "transparent", border: "none", cursor: "pointer" }}>+ เพิ่มสินค้า</button>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--dim)", marginBottom: 6 }}>เจาะจงรุ่นสินค้า <span style={{ fontWeight: 400, color: "var(--faint)" }}>(ว่าง = ตามยี่ห้อ/หมวด • เลือกถ้าต้องการกำหนดเฉพาะรุ่น)</span></div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 150, overflowY: "auto", padding: 4, background: "var(--bg)", borderRadius: 6 }}>
+          {filteredProducts.length === 0 ? <div style={{ fontSize: 11, color: "var(--faint)", padding: 8 }}>ไม่มีสินค้าตามตัวกรอง</div> : filteredProducts.map(p => {
+            const sel = (form.productIds || []).includes(p.id);
+            return <span key={p.id} onClick={() => toggleProd(p.id)} style={{ ...chip, color: sel ? "var(--purple)" : "var(--dim)", background: sel ? "rgba(175,82,222,0.14)" : "var(--hover)", border: sel ? "1px solid var(--purple)" : "1px solid transparent" }}>{pN(p)}<span style={{ marginLeft: 4, fontSize: 10, color: "var(--faint)" }}>{p.brand}</span></span>;
+          })}
         </div>
-        {(form.items || []).map((it, i) => <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px auto", gap: 8, marginBottom: 6, alignItems: "end" }}>
-          <CustomSelect searchable value={String(it.productId)} onChange={v => setItem(i, "productId", v)} options={productOpts} />
-          <input type="number" min="1" value={it.qty} onChange={e => setItem(i, "qty", +e.target.value || 1)} style={IB} />
-          {form.items.length > 1 && <button onClick={() => delItem(i)} style={{ fontSize: 11, color: "var(--red)", background: "transparent", border: "none", cursor: "pointer", padding: "0 6px" }}>×</button>}
-        </div>)}
+        {(form.productIds || []).length > 0 && <div style={{ fontSize: 11, color: "var(--purple)", marginTop: 4 }}>{"เลือก " + form.productIds.length + " รุ่น"}</div>}
       </div>
     </div>
-    <MBtns onCancel={onClose} onSave={() => onSave({ ...form, brands: form.brands || [], categoryIds: form.categoryIds || [], items: form.items.map(it => ({ productId: +it.productId, qty: +it.qty })) })} saveLabel="บันทึก" disabled={!valid} />
+    <MBtns onCancel={onClose} onSave={() => onSave({ ...form, brands: form.brands || [], categoryIds: form.categoryIds || [], productIds: form.productIds || [], threshold: +form.threshold || 0, couponsPerPack: +form.couponsPerPack || 0 })} saveLabel="บันทึก" disabled={!valid} />
   </Modal>;
 }
 
@@ -303,6 +349,7 @@ function AwardForm({ sh, event, customerId, rewardRemaining, onClose, onSave }) 
 
 function CustomerTab({ event, updateEvent, sh, computeProgress, rewardRemaining, setSubModal, setConfirmAct, ed }) {
   const { contacts, products, sales, cN, pN } = sh;
+  const [expanded, setExpanded] = useState({});
   const targets = event.customerTargets || [];
   const rows = useMemo(() => targets.map(t => {
     const cust = contacts.find(c => c.id === t.customerId);
@@ -310,7 +357,8 @@ function CustomerTab({ event, updateEvent, sh, computeProgress, rewardRemaining,
     const qualified = prog.bought >= t.targetPacks;
     const custAwards = (event.awards || []).filter(a => a.customerId === t.customerId);
     return { ...t, cust, ...prog, qualified, awards: custAwards };
-  }), [targets, contacts, event, sales]);
+  }), [targets, contacts, event, sales, products]);
+  const toggleExpand = (id) => setExpanded(p => ({ ...p, [id]: !p[id] }));
 
   return <div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -325,29 +373,61 @@ function CustomerTab({ event, updateEvent, sh, computeProgress, rewardRemaining,
           </tr></thead>
           <tbody>{rows.map(r => {
             const pct = r.targetPacks > 0 ? Math.min(100, Math.round(r.bought / r.targetPacks * 100)) : 0;
-            return <tr key={r.customerId} style={{ borderBottom: "0.5px solid var(--line)" }}>
-              <td style={{ padding: "8px 10px", fontWeight: 500 }}>{r.cust ? cN(r.cust) : "(ไม่พบ)"}{r.note && <div style={{ fontSize: 10, color: "var(--faint)", marginTop: 2 }}>{r.note}</div>}</td>
-              <td style={{ padding: "8px 10px", minWidth: 130 }}>
-                <div style={{ fontSize: 13 }}>{r.bought + " / " + r.targetPacks + " pack"}</div>
-                <div style={{ height: 4, background: "var(--hover)", borderRadius: 99, overflow: "hidden", marginTop: 4 }}><div style={{ height: "100%", width: pct + "%", background: r.qualified ? "var(--green)" : "var(--orange)", transition: "width 0.3s" }} /></div>
-                <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>{r.soCount + " ใบ SO"}</div>
-              </td>
-              <td style={{ padding: "8px 10px", fontWeight: 600, color: "var(--purple)" }}>{r.coupons}</td>
-              <td style={{ padding: "8px 10px" }}>{r.qualified ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, background: "rgba(52,199,89,0.14)", color: "var(--green)", fontWeight: 600 }}>✓ Qualified</span> : <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, background: "rgba(255,149,0,0.14)", color: "var(--orange)" }}>ยังไม่ถึง</span>}</td>
-              <td style={{ padding: "8px 10px" }}>
-                {r.awards.length === 0 ? <span style={{ color: "var(--faint)", fontSize: 11 }}>—</span> :
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                    {r.awards.map(a => { const rw = (event.rewards || []).find(x => x.id === a.rewardId); const p = rw ? products.find(x => x.id === +rw.productId) : null; return <div key={a.id} style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ padding: "1px 6px", borderRadius: 99, background: "rgba(52,199,89,0.14)", color: "var(--green)", fontWeight: 500 }}>{(p ? pN(p) : "?") + " × " + a.qty}</span>
-                      {ed && <button onClick={() => setConfirmAct({ title: "ลบรางวัล", msg: "ลบรางวัลนี้ออกจาก event? (ไม่ลบจาก wallet ลูกค้า)", onOk: () => updateEvent({ awards: (event.awards || []).filter(x => x.id !== a.id) }) })} style={{ background: "transparent", border: "none", color: "var(--red)", cursor: "pointer", fontSize: 11, padding: 0, lineHeight: 1, fontWeight: 700 }}>×</button>}
-                    </div>; })}
-                  </div>}
-              </td>
-              {ed && <td style={{ padding: "8px 10px" }}>
-                {r.qualified && <button onClick={() => setSubModal({ type: "award", data: { customerId: r.customerId } })} style={{ padding: "3px 10px", fontSize: 11, borderRadius: 5, border: "1px solid var(--green)", background: "rgba(52,199,89,0.12)", color: "var(--green)", cursor: "pointer", marginRight: 4 }}>+ ออกรางวัล</button>}
-                <button onClick={() => setConfirmAct({ title: "ลบ target", msg: "ลบลูกค้า " + (r.cust ? cN(r.cust) : "?") + " ออกจาก event?", onOk: () => updateEvent({ customerTargets: targets.filter(x => x.customerId !== r.customerId) }) })} style={{ padding: "3px 8px", fontSize: 11, borderRadius: 5, border: "1px solid var(--red)", background: "rgba(255,59,48,0.12)", color: "var(--red)", cursor: "pointer" }}>ลบ</button>
-              </td>}
-            </tr>;
+            const isOpen = !!expanded[r.customerId];
+            const colCount = 5 + (ed ? 1 : 0);
+            return <Fragment key={r.customerId}>
+              <tr style={{ borderBottom: isOpen ? "none" : "0.5px solid var(--line)" }}>
+                <td style={{ padding: "8px 10px", fontWeight: 500 }}>
+                  <div onClick={() => toggleExpand(r.customerId)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 10, color: "var(--dim)", transition: "transform .2s", transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", display: "inline-block" }}>▶</span>
+                    <span>{r.cust ? cN(r.cust) : "(ไม่พบ)"}</span>
+                  </div>
+                  {r.note && <div style={{ fontSize: 10, color: "var(--faint)", marginTop: 2, paddingLeft: 18 }}>{r.note}</div>}
+                </td>
+                <td style={{ padding: "8px 10px", minWidth: 130 }}>
+                  <div style={{ fontSize: 13 }}>{r.bought + " / " + r.targetPacks + " pack"}</div>
+                  <div style={{ height: 4, background: "var(--hover)", borderRadius: 99, overflow: "hidden", marginTop: 4 }}><div style={{ height: "100%", width: pct + "%", background: r.qualified ? "var(--green)" : "var(--orange)", transition: "width 0.3s" }} /></div>
+                  <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>{r.soCount + " ใบ SO"}</div>
+                </td>
+                <td style={{ padding: "8px 10px", fontWeight: 600, color: "var(--purple)" }}>{r.coupons}</td>
+                <td style={{ padding: "8px 10px" }}>{r.qualified ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, background: "rgba(52,199,89,0.14)", color: "var(--green)", fontWeight: 600 }}>✓ Qualified</span> : <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, background: "rgba(255,149,0,0.14)", color: "var(--orange)" }}>ยังไม่ถึง</span>}</td>
+                <td style={{ padding: "8px 10px" }}>
+                  {r.awards.length === 0 ? <span style={{ color: "var(--faint)", fontSize: 11 }}>—</span> :
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {r.awards.map(a => { const rw = (event.rewards || []).find(x => x.id === a.rewardId); const p = rw ? products.find(x => x.id === +rw.productId) : null; return <div key={a.id} style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ padding: "1px 6px", borderRadius: 99, background: "rgba(52,199,89,0.14)", color: "var(--green)", fontWeight: 500 }}>{(p ? pN(p) : "?") + " × " + a.qty}</span>
+                        {ed && <button onClick={() => setConfirmAct({ title: "ลบรางวัล", msg: "ลบรางวัลนี้ออกจาก event? (ไม่ลบจาก wallet ลูกค้า)", onOk: () => updateEvent({ awards: (event.awards || []).filter(x => x.id !== a.id) }) })} style={{ background: "transparent", border: "none", color: "var(--red)", cursor: "pointer", fontSize: 11, padding: 0, lineHeight: 1, fontWeight: 700 }}>×</button>}
+                      </div>; })}
+                    </div>}
+                </td>
+                {ed && <td style={{ padding: "8px 10px" }}>
+                  {r.qualified && <button onClick={() => setSubModal({ type: "award", data: { customerId: r.customerId } })} style={{ padding: "3px 10px", fontSize: 11, borderRadius: 5, border: "1px solid var(--green)", background: "rgba(52,199,89,0.12)", color: "var(--green)", cursor: "pointer", marginRight: 4 }}>+ ออกรางวัล</button>}
+                  <button onClick={() => setConfirmAct({ title: "ลบ target", msg: "ลบลูกค้า " + (r.cust ? cN(r.cust) : "?") + " ออกจาก event?", onOk: () => updateEvent({ customerTargets: targets.filter(x => x.customerId !== r.customerId) }) })} style={{ padding: "3px 8px", fontSize: 11, borderRadius: 5, border: "1px solid var(--red)", background: "rgba(255,59,48,0.12)", color: "var(--red)", cursor: "pointer" }}>ลบ</button>
+                </td>}
+              </tr>
+              {isOpen && <tr style={{ borderBottom: "0.5px solid var(--line)" }}>
+                <td colSpan={colCount} style={{ padding: "8px 14px 10px 30px", background: "var(--bg)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dim)", marginBottom: 6 }}>รายละเอียดต่อ Pack</div>
+                  {(r.perPack || []).length === 0 ? <div style={{ fontSize: 11, color: "var(--faint)" }}>ยังไม่มี pack ใน event</div> :
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 8 }}>
+                      {r.perPack.map(pp => {
+                        const pkPct = pp.threshold > 0 ? Math.min(100, Math.round(pp.total / pp.threshold * 100)) : 0;
+                        const measureStr = pp.pack.measureBy === "qty" ? fmt(pp.total) + " ชิ้น" : "฿" + fmt(pp.total);
+                        const thresholdStr = pp.pack.measureBy === "qty" ? fmt(pp.threshold) + " ชิ้น" : "฿" + fmt(pp.threshold);
+                        return <div key={pp.pack.id} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 6, padding: "8px 10px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>{pp.pack.name}</span>
+                            <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 99, background: pp.earned > 0 ? "rgba(175,82,222,0.14)" : "var(--hover)", color: pp.earned > 0 ? "var(--purple)" : "var(--dim)", fontWeight: 600 }}>{pp.earned + " pack × " + pp.pack.couponsPerPack + " = " + pp.coupons + " คูปอง"}</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "var(--dim)", marginBottom: 4 }}>{measureStr + " / " + thresholdStr}</div>
+                          <div style={{ height: 3, background: "var(--hover)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: pkPct + "%", background: pp.earned > 0 ? "var(--green)" : "var(--orange)", transition: "width 0.3s" }} /></div>
+                        </div>;
+                      })}
+                    </div>
+                  }
+                </td>
+              </tr>}
+            </Fragment>;
           })}</tbody>
         </table>
       </div>
