@@ -25,8 +25,10 @@ export default function ThaiDateInput({ value, onChange, style }) {
         type="date"
         value={value || ""}
         onChange={onChange}
+        tabIndex={-1}
+        aria-hidden="true"
         style={{
-          position: "absolute", inset: 0, opacity: 0, cursor: "pointer",
+          position: "absolute", inset: 0, opacity: 0, pointerEvents: "none",
           width: "100%", height: "100%",
         }}
       />
