@@ -102,37 +102,8 @@ export default function EventDetail({ event, sh, onClose }) {
       }
     </div>}
 
-    {/* TAB 3: Rewards */}
-    {tab === "rewards" && <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, color: "var(--dim)" }}>Pool รางวัลที่จับสลาก — จำกัดตามจำนวน</div>
-        {ed && <button onClick={() => setSubModal({ type: "reward", data: { id: Date.now(), productId: "", totalQty: 1 } })} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--purple)", background: "rgba(175,82,222,0.14)", color: "var(--purple)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>+ เพิ่มรางวัล</button>}
-      </div>
-      {(event.rewards || []).length === 0 ? <div style={{ textAlign: "center", color: "var(--faint)", padding: "2rem", background: "var(--bg)", borderRadius: 8 }}>ยังไม่มีรางวัล</div> :
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-            <thead><tr style={{ borderBottom: "1px solid var(--line)", background: "var(--bg)" }}>
-              {["สินค้า", "ทั้งหมด", "มอบไปแล้ว", "คงเหลือ", ed && ""].filter(x => x !== false).map((h, i) => <th key={i} style={{ padding: "8px 10px", textAlign: "left", fontSize: 12, fontWeight: 500, color: "var(--dim)" }}>{h}</th>)}
-            </tr></thead>
-            <tbody>{(event.rewards || []).map(rw => {
-              const p = products.find(x => x.id === +rw.productId);
-              const awarded = (rw.totalQty || 0) - rewardRemaining(rw);
-              const rem = rewardRemaining(rw);
-              return <tr key={rw.id} style={{ borderBottom: "0.5px solid var(--line)" }}>
-                <td style={{ padding: "8px 10px", fontWeight: 500 }}>{p ? pN(p) : "(ไม่พบ)"}{p?.brand && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--dim)" }}>{p.brand}</span>}</td>
-                <td style={{ padding: "8px 10px" }}>{rw.totalQty}</td>
-                <td style={{ padding: "8px 10px", color: "var(--orange)" }}>{awarded}</td>
-                <td style={{ padding: "8px 10px", fontWeight: 600, color: rem > 0 ? "var(--green)" : "var(--red)" }}>{rem}</td>
-                {ed && <td style={{ padding: "8px 10px" }}>
-                  <button onClick={() => setSubModal({ type: "reward", data: { ...rw } })} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "1px solid var(--line)", background: "var(--hover)", color: "var(--dim)", cursor: "pointer", marginRight: 4 }}>แก้</button>
-                  <button onClick={() => setConfirmAct({ title: "ลบรางวัล", msg: "ลบรางวัล " + (p ? pN(p) : "?") + " ออกจาก pool?", onOk: () => updateEvent({ rewards: (event.rewards || []).filter(x => x.id !== rw.id) }) })} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "1px solid var(--red)", background: "rgba(255,59,48,0.12)", color: "var(--red)", cursor: "pointer" }}>ลบ</button>
-                </td>}
-              </tr>;
-            })}</tbody>
-          </table>
-        </div>
-      }
-    </div>}
+    {/* TAB 3: Rewards (slot-based) */}
+    {tab === "rewards" && <RewardsTab event={event} updateEvent={updateEvent} sh={sh} setSubModal={setSubModal} setConfirmAct={setConfirmAct} ed={ed} computeProgress={computeProgress} />}
 
     {/* TAB 4: Customers + Awards */}
     {tab === "customers" && <CustomerTab event={event} updateEvent={updateEvent} sh={sh} computeProgress={computeProgress} rewardRemaining={rewardRemaining} setSubModal={setSubModal} setConfirmAct={setConfirmAct} ed={ed} />}
@@ -335,5 +306,160 @@ function CustomerTab({ event, updateEvent, sh, computeProgress, rewardRemaining,
         </table>
       </div>
     }
+  </div>;
+}
+
+function RewardsTab({ event, updateEvent, sh, setSubModal, setConfirmAct, ed, computeProgress }) {
+  const { products, contacts, setContacts, pN, cN } = sh;
+  const customers = contacts.filter(c => c.type === "customer");
+  // Build map of customer in targets
+  const targetMap = useMemo(() => {
+    const m = {};
+    (event.customerTargets || []).forEach(t => { m[t.customerId] = t; });
+    return m;
+  }, [event.customerTargets]);
+
+  const isQualified = (custId) => {
+    const t = targetMap[custId];
+    if (!t) return false;
+    return computeProgress(custId).bought >= t.targetPacks;
+  };
+
+  // Customer options sorted: in targets (qualified first) → others
+  const custOpts = useMemo(() => {
+    const opts = [];
+    const inTarget = customers.filter(c => targetMap[c.id]);
+    const notInTarget = customers.filter(c => !targetMap[c.id]);
+    inTarget.sort((a, b) => {
+      const qa = isQualified(a.id) ? 0 : 1;
+      const qb = isQualified(b.id) ? 0 : 1;
+      return qa - qb;
+    });
+    inTarget.forEach(c => {
+      const q = isQualified(c.id);
+      opts.push({ value: String(c.id), label: cN(c) + (q ? " ✓" : " (ยังไม่ qualify)"), searchText: cN(c) });
+    });
+    if (notInTarget.length) {
+      notInTarget.forEach(c => opts.push({ value: String(c.id), label: cN(c) + " (นอก event)", searchText: cN(c) }));
+    }
+    return opts;
+  }, [customers, targetMap, event]);
+
+  // Expand awards into slot entries (each qty=1 = 1 slot)
+  const slotEntriesFor = (rw) => {
+    const awards = (event.awards || []).filter(a => a.rewardId === rw.id);
+    const out = [];
+    awards.forEach(a => {
+      for (let i = 0; i < (a.qty || 1); i++) {
+        out.push({ awardId: a.id, slotIdx: i, customerId: a.customerId, awardedAt: a.awardedAt, note: a.note });
+      }
+    });
+    return out;
+  };
+
+  const assignSlot = (rw, customerId) => {
+    // create new award entry qty=1
+    const newAward = { id: Date.now() + Math.random(), customerId: +customerId, rewardId: rw.id, qty: 1, awardedAt: todayStr(), note: "" };
+    updateEvent({ awards: [...(event.awards || []), newAward] });
+    // push reward into customer.savedRewards
+    const prod = products.find(p => p.id === +rw.productId);
+    const cust = contacts.find(c => c.id === +customerId);
+    if (prod && cust) {
+      const newReward = {
+        id: Date.now() + Math.random(),
+        promoId: event.id,
+        promoName: event.name + " (Event)",
+        tier: { id: rw.id, threshold: 0, rewardType: "product", rewardValue: 0, rewardProductId: +rw.productId },
+        savedAt: todayStr(),
+        savedFromSO: "(จาก event)",
+      };
+      setContacts(prev => prev.map(c => c.id === cust.id ? { ...c, savedRewards: [...(c.savedRewards || []), newReward] } : c));
+    }
+  };
+
+  const removeSlot = (rw, slot) => {
+    setConfirmAct({
+      title: "ลบรางวัลของช่องนี้",
+      msg: "ลบรางวัลของช่องนี้? รางวัลใน wallet ลูกค้าจะถูกลบด้วย (ถ้ายังไม่ถูกใช้)",
+      onOk: () => {
+        const ev = event;
+        const award = (ev.awards || []).find(a => a.id === slot.awardId);
+        if (!award) return;
+        let newAwards;
+        if ((award.qty || 1) <= 1) newAwards = (ev.awards || []).filter(a => a.id !== award.id);
+        else newAwards = (ev.awards || []).map(a => a.id === award.id ? { ...a, qty: a.qty - 1 } : a);
+        updateEvent({ awards: newAwards });
+        // remove 1 entry from customer.savedRewards matching event + reward productId
+        setContacts(prev => prev.map(c => {
+          if (c.id !== award.customerId) return c;
+          const wallet = c.savedRewards || [];
+          const idx = wallet.findIndex(w => w.promoId === ev.id && +w.tier?.rewardProductId === +rw.productId);
+          if (idx < 0) return c;
+          const next = [...wallet];
+          next.splice(idx, 1);
+          return { ...c, savedRewards: next };
+        }));
+      },
+    });
+  };
+
+  return <div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+      <div style={{ fontSize: 12, color: "var(--dim)" }}>เลือกร้านให้แต่ละช่องรางวัล — บันทึกทันทีเข้า wallet ลูกค้า</div>
+      {ed && <button onClick={() => setSubModal({ type: "reward", data: { id: Date.now(), productId: "", totalQty: 1 } })} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--purple)", background: "rgba(175,82,222,0.14)", color: "var(--purple)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>+ เพิ่มรางวัล</button>}
+    </div>
+    {(event.rewards || []).length === 0 ? <div style={{ textAlign: "center", color: "var(--faint)", padding: "2rem", background: "var(--bg)", borderRadius: 8 }}>ยังไม่มีรางวัล</div> :
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {(event.rewards || []).map(rw => {
+          const p = products.find(x => x.id === +rw.productId);
+          const slots = slotEntriesFor(rw);
+          const total = rw.totalQty || 0;
+          const filled = slots.length;
+          const remaining = total - filled;
+          return <div key={rw.id} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{p ? pN(p) : "(ไม่พบ)"}{p?.brand && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--dim)", fontWeight: 400 }}>{p.brand}</span>}</div>
+                <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 2 }}>{"ทั้งหมด " + total + " ชิ้น • มอบไปแล้ว " + filled + " • คงเหลือ "}<span style={{ color: remaining > 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>{remaining}</span></div>
+              </div>
+              {ed && <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setSubModal({ type: "reward", data: { ...rw } })} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "1px solid var(--line)", background: "var(--hover)", color: "var(--dim)", cursor: "pointer", fontFamily: "inherit" }}>แก้</button>
+                <button onClick={() => setConfirmAct({ title: "ลบรางวัล", msg: "ลบรางวัล " + (p ? pN(p) : "?") + " ออกจาก pool?", onOk: () => updateEvent({ rewards: (event.rewards || []).filter(x => x.id !== rw.id) }) })} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "1px solid var(--red)", background: "rgba(255,59,48,0.12)", color: "var(--red)", cursor: "pointer", fontFamily: "inherit" }}>ลบ</button>
+              </div>}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 8 }}>
+              {/* Filled slots */}
+              {slots.map((slot, i) => {
+                const cust = contacts.find(c => c.id === slot.customerId);
+                return <div key={"f" + i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "rgba(52,199,89,0.08)", border: "1px solid var(--green)", borderRadius: 8 }}>
+                  <span style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--green)", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cust ? cN(cust) : "(ลูกค้าถูกลบ)"}</div>
+                    <div style={{ fontSize: 10, color: "var(--dim)" }}>{toBE(slot.awardedAt)}</div>
+                  </div>
+                  {ed && <button onClick={() => removeSlot(rw, slot)} title="ลบช่องนี้" style={{ background: "transparent", border: "none", color: "var(--red)", cursor: "pointer", fontSize: 14, padding: "2px 6px", fontFamily: "inherit", fontWeight: 700 }}>×</button>}
+                </div>;
+              })}
+              {/* Empty slots */}
+              {ed && Array.from({ length: remaining }).map((_, i) => {
+                const slotNum = filled + i + 1;
+                return <EmptySlot key={"e" + i} slotNum={slotNum} custOpts={custOpts} onAssign={(custId) => assignSlot(rw, custId)} />;
+              })}
+            </div>
+          </div>;
+        })}
+      </div>
+    }
+  </div>;
+}
+
+function EmptySlot({ slotNum, custOpts, onAssign }) {
+  const [val, setVal] = useState("");
+  return <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", background: "var(--bg)", border: "1px dashed var(--line2)", borderRadius: 8 }}>
+    <span style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--hover)", color: "var(--dim)", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{slotNum}</span>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <CustomSelect searchable value={val} onChange={v => setVal(v)} options={[{ value: "", label: "เลือกร้าน..." }, ...custOpts]} />
+    </div>
+    <button disabled={!val} onClick={() => { if (val) { onAssign(val); setVal(""); } }} style={{ padding: "5px 10px", borderRadius: 5, border: "1px solid var(--green)", background: val ? "var(--green)" : "var(--hover)", color: val ? "#fff" : "var(--faint)", fontSize: 11, fontWeight: 600, cursor: val ? "pointer" : "not-allowed", fontFamily: "inherit", whiteSpace: "nowrap" }}>+ มอบ</button>
   </div>;
 }
