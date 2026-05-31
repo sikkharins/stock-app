@@ -158,7 +158,7 @@ export default function ContactPage({sh,ft}){
 
     {modal==="contactImport"&&<ContactExcelImport contactType={ft} onClose={cM} onImport={(items)=>{setContacts(p=>[...p,...items]);sh.addA("นำเข้า Excel",items.length+" "+title);}}/>}
 
-    {viewProfile&&isC&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={sh.promos||[]} onClose={()=>setViewProfile(null)}/>}
+    {viewProfile&&isC&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={sh.promos||[]} setContacts={setContacts} canEdit={canE("contacts")} onClose={()=>setViewProfile(null)}/>}
     {viewSupplier&&!isC&&<SupplierProfile supplier={viewSupplier} pos={pos||[]} payments={payments||[]} products={products||[]} pN={pN} cN={cN} onClose={()=>setViewSupplier(null)}/>}
 
     {modal===mk&&ed&&<Modal title={(form.id?"แก้ไข":"เพิ่ม")+title} onClose={cM} wide>

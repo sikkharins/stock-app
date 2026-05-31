@@ -29,7 +29,7 @@ const DEF_PERMS={receive:true,clearCheque:true,payEPP:true,transferOut:true};
 const hasPerm=(acc,key)=>{const p=acc.perms;if(!p)return true;if(key==="payEPP")return p.payEPP!==undefined?!!p.payEPP:p.payOnline!==undefined?!!p.payOnline:true;if(key==="transferOut")return p.transferOut!==undefined?!!p.transferOut:true;return p[key]!==undefined?!!p[key]:true;};
 
 export default function FinPage({sh}){
-  const{cN,pN,contacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes}=sh;
+  const{cN,pN,contacts,setContacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes}=sh;
   const ed=canE("finance");const cd=canD("finance");
   const[sub,setSub]=useState("ap");const[viewProfile,setViewProfile]=useState(null);
   const[payForm,setPayForm]=useState({refId:"",type:"",amount:"",method:"โอนเงิน",date:todayStr(),note:""});
@@ -622,7 +622,7 @@ export default function FinPage({sh}){
       </Modal>;
     })()}
 
-    {viewProfile&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={sh.promos||[]} onClose={()=>setViewProfile(null)}/>}
+    {viewProfile&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={sh.promos||[]} setContacts={setContacts} canEdit={canE("contacts")||canE("finance")} onClose={()=>setViewProfile(null)}/>}
     {viewSupplier&&<SupplierProfile supplier={viewSupplier} pos={pos} payments={payments} products={products} pN={pN} cN={cN} onClose={()=>setViewSupplier(null)}/>}
 
     {modal==="addPay"&&ed&&<Modal title={(payForm.editId?"แก้ไขชำระ — ":sub==="ap"?"จ่าย — ":"รับ — ")+payForm.refId+" — "+(payForm.name||"")} onClose={cM}>

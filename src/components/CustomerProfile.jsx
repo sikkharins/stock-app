@@ -37,7 +37,7 @@ function getLast6Months() {
   });
 }
 
-export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], onClose }) {
+export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], setContacts, canEdit = true, onClose }) {
   const [tab, setTab] = useState("so");
 
   const custSales  = [...sales].filter(so => so.customerId === customer.id).reverse();
@@ -231,12 +231,42 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
       {tab==="wallet"&&(()=>{
         const wallet=customer.savedRewards||[];
         const claims=customer.promoClaims||{};
+        const canMutate=canEdit&&typeof setContacts==="function";
         const rewardLbl=(t)=>{
           if(!t)return"-";
           if(t.rewardType==="percent")return"ลด "+t.rewardValue+"%";
           if(t.rewardType==="fixed")return"ลด ฿"+fmt(t.rewardValue);
           if(t.rewardType==="product"){const rp=products.find(x=>x.id===+t.rewardProductId);return"แถม "+(rp?pN(rp):"สินค้า");}
           return"-";
+        };
+        const deleteWallet=(walletId)=>{
+          if(!canMutate)return;
+          if(!window.confirm("ลบรางวัลนี้ออกจาก wallet?"))return;
+          setContacts(prev=>prev.map(c=>c.id===customer.id?{...c,savedRewards:(c.savedRewards||[]).filter(r=>r.id!==walletId)}:c));
+        };
+        const deleteClaimTier=(promoId,tierId)=>{
+          if(!canMutate)return;
+          if(!window.confirm("ลบ tier นี้ออกจากประวัติการเคลม?\n(ลูกค้าจะสามารถเคลม tier นี้ใหม่ได้)"))return;
+          setContacts(prev=>prev.map(c=>{
+            if(c.id!==customer.id)return c;
+            const newClaims={...(c.promoClaims||{})};
+            const info=newClaims[promoId];
+            if(!info)return c;
+            const newIds=(info.claimedTierIds||[]).filter(id=>id!==tierId);
+            if(newIds.length===0)delete newClaims[promoId];
+            else newClaims[promoId]={...info,claimedTierIds:newIds};
+            return{...c,promoClaims:newClaims};
+          }));
+        };
+        const deleteClaimEntry=(promoId)=>{
+          if(!canMutate)return;
+          if(!window.confirm("ลบประวัติการเคลมโปรนี้ทั้งหมด?"))return;
+          setContacts(prev=>prev.map(c=>{
+            if(c.id!==customer.id)return c;
+            const newClaims={...(c.promoClaims||{})};
+            delete newClaims[promoId];
+            return{...c,promoClaims:newClaims};
+          }));
         };
         const claimEntries=Object.entries(claims).map(([promoId,info])=>{
           const promo=promos.find(p=>p.id===+promoId);
@@ -257,10 +287,13 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
             {wallet.length===0
               ?<div style={{textAlign:"center",color:"var(--faint)",padding:"1.5rem",fontSize:13,background:"var(--bg)",borderRadius:8}}>ยังไม่มีรางวัลที่เก็บไว้</div>
               :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
-                {wallet.map(w=><div key={w.id} style={{background:"var(--panel)",border:"1px solid var(--purple)",borderRadius:10,padding:"12px 14px"}}>
+                {wallet.map(w=><div key={w.id} style={{background:"var(--panel)",border:"1px solid var(--purple)",borderRadius:10,padding:"12px 14px",position:"relative"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
                     <div style={{fontSize:12,color:"var(--dim)"}}>จากโปร</div>
-                    <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"rgba(175,82,222,0.14)",color:"var(--purple)",fontWeight:600,whiteSpace:"nowrap"}}>คงเหลือ</span>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"rgba(175,82,222,0.14)",color:"var(--purple)",fontWeight:600,whiteSpace:"nowrap"}}>คงเหลือ</span>
+                      {canMutate&&<button onClick={()=>deleteWallet(w.id)} title="ลบรางวัลนี้" style={{background:"transparent",border:"1px solid var(--red)",color:"var(--red)",borderRadius:4,padding:"1px 6px",fontSize:11,cursor:"pointer",fontFamily:"inherit",lineHeight:1.2}}>ลบ</button>}
+                    </div>
                   </div>
                   <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:"var(--text)"}}>{w.promoName}</div>
                   <div style={{background:"var(--bg)",borderRadius:6,padding:"8px 10px",marginBottom:8}}>
@@ -283,19 +316,23 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
               ?<div style={{textAlign:"center",color:"var(--faint)",padding:"1.5rem",fontSize:13,background:"var(--bg)",borderRadius:8}}>ยังไม่เคยเคลมโปรโมชั่น</div>
               :<div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
-                  <thead><tr style={{borderBottom:"1px solid var(--line)",background:"var(--bg)"}}>{["โปรโมชั่น","ขั้น/รางวัลที่เคลม","SO ล่าสุด","วันที่ล่าสุด"].map(thTd)}</tr></thead>
+                  <thead><tr style={{borderBottom:"1px solid var(--line)",background:"var(--bg)"}}>{[...["โปรโมชั่น","ขั้น/รางวัลที่เคลม","SO ล่าสุด","วันที่ล่าสุด"],...(canMutate?[""]:[])].map(thTd)}</tr></thead>
                   <tbody>{claimEntries.map(e=>(
                     <tr key={e.promoId} style={{borderBottom:"0.5px solid var(--line)"}}>
                       <td style={{padding:"7px 8px",fontWeight:500}}>{e.promoName}</td>
                       <td style={{padding:"7px 8px"}}>
                         {e.tierDetails.map((td,i)=>(
-                          <span key={td.id+"-"+i} style={{display:"inline-block",fontSize:11,padding:"2px 7px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)",marginRight:4,marginBottom:3,fontWeight:500}}>
-                            {td.tier?rewardLbl(td.tier):"tier #"+td.id+" (ถูกลบ)"}
+                          <span key={td.id+"-"+i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 4px 2px 7px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)",marginRight:4,marginBottom:3,fontWeight:500}}>
+                            <span>{td.tier?rewardLbl(td.tier):"tier #"+td.id+" (ถูกลบ)"}</span>
+                            {canMutate&&<button onClick={()=>deleteClaimTier(e.promoId,td.id)} title="ลบ tier นี้" style={{background:"transparent",border:"none",color:"var(--red)",cursor:"pointer",fontSize:11,padding:"0 4px",lineHeight:1,fontFamily:"inherit",fontWeight:700}}>×</button>}
                           </span>
                         ))}
                       </td>
                       <td style={{padding:"7px 8px",color:"var(--blue)",fontSize:12}}>{e.info.lastClaimedSO||"-"}</td>
                       <td style={{padding:"7px 8px",color:"var(--dim)",fontSize:12}}>{e.info.lastClaimedAt?toBE(e.info.lastClaimedAt):"-"}</td>
+                      {canMutate&&<td style={{padding:"7px 8px"}}>
+                        <button onClick={()=>deleteClaimEntry(e.promoId)} title="ลบประวัติทั้งหมดของโปรนี้" style={{background:"transparent",border:"1px solid var(--red)",color:"var(--red)",borderRadius:4,padding:"2px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>ลบทั้งหมด</button>
+                      </td>}
                     </tr>
                   ))}</tbody>
                 </table>
