@@ -15,12 +15,12 @@ import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 import QuotesPage from "./Quotes.jsx";
 
 function SOList({sh}){
-  const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,setContacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques,promos=[]}=sh;
+  const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,setContacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques,promos=[],events=[]}=sh;
   const ed=canC("sales");const cd=canD("sales");const isSU=cu.role==="SalesManager"?"":cu.salesName||"";
   const custs=contacts.filter(c=>c.type==="customer"&&(!isSU||c.salesPerson===isSU));
   const myCI=isSU?custs.map(c=>c.id):null;
 
-  const ef={customerId:"",date:todayStr(),items:[{productId:"",qty:1,price:0}],useVatRep:false,vatRepId:"",note:"",legacyNum:""};
+  const ef={customerId:"",date:todayStr(),items:[{productId:"",qty:1,price:0}],useVatRep:false,vatRepId:"",note:"",legacyNum:"",eventId:"",eventPackPurchases:[]};
   const[form,setForm]=useState(ef);const[viewSO,setViewSO]=useState(null);const[confirmSO,setConfirmSO]=useState(null);const[delSO,setDelSO]=useState(null);const[editSO,setEditSO]=useState(null);const[viewProfile,setViewProfile]=useState(null);const[fSt,setFSt]=useState("all");const[approveSO,setApproveSO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);
 
   const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId))return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
@@ -87,7 +87,7 @@ function SOList({sh}){
     const origPrices=items.map(i=>{const p=products.find(x=>x.id===i.productId);return p?+p.price:+i.price;});
     const priceChanged=baseItems.some((i,idx)=>{const p=products.find(x=>x.id===i.productId);return p&&+i.price!==+p.price;});
     const needsApproval=!hasApv&&(priceChanged||ep>0);
-    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||"",legacyNum:form.legacyNum||""};
+    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||"",legacyNum:form.legacyNum||"",eventId:form.eventId||"",eventPackPurchases:[...(form.eventPackPurchases||[])]};
 
     // Update customer: claimedTierIds, savedRewards, savedFromSO
     let newSoNum="";
@@ -144,7 +144,7 @@ function SOList({sh}){
     const cust=contacts.find(c=>c.id===so.customerId);
     const reps=(cust&&cust.vatReps)||[];
     const matchRep=so.useVatRep&&so.vatRepName?reps.find(r=>r.name===so.vatRepName):null;
-    setForm({customerId:String(so.customerId),date:so.date,items:so.items.map(i=>({productId:String(i.productId),qty:i.qty,price:i.price})),useVatRep:!!so.useVatRep,vatRepId:matchRep?String(matchRep.id):"",note:so.note||"",legacyNum:so.legacyNum||""});
+    setForm({customerId:String(so.customerId),date:so.date,items:so.items.map(i=>({productId:String(i.productId),qty:i.qty,price:i.price})),useVatRep:!!so.useVatRep,vatRepId:matchRep?String(matchRep.id):"",note:so.note||"",legacyNum:so.legacyNum||"",eventId:so.eventId||"",eventPackPurchases:[...(so.eventPackPurchases||[])]});
     setIncVat(so.includeVat!==false);setPayType(so.payType||"cash");setDiscPct(so.discPct||1);setCreditDays(so.creditDays||45);setExtraDiscPct(so.extraDiscPct?String(so.extraDiscPct):"");resetPromoStates();setEditSO(so);oM("editSO");
   };
 
@@ -189,6 +189,61 @@ function SOList({sh}){
           <span style={{fontSize:10,color:"var(--faint)",whiteSpace:"nowrap"}}>เติมเลข 3 หลัก เช่น 001</span>
         </div></Field>
       </div>
+      {(()=>{
+        const today=todayStr();
+        const activeEvents=(events||[]).filter(e=>e.status==="active"&&e.startDate<=today&&(!e.endDate||e.endDate>=today));
+        if(activeEvents.length===0)return null;
+        const currentEvent=form.eventId?activeEvents.find(e=>e.id===+form.eventId):null;
+        const addPack=(pk)=>{
+          // add pack items to form.items
+          const newItems=(pk.items||[]).map(it=>{const p=products.find(x=>x.id===+it.productId);return{productId:String(it.productId),qty:it.qty,price:p?+p.price:0};});
+          setForm(f=>{
+            // merge with existing items (or add new)
+            const updated=[...f.items];
+            newItems.forEach(ni=>{
+              // remove empty placeholder if exists
+              const emptyIdx=updated.findIndex(x=>!x.productId);
+              if(emptyIdx>=0)updated.splice(emptyIdx,1);
+              updated.push(ni);
+            });
+            // track in eventPackPurchases (merge qty if same pack)
+            const purchases=[...(f.eventPackPurchases||[])];
+            const exIdx=purchases.findIndex(p=>p.packId===pk.id);
+            if(exIdx>=0)purchases[exIdx]={...purchases[exIdx],qty:(+purchases[exIdx].qty||0)+1};
+            else purchases.push({packId:pk.id,qty:1});
+            return{...f,items:updated,eventPackPurchases:purchases};
+          });
+        };
+        const removePack=(packId)=>{
+          setForm(f=>({...f,eventPackPurchases:(f.eventPackPurchases||[]).filter(p=>p.packId!==packId)}));
+        };
+        return <div style={{background:"rgba(0,113,227,0.05)",border:"1px solid rgba(0,113,227,0.3)",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:form.eventId?10:0,flexWrap:"wrap"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--blue)"}}>Event Promotion (Lucky Draw)</div>
+            <div style={{flex:1,minWidth:200}}>
+              <CustomSelect value={String(form.eventId||"")} onChange={v=>setForm(f=>({...f,eventId:v?+v:"",eventPackPurchases:v?(f.eventPackPurchases||[]):[]}))} options={[{value:"",label:"— ไม่ใช่ event —"},...activeEvents.map(e=>({value:String(e.id),label:e.name}))]}/>
+            </div>
+          </div>
+          {currentEvent&&<div>
+            <div style={{fontSize:11,color:"var(--dim)",marginBottom:6}}>เลือก Pack เพื่อเพิ่มสินค้าใน SO อัตโนมัติ</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {(currentEvent.packs||[]).map(pk=>{const cnt=(form.eventPackPurchases||[]).find(p=>p.packId===pk.id)?.qty||0;return <button key={pk.id} onClick={()=>addPack(pk)} style={{padding:"6px 12px",fontSize:12,borderRadius:6,border:"1px solid var(--blue)",background:cnt>0?"var(--blue-bg)":"var(--panel)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6}}>
+                <span>+ {pk.name}</span>
+                <span style={{fontSize:10,color:"var(--dim)"}}>({pk.couponsPerPack} คูปอง • ฿{fmt(pk.price)})</span>
+                {cnt>0&&<span style={{padding:"1px 7px",borderRadius:99,background:"var(--blue)",color:"#fff",fontSize:10,fontWeight:700}}>×{cnt}</span>}
+              </button>;})}
+            </div>
+            {(form.eventPackPurchases||[]).length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:6,padding:"8px 10px",fontSize:11}}>
+              <div style={{color:"var(--dim)",fontWeight:600,marginBottom:4}}>Packs ใน SO นี้:</div>
+              {(form.eventPackPurchases||[]).map(pp=>{const pk=(currentEvent.packs||[]).find(x=>x.id===pp.packId);return <div key={pp.packId} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}>
+                <span>{pk?pk.name:"Pack?"}<span style={{marginLeft:6,color:"var(--purple)",fontWeight:500}}>×{pp.qty}</span> = <span style={{color:"var(--purple)",fontWeight:500}}>{(pk?.couponsPerPack||0)*pp.qty} คูปอง</span></span>
+                <button onClick={()=>removePack(pp.packId)} style={{background:"transparent",border:"none",color:"var(--red)",cursor:"pointer",fontSize:11,padding:"0 4px"}}>ลบ</button>
+              </div>;})}
+              <div style={{borderTop:"1px solid var(--line)",marginTop:4,paddingTop:4,color:"var(--purple)",fontWeight:600}}>{"คูปองรวม: "+(form.eventPackPurchases||[]).reduce((s,pp)=>{const pk=(currentEvent.packs||[]).find(x=>x.id===pp.packId);return s+(pk?.couponsPerPack||0)*pp.qty;},0)}</div>
+            </div>}
+          </div>}
+        </div>;
+      })()}
       {renderItems(exId)}
       <button onClick={addItem} style={{fontSize:12,padding:"5px 10px",borderRadius:6,border:"0.5px solid var(--line)",cursor:"pointer",background:"transparent",marginBottom:12}}>{"+ เพิ่ม"}</button>
       {(()=>{

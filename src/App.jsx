@@ -16,6 +16,7 @@ const LogPage = lazy(() => import("./components/StockLog.jsx"));
 const POPage = lazy(() => import("./components/PurchaseOrders.jsx"));
 const SalesPage = lazy(() => import("./components/Sales.jsx"));
 const PromosPage = lazy(() => import("./components/Promotions.jsx"));
+const EventsPage = lazy(() => import("./components/Events.jsx"));
 const FinPage = lazy(() => import("./components/Finance.jsx"));
 const RepPage = lazy(() => import("./components/Reports/ReportsPage.jsx"));
 const ContactPage = lazy(() => import("./components/Contacts.jsx"));
@@ -27,9 +28,9 @@ const FabCustomizer = lazy(() => import("./components/FabCustomizer.jsx"));
 const SalesOverviewPage = lazy(() => import("./components/SalesOverview.jsx"));
 const FinancialCalendarPage = lazy(() => import("./components/FinancialCalendar.jsx"));
 
-const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙"};
+const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",events:"◈",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙"};
 const NAV_SECTIONS=[
-  {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","purchase","sales","promos"]},
+  {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","purchase","sales","promos","events"]},
   {label:{th:"การจัดการ",en:"Manage"},tabs:["finance","reports","sales_overview","defective","suppliers","customers"]},
   {label:{th:"วางแผน",en:"Planning"},tabs:["financial_calendar"]},
   {label:{th:"ระบบ",en:"System"},tabs:["users"]},
@@ -71,7 +72,7 @@ export default function App(){
   const[billings,setBillings]=useState([]);
   const[defectives,setDefectives]=useState([]);
   const[supCNotes,setSupCNotes]=useState([]);
-  const[promos,setPromos]=useState([]);
+  const[promos,setPromos]=useState([]);const[events,setEvents]=useState([]);
   const[cats,setCats]=useState(initCats);const[brands,setBrands]=useState(initBrands);
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
@@ -141,7 +142,7 @@ export default function App(){
 
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
-    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos};
+    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents};
     return RT_SETTERS.current;
   },[]);
 
@@ -192,6 +193,7 @@ export default function App(){
     setBillings(g("billings","v3_billings",[]));
     setSupCNotes(g("supcnotes","v3_supcnotes",[]));
     setPromos(g("promos","v3_promos",[]));
+    setEvents(g("events","v3_events",[]));
     setDefectives(g("defectives","v3_defectives",[]).map(d=>{
       if(d.status==="cn_created"||d.status==="cn_used")return{...d,custStatus:d.status,status:d.custStatus||"pending_inspection"};
       return d;
@@ -237,7 +239,7 @@ export default function App(){
 
   const pendingSaveRef=useRef(null);
   useEffect(()=>{if(!loaded)return;
-    const allEntries=[["v3_products",products],["v3_contacts",contacts],["v3_pos",pos],["v3_sales",sales],["v3_cats",cats],["v3_brands",brands],["v3_logs",logs],["v3_payments",payments],["v3_activity",actLogs],["v3_quotes",quotes],["v3_targets",targets],["v3_audit",audit],["v3_pricehist",priceHist],["v3_cheques",cheques],["v3_bankaccs",bankAccs],["v3_banktxns",bankTxns],["v3_cnotes",cnotes],["v3_billings",billings],["v3_defectives",defectives],["v3_supcnotes",supCNotes],["v3_promos",promos]];
+    const allEntries=[["v3_products",products],["v3_contacts",contacts],["v3_pos",pos],["v3_sales",sales],["v3_cats",cats],["v3_brands",brands],["v3_logs",logs],["v3_payments",payments],["v3_activity",actLogs],["v3_quotes",quotes],["v3_targets",targets],["v3_audit",audit],["v3_pricehist",priceHist],["v3_cheques",cheques],["v3_bankaccs",bankAccs],["v3_banktxns",bankTxns],["v3_cnotes",cnotes],["v3_billings",billings],["v3_defectives",defectives],["v3_supcnotes",supCNotes],["v3_promos",promos],["v3_events",events]];
     pendingSaveRef.current=allEntries;
     setSaving(true);const tm=setTimeout(()=>{
     const now=Date.now();const skipTs={...realtimeSkipRef.current};
@@ -246,7 +248,7 @@ export default function App(){
     if(entries.length>0)saveAllToSupabase(entries,cuRef.current?.id).catch(e=>console.warn("Supabase save error:",e.message));
     pendingSaveRef.current=null;
     setSaving(false);
-  },800);return()=>clearTimeout(tm);},[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,loaded]);
+  },800);return()=>clearTimeout(tm);},[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
 
   useEffect(()=>{
     const flush=()=>{if(pendingSaveRef.current){const pend=pendingSaveRef.current;pend.forEach(([k,v])=>saveData(k,v));saveAllToSupabase(pend,cuRef.current?.id).catch(()=>{});}};
@@ -270,7 +272,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
@@ -356,6 +358,7 @@ export default function App(){
           {tab==="purchase"&&<POPage sh={sh}/>}
           {tab==="sales"&&<SalesPage sh={sh}/>}
           {tab==="promos"&&<PromosPage sh={sh}/>}
+          {tab==="events"&&<EventsPage sh={sh}/>}
           {tab==="finance"&&<FinPage sh={sh}/>}
           {tab==="reports"&&<RepPage sh={sh}/>}
           {tab==="sales_overview"&&<SalesOverviewPage sh={sh}/>}
