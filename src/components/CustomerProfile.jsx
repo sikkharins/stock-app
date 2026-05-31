@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal } from "./ui/Modal.jsx";
+import { Modal, MBtns } from "./ui/Modal.jsx";
 import { fmt, toBE, todayStr } from "../utils/helpers.js";
 import Badge from "./ui/Badge.jsx";
 import StatCard from "./ui/StatCard.jsx";
@@ -39,6 +39,7 @@ function getLast6Months() {
 
 export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], setContacts, canEdit = true, onClose }) {
   const [tab, setTab] = useState("so");
+  const [confirmAct, setConfirmAct] = useState(null); // {title, msg, onOk}
 
   const custSales  = [...sales].filter(so => so.customerId === customer.id).reverse();
   const custQuotes = [...quotes].filter(qt => qt.customerId === customer.id).reverse();
@@ -239,14 +240,10 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
           if(t.rewardType==="product"){const rp=products.find(x=>x.id===+t.rewardProductId);return"แถม "+(rp?pN(rp):"สินค้า");}
           return"-";
         };
-        const deleteWallet=(walletId)=>{
-          if(!canMutate)return;
-          if(!window.confirm("ลบรางวัลนี้ออกจาก wallet?"))return;
+        const _doDeleteWallet=(walletId)=>{
           setContacts(prev=>prev.map(c=>c.id===customer.id?{...c,savedRewards:(c.savedRewards||[]).filter(r=>r.id!==walletId)}:c));
         };
-        const deleteClaimTier=(promoId,tierId)=>{
-          if(!canMutate)return;
-          if(!window.confirm("ลบ tier นี้ออกจากประวัติการเคลม?\n(ลูกค้าจะสามารถเคลม tier นี้ใหม่ได้)"))return;
+        const _doDeleteClaimTier=(promoId,tierId)=>{
           setContacts(prev=>prev.map(c=>{
             if(c.id!==customer.id)return c;
             const newClaims={...(c.promoClaims||{})};
@@ -258,15 +255,25 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
             return{...c,promoClaims:newClaims};
           }));
         };
-        const deleteClaimEntry=(promoId)=>{
-          if(!canMutate)return;
-          if(!window.confirm("ลบประวัติการเคลมโปรนี้ทั้งหมด?"))return;
+        const _doDeleteClaimEntry=(promoId)=>{
           setContacts(prev=>prev.map(c=>{
             if(c.id!==customer.id)return c;
             const newClaims={...(c.promoClaims||{})};
             delete newClaims[promoId];
             return{...c,promoClaims:newClaims};
           }));
+        };
+        const deleteWallet=(w)=>{
+          if(!canMutate)return;
+          setConfirmAct({title:"ลบรางวัลออกจาก wallet",msg:"ต้องการลบรางวัลนี้ใช่หรือไม่?",detail:w.promoName+" — "+rewardLbl(w.tier),onOk:()=>_doDeleteWallet(w.id)});
+        };
+        const deleteClaimTier=(promoId,tierId,promoName,tier)=>{
+          if(!canMutate)return;
+          setConfirmAct({title:"ลบ tier ออกจากประวัติเคลม",msg:"ต้องการลบ tier นี้ใช่หรือไม่? ลูกค้าจะสามารถเคลม tier นี้ใหม่ได้",detail:promoName+" — "+(tier?rewardLbl(tier):"tier #"+tierId+" (ถูกลบ)"),onOk:()=>_doDeleteClaimTier(promoId,tierId)});
+        };
+        const deleteClaimEntry=(promoId,promoName)=>{
+          if(!canMutate)return;
+          setConfirmAct({title:"ลบประวัติเคลมทั้งหมด",msg:"ต้องการลบประวัติการเคลมโปรนี้ทั้งหมดใช่หรือไม่?",detail:promoName,onOk:()=>_doDeleteClaimEntry(promoId)});
         };
         const claimEntries=Object.entries(claims).map(([promoId,info])=>{
           const promo=promos.find(p=>p.id===+promoId);
@@ -292,7 +299,7 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
                     <div style={{fontSize:12,color:"var(--dim)"}}>จากโปร</div>
                     <div style={{display:"flex",gap:4,alignItems:"center"}}>
                       <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"rgba(175,82,222,0.14)",color:"var(--purple)",fontWeight:600,whiteSpace:"nowrap"}}>คงเหลือ</span>
-                      {canMutate&&<button onClick={()=>deleteWallet(w.id)} title="ลบรางวัลนี้" style={{background:"transparent",border:"1px solid var(--red)",color:"var(--red)",borderRadius:4,padding:"1px 6px",fontSize:11,cursor:"pointer",fontFamily:"inherit",lineHeight:1.2}}>ลบ</button>}
+                      {canMutate&&<button onClick={()=>deleteWallet(w)} title="ลบรางวัลนี้" style={{background:"transparent",border:"1px solid var(--red)",color:"var(--red)",borderRadius:4,padding:"1px 6px",fontSize:11,cursor:"pointer",fontFamily:"inherit",lineHeight:1.2}}>ลบ</button>}
                     </div>
                   </div>
                   <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:"var(--text)"}}>{w.promoName}</div>
@@ -324,14 +331,14 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
                         {e.tierDetails.map((td,i)=>(
                           <span key={td.id+"-"+i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 4px 2px 7px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)",marginRight:4,marginBottom:3,fontWeight:500}}>
                             <span>{td.tier?rewardLbl(td.tier):"tier #"+td.id+" (ถูกลบ)"}</span>
-                            {canMutate&&<button onClick={()=>deleteClaimTier(e.promoId,td.id)} title="ลบ tier นี้" style={{background:"transparent",border:"none",color:"var(--red)",cursor:"pointer",fontSize:11,padding:"0 4px",lineHeight:1,fontFamily:"inherit",fontWeight:700}}>×</button>}
+                            {canMutate&&<button onClick={()=>deleteClaimTier(e.promoId,td.id,e.promoName,td.tier)} title="ลบ tier นี้" style={{background:"transparent",border:"none",color:"var(--red)",cursor:"pointer",fontSize:11,padding:"0 4px",lineHeight:1,fontFamily:"inherit",fontWeight:700}}>×</button>}
                           </span>
                         ))}
                       </td>
                       <td style={{padding:"7px 8px",color:"var(--blue)",fontSize:12}}>{e.info.lastClaimedSO||"-"}</td>
                       <td style={{padding:"7px 8px",color:"var(--dim)",fontSize:12}}>{e.info.lastClaimedAt?toBE(e.info.lastClaimedAt):"-"}</td>
                       {canMutate&&<td style={{padding:"7px 8px"}}>
-                        <button onClick={()=>deleteClaimEntry(e.promoId)} title="ลบประวัติทั้งหมดของโปรนี้" style={{background:"transparent",border:"1px solid var(--red)",color:"var(--red)",borderRadius:4,padding:"2px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>ลบทั้งหมด</button>
+                        <button onClick={()=>deleteClaimEntry(e.promoId,e.promoName)} title="ลบประวัติทั้งหมดของโปรนี้" style={{background:"transparent",border:"1px solid var(--red)",color:"var(--red)",borderRadius:4,padding:"2px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>ลบทั้งหมด</button>
                       </td>}
                     </tr>
                   ))}</tbody>
@@ -392,6 +399,13 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
         </div>
       )}
 
+      {confirmAct&&(
+        <Modal title={confirmAct.title||"ยืนยัน"} onClose={()=>setConfirmAct(null)}>
+          <div style={{fontSize:13,color:"var(--text)",marginBottom:10}}>{confirmAct.msg}</div>
+          {confirmAct.detail&&<div style={{background:"var(--bg)",borderRadius:8,padding:"10px 12px",fontSize:13,fontWeight:500,color:"var(--text)",border:"1px solid var(--line)",marginBottom:6}}>{confirmAct.detail}</div>}
+          <MBtns onCancel={()=>setConfirmAct(null)} onSave={()=>{const f=confirmAct.onOk;setConfirmAct(null);if(typeof f==="function")f();}} saveLabel="ยืนยันลบ"/>
+        </Modal>
+      )}
     </Modal>
   );
 }
