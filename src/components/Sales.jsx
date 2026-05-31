@@ -122,7 +122,9 @@ function SOList({sh}){
     resetPromoStates();
     cM();
   };
-  const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);doSave(soId);};
+  const[reviewMode,setReviewMode]=useState(null);
+  const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);setReviewMode({soId});};
+  const confirmAndSave=()=>{if(!reviewMode)return;const id=reviewMode.soId;setReviewMode(null);doSave(id);};
   const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO&&cu?.role!=="Admin"){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.linkedPO){setPOs(p=>p.map(x=>x.linkedSO===so.soNum?{...x,linkedSO:""}:x));}if(so.status==="completed"){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");if(soPays.length){setPayments(prev=>prev.filter(p=>!(p.refId===so.soNum&&p.type==="ar")));setBankTxns(prev=>prev.filter(t=>!soPays.some(p=>t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="in")));setCheques(prev=>prev.filter(c=>!soPays.some(p=>p.method==="เช็ค"&&p.chequeNo&&c.chequeNo===p.chequeNo&&c.refId===p.refId)));}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
   const deliveringRef=useRef(new Set());
   const confirmDelivery=id=>{
@@ -420,6 +422,78 @@ function SOList({sh}){
 
     {modal==="addSO"&&ed&&<Modal title="สร้างใบขายใหม่" onClose={cM}>{renderForm(null)}</Modal>}
     {modal==="editSO"&&editSO&&ed&&<Modal title={"แก้ไข — "+editSO.soNum} onClose={()=>{setEditSO(null);cM();}}>{renderForm(editSO.id)}</Modal>}
+    {reviewMode&&(()=>{
+      const cust=contacts.find(c=>c.id===+form.customerId);
+      const _items=form.items.filter(it=>it.productId&&+it.qty>0);
+      // preview reward
+      let prevRewPct2=0,prevRewAmt2=0;
+      pendingClaims.forEach(c=>{if(c.tier.rewardType==="percent")prevRewPct2+=c.tier.rewardValue;else if(c.tier.rewardType==="fixed")prevRewAmt2+=c.tier.rewardValue;});
+      selectedWalletIds.forEach(wid=>{const w=(cust?.savedRewards||[]).find(r=>r.id===wid);if(w){if(w.tier.rewardType==="percent")prevRewPct2+=w.tier.rewardValue;else if(w.tier.rewardType==="fixed")prevRewAmt2+=w.tier.rewardValue;}});
+      const productClaims=pendingClaims.filter(c=>c.tier.rewardType==="product");
+      const productWallets=selectedWalletIds.map(wid=>(cust?.savedRewards||[]).find(r=>r.id===wid)).filter(w=>w&&w.tier.rewardType==="product");
+      const _sub=_items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);
+      const _disc=payType==="cash"?round2(_sub*discPct/100):0;
+      const _ep=+(extraDiscPct||0);const _extraDisc=_ep>0?round2(_sub*_ep/100):0;
+      const _rewDiscPctAmt=prevRewPct2>0?round2(_sub*prevRewPct2/100):0;
+      const _totalRewDisc=_rewDiscPctAmt+prevRewAmt2;
+      const _totalDisc=_disc+_extraDisc+_totalRewDisc;
+      const _after=_sub-_totalDisc;const _vat=incVat?round2(_after*7/107):0;
+      const _selRep=form.useVatRep&&form.vatRepId?curVatReps.find(r=>r.id===+form.vatRepId):null;
+      return<Modal title="ตรวจสอบก่อนบันทึก" onClose={()=>setReviewMode(null)} wide>
+        <div style={{fontSize:13}}>
+          <div style={{background:"var(--bg)",border:"1px solid var(--line)",borderRadius:8,padding:"12px 14px",marginBottom:12,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"8px 16px"}}>
+            <div><div style={{fontSize:11,color:"var(--dim)"}}>ลูกค้า</div><div style={{fontWeight:600}}>{cust?cN(cust):"-"}</div></div>
+            <div><div style={{fontSize:11,color:"var(--dim)"}}>วันที่</div><div style={{fontWeight:500}}>{toBE(form.date)}</div></div>
+            {form.legacyNum&&<div><div style={{fontSize:11,color:"var(--dim)"}}>เลข SO ระบบเก่า</div><div style={{fontWeight:500,fontFamily:"monospace"}}>{form.legacyNum}</div></div>}
+            <div><div style={{fontSize:11,color:"var(--dim)"}}>การชำระ</div><div style={{fontWeight:500}}>{payType==="cash"?"เงินสด"+(discPct?" -"+discPct+"%":""):"เครดิต "+creditDays+" วัน"}</div></div>
+            {_selRep&&<div style={{gridColumn:"1/-1"}}><div style={{fontSize:11,color:"var(--dim)"}}>ตัวแทน VAT</div><div style={{fontWeight:500}}>{_selRep.name}<span style={{color:"var(--dim)",marginLeft:6,fontSize:11}}>{_selRep.idCard}</span></div></div>}
+          </div>
+
+          <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:6}}>{"รายการสินค้า ("+_items.length+")"}</div>
+          <table style={{width:"100%",borderCollapse:"collapse",marginBottom:12,border:"1px solid var(--line)",borderRadius:8,overflow:"hidden"}}>
+            <thead><tr style={{background:"var(--bg)",fontSize:11,color:"var(--dim)"}}>
+              <th style={{padding:"7px 10px",textAlign:"left",width:30}}>#</th>
+              <th style={{padding:"7px 10px",textAlign:"left"}}>สินค้า</th>
+              <th style={{padding:"7px 10px",textAlign:"right",width:60}}>จำนวน</th>
+              <th style={{padding:"7px 10px",textAlign:"right",width:90}}>ราคา</th>
+              <th style={{padding:"7px 10px",textAlign:"right",width:100}}>รวม</th>
+            </tr></thead>
+            <tbody>{_items.map((it,i)=>{const pr=products.find(p=>p.id===+it.productId);const line=(+it.qty||0)*(+it.price||0);const origP=pr?+pr.price:0;const changed=pr&&+it.price!==origP;
+              return<tr key={i} style={{borderTop:"1px solid var(--line)"}}>
+                <td style={{padding:"7px 10px",color:"var(--dim)"}}>{i+1}</td>
+                <td style={{padding:"7px 10px"}}>{pr?pN(pr):"-"}<span style={{fontSize:10,color:"var(--faint)",marginLeft:6}}>{pr?.code}</span></td>
+                <td style={{padding:"7px 10px",textAlign:"right"}}>{it.qty}</td>
+                <td style={{padding:"7px 10px",textAlign:"right",color:changed?"var(--purple)":"var(--text)"}}>{"฿"+fmt(it.price)}{changed&&<div style={{fontSize:10,color:"var(--faint)"}}>{"ตั้งต้น ฿"+fmt(origP)}</div>}</td>
+                <td style={{padding:"7px 10px",textAlign:"right",fontWeight:500}}>{"฿"+fmt(line)}</td>
+              </tr>;
+            })}
+            {(productClaims.length>0||productWallets.length>0)&&[...productClaims.map((c,i)=>{const p=products.find(x=>x.id===+c.tier.rewardProductId);return{key:"pc"+i,name:p?pN(p):"สินค้า",src:"รับเลย"};}),...productWallets.map((w,i)=>{const p=products.find(x=>x.id===+w.tier.rewardProductId);return{key:"pw"+i,name:p?pN(p):"สินค้า",src:"wallet"};})].map(x=>(
+              <tr key={x.key} style={{borderTop:"1px solid var(--line)",background:"rgba(52,199,89,0.06)"}}>
+                <td style={{padding:"7px 10px"}}>★</td>
+                <td style={{padding:"7px 10px",color:"var(--green)"}}>{x.name}<span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:"rgba(52,199,89,0.14)",color:"var(--green)",marginLeft:6,fontWeight:600}}>{"ของแถม ("+x.src+")"}</span></td>
+                <td style={{padding:"7px 10px",textAlign:"right"}}>1</td>
+                <td style={{padding:"7px 10px",textAlign:"right",color:"var(--green)"}}>฿0</td>
+                <td style={{padding:"7px 10px",textAlign:"right",fontWeight:500,color:"var(--green)"}}>฿0</td>
+              </tr>))}
+            </tbody>
+          </table>
+
+          <div style={{background:"var(--bg)",border:"1px solid var(--line)",borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:13}}>
+            <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(_sub)}</span></div>
+            {_disc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+discPct+"%"}</span><span>{"-฿"+fmt(_disc)}</span></div>}
+            {_ep>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+_ep+"%"}</span><span>{"-฿"+fmt(_extraDisc)}</span></div>}
+            {_totalRewDisc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:4}}><span>{"ส่วนลด (รางวัล)"+(prevRewPct2>0?" "+prevRewPct2+"%":"")}</span><span>{"-฿"+fmt(_totalRewDisc)}</span></div>}
+            {incVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4,fontSize:12}}><span>VAT 7%</span><span>{"฿"+fmt(_vat)}</span></div>}
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:16,borderTop:"1px solid var(--line)",paddingTop:8,marginTop:6}}><span>ยอดสุทธิ</span><span style={{color:"var(--green)"}}>{"฿"+fmt(_after)}</span></div>
+          </div>
+
+          {form.note&&<div style={{background:"var(--bg)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:12}}><div style={{color:"var(--dim)",marginBottom:3,fontSize:11}}>หมายเหตุ</div><div>{form.note}</div></div>}
+
+          <div style={{background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:8,padding:"10px 12px",marginBottom:6,fontSize:12,color:"var(--blue)",fontWeight:500}}>กรุณาตรวจสอบข้อมูลก่อนกด "ยืนยันบันทึก"</div>
+        </div>
+        <MBtns onCancel={()=>setReviewMode(null)} onSave={confirmAndSave} saveLabel={reviewMode.soId?"ยืนยันบันทึก":"ยืนยันสร้าง SO"}/>
+      </Modal>;
+    })()}
     {modal==="confirmD"&&confirmSO&&(()=>{
       const cust=contacts.find(c=>c.id===confirmSO.customerId);
       return<Modal title={"ยืนยันจัดส่ง — "+confirmSO.soNum} onClose={cM}>
