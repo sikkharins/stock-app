@@ -9,7 +9,7 @@ import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 const MEASURE_OPTS=[{value:"amount",label:"ยอดเงิน (บาท)"},{value:"qty",label:"จำนวนสินค้า (ชิ้น)"}];
 const REWARD_OPTS=[{value:"product",label:"แถมสินค้า"},{value:"percent",label:"ส่วนลด %"},{value:"fixed",label:"ส่วนลดยอดสุทธิ (บาท)"}];
 const emptyTier=()=>({id:Date.now()+Math.random(),threshold:"",rewardType:"percent",rewardValue:"",rewardProductId:""});
-const emptyForm=()=>({name:"",startDate:todayStr(),endDate:"",brands:[],categoryIds:[],measureBy:"amount",tiers:[emptyTier()],active:true});
+const emptyForm=()=>({name:"",startDate:todayStr(),endDate:"",brands:[],categoryIds:[],measureBy:"amount",mode:"per_so",tiers:[emptyTier()],active:true});
 
 function statusOf(p){
   const today=todayStr();
@@ -42,7 +42,7 @@ export default function PromosPage({sh}){
 
   const openNew=()=>{setForm(emptyForm());setIsEdit(false);oM("promoForm");};
   const openEdit=p=>{
-    setForm({id:p.id,name:p.name,startDate:p.startDate||"",endDate:p.endDate||"",brands:p.brands||[],categoryIds:p.categoryIds||[],measureBy:p.measureBy||"amount",tiers:(p.tiers||[]).map(t=>({...t})),active:p.active!==false});
+    setForm({id:p.id,name:p.name,startDate:p.startDate||"",endDate:p.endDate||"",brands:p.brands||[],categoryIds:p.categoryIds||[],measureBy:p.measureBy||"amount",mode:p.mode||"per_so",tiers:(p.tiers||[]).map(t=>({...t})),active:p.active!==false});
     setIsEdit(true);oM("promoForm");
   };
   const askDel=id=>{setDelId(id);oM("promoDel");};
@@ -69,7 +69,7 @@ export default function PromosPage({sh}){
 
   const save=()=>{
     if(!form.name||!form.startDate||form.tiers.length===0)return;
-    const d={name:form.name,startDate:form.startDate,endDate:form.endDate||"",brands:form.brands,categoryIds:form.categoryIds,measureBy:form.measureBy,tiers:form.tiers.map(t=>({id:t.id,threshold:+t.threshold||0,rewardType:t.rewardType,rewardValue:t.rewardType==="product"?0:+(t.rewardValue)||0,rewardProductId:t.rewardType==="product"?+t.rewardProductId||0:0})),active:form.active};
+    const d={name:form.name,startDate:form.startDate,endDate:form.endDate||"",brands:form.brands,categoryIds:form.categoryIds,measureBy:form.measureBy,mode:form.mode||"per_so",tiers:form.tiers.map(t=>({id:t.id,threshold:+t.threshold||0,rewardType:t.rewardType,rewardValue:t.rewardType==="product"?0:+(t.rewardValue)||0,rewardProductId:t.rewardType==="product"?+t.rewardProductId||0:0})),active:form.active};
     if(isEdit){setPromos(p=>p.map(x=>x.id===form.id?{...x,...d}:x));}
     else{setPromos(p=>[...p,{id:Date.now(),...d}]);}
     cM();
@@ -118,8 +118,9 @@ export default function PromosPage({sh}){
             {p.categoryIds.map(id=><span key={id} style={{...chip,color:"var(--orange)",background:"rgba(255,149,0,0.14)"}}>{getCN(id)}</span>)}
           </div>}
 
-          <div style={{fontSize:12,color:"var(--dim)",marginBottom:4}}>
-            วัดผลด้วย: {p.measureBy==="amount"?"ยอดเงิน":"จำนวน"}
+          <div style={{fontSize:12,color:"var(--dim)",marginBottom:4,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span>วัดผลด้วย: {p.measureBy==="amount"?"ยอดเงิน":"จำนวน"}</span>
+            <span style={{padding:"1px 7px",borderRadius:99,fontSize:10,fontWeight:600,color:(p.mode||"per_so")==="accumulate"?"var(--purple)":"var(--blue)",background:(p.mode||"per_so")==="accumulate"?"rgba(175,82,222,0.14)":"var(--blue-bg)"}}>{(p.mode||"per_so")==="accumulate"?"สะสม":"ต่อใบ"}</span>
           </div>
 
           <div style={{fontSize:12,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
@@ -149,6 +150,22 @@ export default function PromosPage({sh}){
         </div>
 
         <Field label="วัดผลด้วย"><CustomSelect value={form.measureBy} onChange={v=>setF("measureBy",v)} options={MEASURE_OPTS}/></Field>
+
+        <div>
+          <div style={{fontSize:11.5,fontWeight:500,color:"var(--dim)",marginBottom:6}}>รูปแบบการนับยอด</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {[{k:"per_so",lbl:"ต่อใบ SO",hint:"ลูกค้าต้องซื้อครบในใบเดียว"},{k:"accumulate",lbl:"สะสมข้าม SO",hint:"ผูกกับลูกค้า นับจาก SO ที่จัดส่ง/รอส่ง"}].map(opt=>{
+              const sel=form.mode===opt.k;
+              return <label key={opt.k} style={{display:"flex",flexDirection:"column",gap:4,padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(sel?"var(--blue)":"var(--line)"),background:sel?"var(--blue-bg)":"var(--panel)",cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <input type="radio" name="promo_mode" checked={sel} onChange={()=>setF("mode",opt.k)}/>
+                  <span style={{fontWeight:500,color:sel?"var(--blue)":"var(--text)",fontSize:13}}>{opt.lbl}</span>
+                </div>
+                <span style={{fontSize:11,color:"var(--dim)",paddingLeft:22}}>{opt.hint}</span>
+              </label>;
+            })}
+          </div>
+        </div>
 
         <div>
           <div style={{fontSize:11.5,fontWeight:500,color:"var(--dim)",marginBottom:6}}>ยี่ห้อที่เข้าร่วม <span style={{fontWeight:400,color:"var(--faint)"}}>(ว่าง = ทุกยี่ห้อ)</span></div>

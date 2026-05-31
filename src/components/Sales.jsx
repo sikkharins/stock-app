@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, round2 } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -15,7 +15,7 @@ import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 import QuotesPage from "./Quotes.jsx";
 
 function SOList({sh}){
-  const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques,promos=[]}=sh;
+  const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,setContacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques,promos=[]}=sh;
   const ed=canC("sales");const cd=canD("sales");const isSU=cu.role==="SalesManager"?"":cu.salesName||"";
   const custs=contacts.filter(c=>c.type==="customer"&&(!isSU||c.salesPerson===isSU));
   const myCI=isSU?custs.map(c=>c.id):null;
@@ -25,8 +25,13 @@ function SOList({sh}){
 
   const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId))return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
   const[incVat,setIncVat]=useState(true);const[payType,setPayType]=useState("cash");const[discPct,setDiscPct]=useState(1);const[creditDays,setCreditDays]=useState(45);const[extraDiscPct,setExtraDiscPct]=useState("");const[formErrors,setFormErrors]=useState([]);
+  // Promo accumulate: pendingClaims = รับเลย, pendingSaves = เก็บไว้, selectedWalletIds = ใช้รางวัลจาก wallet
+  const[pendingClaims,setPendingClaims]=useState([]); // [{promoId, tierId, promoName, tier}]
+  const[pendingSaves,setPendingSaves]=useState([]);   // [{promoId, tierId, promoName, tier}]
+  const[selectedWalletIds,setSelectedWalletIds]=useState([]); // [walletId, ...]
 
-  useEffect(()=>{if(sh.quickCreate==="addSO"&&ed){setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);oM("addSO");sh.clearQuickCreate();}},[sh.quickCreate]);
+  const resetPromoStates=()=>{setPendingClaims([]);setPendingSaves([]);setSelectedWalletIds([]);};
+  useEffect(()=>{if(sh.quickCreate==="addSO"&&ed){setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);resetPromoStates();oM("addSO");sh.clearQuickCreate();}},[sh.quickCreate]);
 
   const soTot=so=>(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
   const mySO=useMemo(()=>myCI?sales.filter(s=>myCI.includes(s.customerId)):sales,[sales,myCI]);
@@ -41,15 +46,80 @@ function SOList({sh}){
   const getAvail=(pid,exId)=>{const pr=products.find(x=>x.id===+pid);if(!pr)return 0;const pq=sales.filter(so=>(so.status==="pending_delivery"||so.status==="pending_special_approval")&&so.id!==(exId||0)&&!so.dropShip).reduce((s,so)=>{const it=so.items.find(i=>i.productId===+pid);return s+(it?it.qty:0);},0);return Math.max(0,pr.stock-pq);};
   const hasApv=canApv("sales");
   const doSave=(soId)=>{
-    const items=form.items.map(i=>({productId:+i.productId,qty:+i.qty,price:+i.price}));
-    const sub=items.reduce((s,i)=>s+i.qty*i.price,0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;const totalDisc=disc+extraDisc;const vatAmt=incVat?round2((sub-totalDisc)*7/107):0;
+    const baseItems=form.items.map(i=>({productId:+i.productId,qty:+i.qty,price:+i.price}));
+
+    // Collect rewards (pendingClaims + selectedWalletIds)
+    const customer=contacts.find(c=>c.id===+form.customerId);
+    let rewardDiscPct=0, rewardDiscAmt=0;
+    const extraItems=[];
+    const appliedRewards=[];
+
+    // 1. Pending claims (รับเลย)
+    pendingClaims.forEach(c=>{
+      const t=c.tier;
+      if(t.rewardType==="percent")rewardDiscPct+=t.rewardValue;
+      else if(t.rewardType==="fixed")rewardDiscAmt+=t.rewardValue;
+      else if(t.rewardType==="product"&&t.rewardProductId){const p=products.find(x=>x.id===+t.rewardProductId);extraItems.push({productId:+t.rewardProductId,qty:1,price:0,unitPrice:p?+p.price:0});}
+      appliedRewards.push({promoId:c.promoId,tierId:t.id,source:"claim"});
+    });
+
+    // 2. Selected wallet items
+    selectedWalletIds.forEach(wid=>{
+      const w=(customer?.savedRewards||[]).find(r=>r.id===wid);
+      if(!w)return;
+      const t=w.tier;
+      if(t.rewardType==="percent")rewardDiscPct+=t.rewardValue;
+      else if(t.rewardType==="fixed")rewardDiscAmt+=t.rewardValue;
+      else if(t.rewardType==="product"&&t.rewardProductId){const p=products.find(x=>x.id===+t.rewardProductId);extraItems.push({productId:+t.rewardProductId,qty:1,price:0,unitPrice:p?+p.price:0});}
+      appliedRewards.push({promoId:w.promoId,tierId:t.id,source:"wallet",walletId:wid});
+    });
+
+    const items=[...baseItems,...extraItems];
+    const sub=items.reduce((s,i)=>s+i.qty*i.price,0);
+    const disc=payType==="cash"?round2(sub*discPct/100):0;
+    const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;
+    const baseSubForReward=baseItems.reduce((s,i)=>s+i.qty*i.price,0);
+    const rewardDiscFromPct=rewardDiscPct>0?round2(baseSubForReward*rewardDiscPct/100):0;
+    const totalRewardDisc=rewardDiscFromPct+rewardDiscAmt;
+    const totalDisc=disc+extraDisc+totalRewardDisc;
+    const vatAmt=incVat?round2((sub-totalDisc)*7/107):0;
     const selRep=form.useVatRep&&form.vatRepId?curVatReps.find(r=>r.id===+form.vatRepId):null;
     const origPrices=items.map(i=>{const p=products.find(x=>x.id===i.productId);return p?+p.price:+i.price;});
-    const priceChanged=items.some((i,idx)=>+i.price!==origPrices[idx]);
+    const priceChanged=baseItems.some((i,idx)=>{const p=products.find(x=>x.id===i.productId);return p&&+i.price!==+p.price;});
     const needsApproval=!hasApv&&(priceChanged||ep>0);
-    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||""};
+    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||""};
+
+    // Update customer: claimedTierIds, savedRewards, savedFromSO
+    let newSoNum="";
+    if(!soId){const yr=new Date().getFullYear();const mx=sales.reduce((m,s)=>{const mt=(s.soNum||"").match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);newSoNum="SO-"+yr+"-"+String(mx+1).padStart(3,"0");}
+    else{const oldSO=sales.find(s=>s.id===soId);newSoNum=oldSO?.soNum||"";}
+
+    if(customer&&(pendingClaims.length||pendingSaves.length||selectedWalletIds.length)){
+      const newClaims={...(customer.promoClaims||{})};
+      // Mark claim tiers from pendingClaims
+      pendingClaims.forEach(c=>{
+        if(!newClaims[c.promoId])newClaims[c.promoId]={claimedTierIds:[],lastClaimedAt:todayStr(),lastClaimedSO:newSoNum};
+        if(!newClaims[c.promoId].claimedTierIds.includes(c.tierId))newClaims[c.promoId].claimedTierIds=[...newClaims[c.promoId].claimedTierIds,c.tierId];
+        newClaims[c.promoId].lastClaimedAt=todayStr();
+        newClaims[c.promoId].lastClaimedSO=newSoNum;
+      });
+      // Mark + save pendingSaves to wallet
+      const newRewards=[...(customer.savedRewards||[])];
+      pendingSaves.forEach(s=>{
+        if(!newClaims[s.promoId])newClaims[s.promoId]={claimedTierIds:[],lastClaimedAt:todayStr(),lastClaimedSO:newSoNum};
+        if(!newClaims[s.promoId].claimedTierIds.includes(s.tierId))newClaims[s.promoId].claimedTierIds=[...newClaims[s.promoId].claimedTierIds,s.tierId];
+        newClaims[s.promoId].lastClaimedAt=todayStr();
+        newClaims[s.promoId].lastClaimedSO=newSoNum;
+        newRewards.push({id:Date.now()+Math.random(),promoId:s.promoId,promoName:s.promoName,tier:s.tier,savedAt:todayStr(),savedFromSO:newSoNum});
+      });
+      // Remove redeemed wallet items
+      const finalRewards=newRewards.filter(r=>!selectedWalletIds.includes(r.id));
+      setContacts(prev=>prev.map(c=>c.id===customer.id?{...c,promoClaims:newClaims,savedRewards:finalRewards}:c));
+    }
+
     if(soId){const oldSO=sales.find(s=>s.id===soId);const keepStatus=oldSO?.status==="pending_special_approval"&&needsApproval?"pending_special_approval":needsApproval?"pending_special_approval":oldSO?.status||"pending_delivery";setSales(p=>p.map(s=>s.id===soId?{...s,...soBase,status:keepStatus}:s));addA("แก้ไข SO",editSO?.soNum||"");setEditSO(null);}
-    else{const yr=new Date().getFullYear();const mx=sales.reduce((m,s)=>{const mt=s.soNum.match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const sn="SO-"+yr+"-"+String(mx+1).padStart(3,"0");const st=needsApproval?"pending_special_approval":"pending_delivery";setSales(p=>[...p,{id:Date.now(),soNum:sn,status:st,fromQuote:"",...soBase}]);addA("สร้าง SO"+(needsApproval?" (รออนุมัติ)":""),sn);}
+    else{const st=needsApproval?"pending_special_approval":"pending_delivery";setSales(p=>[...p,{id:Date.now(),soNum:newSoNum,status:st,fromQuote:"",...soBase}]);addA("สร้าง SO"+(needsApproval?" (รออนุมัติ)":""),newSoNum);}
+    resetPromoStates();
     cM();
   };
   const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);doSave(soId);};
@@ -73,7 +143,7 @@ function SOList({sh}){
     const reps=(cust&&cust.vatReps)||[];
     const matchRep=so.useVatRep&&so.vatRepName?reps.find(r=>r.name===so.vatRepName):null;
     setForm({customerId:String(so.customerId),date:so.date,items:so.items.map(i=>({productId:String(i.productId),qty:i.qty,price:i.price})),useVatRep:!!so.useVatRep,vatRepId:matchRep?String(matchRep.id):"",note:so.note||""});
-    setIncVat(so.includeVat!==false);setPayType(so.payType||"cash");setDiscPct(so.discPct||1);setCreditDays(so.creditDays||45);setExtraDiscPct(so.extraDiscPct?String(so.extraDiscPct):"");setEditSO(so);oM("editSO");
+    setIncVat(so.includeVat!==false);setPayType(so.payType||"cash");setDiscPct(so.discPct||1);setCreditDays(so.creditDays||45);setExtraDiscPct(so.extraDiscPct?String(so.extraDiscPct):"");resetPromoStates();setEditSO(so);oM("editSO");
   };
 
   const renderItems=(exId)=>form.items.map((item,idx)=>{
@@ -95,7 +165,16 @@ function SOList({sh}){
 
   const renderForm=(soId)=>{
     const exId=soId||0;const hasOver=form.items.some(it=>it.productId&&+it.qty>getAvail(it.productId,exId));
-    const sub=form.items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;const totalDisc=disc+extraDisc;const after=sub-totalDisc;const vatAmt=incVat?round2(after*7/107):0;
+    const sub=form.items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;
+    // Preview reward discount (จาก pendingClaims + selectedWalletIds)
+    const _curCust=contacts.find(c=>c.id===+form.customerId);
+    let prevRewPct=0,prevRewAmt=0;
+    pendingClaims.forEach(c=>{if(c.tier.rewardType==="percent")prevRewPct+=c.tier.rewardValue;else if(c.tier.rewardType==="fixed")prevRewAmt+=c.tier.rewardValue;});
+    selectedWalletIds.forEach(wid=>{const w=(_curCust?.savedRewards||[]).find(r=>r.id===wid);if(w){if(w.tier.rewardType==="percent")prevRewPct+=w.tier.rewardValue;else if(w.tier.rewardType==="fixed")prevRewAmt+=w.tier.rewardValue;}});
+    const rewardDiscPctAmt=prevRewPct>0?round2(sub*prevRewPct/100):0;
+    const totalRewardDisc=rewardDiscPctAmt+prevRewAmt;
+    const totalDisc=disc+extraDisc+totalRewardDisc;
+    const after=sub-totalDisc;const vatAmt=incVat?round2(after*7/107):0;
     return <div>
       <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <Field label="ลูกค้า"><CustomSelect searchable value={form.customerId} onChange={v=>setCust(v)} options={[{value:"",label:"เลือก..."},...custs.map(c=>({value:String(c.id),label:cN(c)}))]}/></Field>
@@ -105,9 +184,23 @@ function SOList({sh}){
       <button onClick={addItem} style={{fontSize:12,padding:"5px 10px",borderRadius:6,border:"0.5px solid var(--line)",cursor:"pointer",background:"transparent",marginBottom:12}}>{"+ เพิ่ม"}</button>
       {(()=>{
         const today=todayStr();
+        const customer=contacts.find(c=>c.id===+form.customerId);
         const activePromos=(promos||[]).filter(p=>p.active&&p.startDate<=today&&(!p.endDate||p.endDate>=today));
+        const perSoPromos=activePromos.filter(p=>(p.mode||"per_so")==="per_so");
+        const accumPromos=activePromos.filter(p=>p.mode==="accumulate");
+
+        const rewardLbl=(t)=>{
+          if(!t)return"";
+          if(t.rewardType==="percent")return"ลด "+t.rewardValue+"%";
+          if(t.rewardType==="fixed")return"ลด ฿"+fmt(t.rewardValue);
+          if(t.rewardType==="product"){const rp=products.find(x=>x.id===+t.rewardProductId);return"แถม "+(rp?pN(rp):"สินค้า")}
+          return"";
+        };
+        const fmtVal=(v,p)=>p.measureBy==="qty"?v+" ชิ้น":"฿"+fmt(v);
+
+        // per_so matching
         const itemsWithProd=form.items.filter(it=>it.productId&&+it.qty>0).map(it=>({...it,prod:products.find(x=>x.id===+it.productId)})).filter(it=>it.prod);
-        const matched=activePromos.map(p=>{
+        const matchedPerSo=perSoPromos.map(p=>{
           const matching=itemsWithProd.filter(it=>{
             if((p.brands||[]).length&&!p.brands.includes(it.prod.brand))return false;
             if((p.categoryIds||[]).length&&!p.categoryIds.includes(it.prod.categoryId))return false;
@@ -121,41 +214,119 @@ function SOList({sh}){
           const nextTier=tiers.find(t=>totalVal<t.threshold);
           return{promo:p,total:totalVal,bestTier,nextTier,matchCount:matching.length};
         }).filter(Boolean);
-        if(!matched.length)return null;
-        const rewardLbl=(t,p)=>{
-          if(!t)return"";
-          if(t.rewardType==="percent")return"ลด "+t.rewardValue+"%";
-          if(t.rewardType==="fixed")return"ลด ฿"+fmt(t.rewardValue);
-          if(t.rewardType==="product"){const rp=products.find(x=>x.id===+t.rewardProductId);return"แถม "+(rp?pN(rp):"สินค้า")}
-          return"";
+
+        // accumulate matching (need customer)
+        const matchedAccum=customer?accumPromos.map(p=>{
+          const pastTotal=calcAccumulatedTotal(customer.id,p,sales,products);
+          const currentTotal=calcCurrentMatchTotal(form.items,p,products);
+          const grandTotal=pastTotal+currentTotal;
+          const claimableTiers=findClaimableTiers(customer,p,grandTotal);
+          const tiers=(p.tiers||[]).slice().sort((a,b)=>a.threshold-b.threshold);
+          const claimedIds=customer?.promoClaims?.[p.id]?.claimedTierIds||[];
+          const nextTier=tiers.find(t=>!claimedIds.includes(t.id)&&grandTotal<t.threshold);
+          if(!claimableTiers.length&&!nextTier&&pastTotal===0&&currentTotal===0)return null;
+          return{promo:p,pastTotal,currentTotal,grandTotal,claimableTiers,nextTier};
+        }).filter(Boolean):[];
+
+        const walletItems=customer?.savedRewards||[];
+
+        if(!matchedPerSo.length&&!matchedAccum.length&&!walletItems.length)return null;
+
+        const totalCount=matchedPerSo.length+matchedAccum.length+(walletItems.length>0?1:0);
+        const isPendingClaim=(promoId,tierId)=>pendingClaims.some(c=>c.promoId===promoId&&c.tierId===tierId);
+        const isPendingSave=(promoId,tierId)=>pendingSaves.some(s=>s.promoId===promoId&&s.tierId===tierId);
+        const togglePendingClaim=(promo,tier)=>{
+          const key={promoId:promo.id,tierId:tier.id,promoName:promo.name,tier};
+          if(isPendingClaim(promo.id,tier.id))setPendingClaims(p=>p.filter(c=>!(c.promoId===promo.id&&c.tierId===tier.id)));
+          else{setPendingClaims(p=>[...p,key]);setPendingSaves(p=>p.filter(s=>!(s.promoId===promo.id&&s.tierId===tier.id)));}
         };
-        const unitOf=p=>p.measureBy==="qty"?" ชิ้น":"";
-        const fmtVal=(v,p)=>p.measureBy==="qty"?v+" ชิ้น":"฿"+fmt(v);
+        const togglePendingSave=(promo,tier)=>{
+          const key={promoId:promo.id,tierId:tier.id,promoName:promo.name,tier};
+          if(isPendingSave(promo.id,tier.id))setPendingSaves(p=>p.filter(s=>!(s.promoId===promo.id&&s.tierId===tier.id)));
+          else{setPendingSaves(p=>[...p,key]);setPendingClaims(p=>p.filter(c=>!(c.promoId===promo.id&&c.tierId===tier.id)));}
+        };
+        const toggleWallet=id=>setSelectedWalletIds(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+
         return <div style={{background:"linear-gradient(135deg,rgba(175,82,222,0.08),rgba(0,113,227,0.08))",border:"1px solid rgba(175,82,222,0.3)",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,fontSize:13,fontWeight:600,color:"var(--purple)"}}>
-            <span style={{fontSize:16}}>🎁</span><span>โปรโมชั่นที่ใช้ได้ ({matched.length})</span>
+            <span>โปรโมชั่น / รางวัล ({totalCount})</span>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {matched.map(m=>{
+
+          {/* PER_SO promos */}
+          {matchedPerSo.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:walletItems.length||matchedAccum.length?12:0}}>
+            {matchedPerSo.map(m=>{
               const savings=m.bestTier&&m.bestTier.rewardType==="percent"?round2(m.total*m.bestTier.rewardValue/100):m.bestTier&&m.bestTier.rewardType==="fixed"?m.bestTier.rewardValue:0;
               const pct=m.bestTier?Math.min(100,Math.round(m.total/m.bestTier.threshold*100)):m.nextTier?Math.min(100,Math.round(m.total/m.nextTier.threshold*100)):0;
               return <div key={m.promo.id} style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:6}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{m.promo.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"var(--blue-bg)",color:"var(--blue)",fontWeight:600}}>ต่อใบ</span>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{m.promo.name}</div>
+                    </div>
                     <div style={{fontSize:11,color:"var(--dim)",marginTop:2}}>{"จับคู่ "+m.matchCount+" รายการ • "+fmtVal(m.total,m.promo)}</div>
                   </div>
-                  {m.bestTier?<span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"rgba(52,199,89,0.14)",color:"var(--green)",fontWeight:600,whiteSpace:"nowrap"}}>✓ {rewardLbl(m.bestTier,m.promo)}</span>:<span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontWeight:600,whiteSpace:"nowrap"}}>ยังไม่ถึงขั้น</span>}
+                  {m.bestTier?<span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"rgba(52,199,89,0.14)",color:"var(--green)",fontWeight:600,whiteSpace:"nowrap"}}>{rewardLbl(m.bestTier)}</span>:<span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontWeight:600,whiteSpace:"nowrap"}}>ยังไม่ถึงขั้น</span>}
                 </div>
-                {m.bestTier&&savings>0&&<div style={{fontSize:11,color:"var(--green)",fontWeight:500,marginBottom:6}}>{"💰 ประหยัด ฿"+fmt(savings)}</div>}
-                {m.nextTier&&<div style={{fontSize:11,color:"var(--dim)",marginBottom:6}}>{"ขั้นถัดไป: "+fmtVal(m.nextTier.threshold,m.promo)+" → "+rewardLbl(m.nextTier,m.promo)+" (ขาดอีก "+fmtVal(m.nextTier.threshold-m.total,m.promo)+")"}</div>}
-                <div style={{height:4,background:"var(--hover)",borderRadius:99,overflow:"hidden"}}>
-                  <div style={{height:"100%",background:m.bestTier?"var(--green)":"var(--orange)",width:pct+"%",transition:"width 0.3s"}}/>
-                </div>
+                {m.bestTier&&savings>0&&<div style={{fontSize:11,color:"var(--green)",fontWeight:500,marginBottom:6}}>{"ประหยัด ฿"+fmt(savings)}</div>}
+                {m.nextTier&&<div style={{fontSize:11,color:"var(--dim)",marginBottom:6}}>{"ขั้นถัดไป: "+fmtVal(m.nextTier.threshold,m.promo)+" → "+rewardLbl(m.nextTier)+" (ขาดอีก "+fmtVal(m.nextTier.threshold-m.total,m.promo)+")"}</div>}
+                <div style={{height:4,background:"var(--hover)",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",background:m.bestTier?"var(--green)":"var(--orange)",width:pct+"%",transition:"width 0.3s"}}/></div>
               </div>;
             })}
-          </div>
-          <div style={{fontSize:11,color:"var(--dim)",marginTop:10,fontStyle:"italic"}}>💡 ระบบไม่หักให้อัตโนมัติ — กรอกส่วนลดในช่องด้านล่างเอง</div>
+          </div>}
+
+          {/* ACCUMULATE promos (need customer) */}
+          {matchedAccum.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:walletItems.length?12:0}}>
+            {matchedAccum.map(m=>{
+              const refTier=m.claimableTiers[0]||m.nextTier;
+              const pct=refTier?Math.min(100,Math.round(m.grandTotal/refTier.threshold*100)):100;
+              return <div key={m.promo.id} style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:6}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(175,82,222,0.14)",color:"var(--purple)",fontWeight:600}}>สะสม</span>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{m.promo.name}</div>
+                    </div>
+                    <div style={{fontSize:11,color:"var(--dim)",marginTop:2}}>{"สะสม "+fmtVal(m.grandTotal,m.promo)+" (เก่า "+fmtVal(m.pastTotal,m.promo)+" + SO นี้ "+fmtVal(m.currentTotal,m.promo)+")"}</div>
+                  </div>
+                </div>
+                <div style={{height:4,background:"var(--hover)",borderRadius:99,overflow:"hidden",marginBottom:8}}><div style={{height:"100%",background:m.claimableTiers.length?"var(--green)":"var(--orange)",width:pct+"%",transition:"width 0.3s"}}/></div>
+                {m.nextTier&&<div style={{fontSize:11,color:"var(--dim)",marginBottom:8}}>{"ขั้นถัดไป: "+fmtVal(m.nextTier.threshold,m.promo)+" → "+rewardLbl(m.nextTier)+" (ขาดอีก "+fmtVal(m.nextTier.threshold-m.grandTotal,m.promo)+")"}</div>}
+                {m.claimableTiers.map(t=>{
+                  const claimMarked=isPendingClaim(m.promo.id,t.id);
+                  const saveMarked=isPendingSave(m.promo.id,t.id);
+                  return <div key={t.id} style={{background:"var(--bg)",border:"1px solid var(--line)",borderRadius:6,padding:"8px 10px",marginBottom:6}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6}}>
+                      <span style={{fontSize:12}}><strong style={{color:"var(--green)"}}>ครบขั้น {fmtVal(t.threshold,m.promo)}</strong> → {rewardLbl(t)}</span>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>togglePendingClaim(m.promo,t)} style={{flex:1,padding:"6px 8px",fontSize:11,borderRadius:6,border:"1px solid "+(claimMarked?"var(--green)":"var(--line)"),background:claimMarked?"rgba(52,199,89,0.14)":"var(--panel)",color:claimMarked?"var(--green)":"var(--text)",fontWeight:claimMarked?600:400,cursor:"pointer",fontFamily:"inherit"}}>{claimMarked?"✓ จะรับใน SO นี้":"รับเลย (ใช้ใน SO นี้)"}</button>
+                      <button onClick={()=>togglePendingSave(m.promo,t)} style={{flex:1,padding:"6px 8px",fontSize:11,borderRadius:6,border:"1px solid "+(saveMarked?"var(--blue)":"var(--line)"),background:saveMarked?"var(--blue-bg)":"var(--panel)",color:saveMarked?"var(--blue)":"var(--text)",fontWeight:saveMarked?600:400,cursor:"pointer",fontFamily:"inherit"}}>{saveMarked?"✓ จะเก็บใน wallet":"เก็บไว้ใช้ทีหลัง"}</button>
+                    </div>
+                  </div>;
+                })}
+              </div>;
+            })}
+          </div>}
+
+          {/* WALLET section */}
+          {walletItems.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--green)",borderRadius:8,padding:"10px 12px"}}>
+            <div style={{fontSize:12,fontWeight:600,color:"var(--green)",marginBottom:8}}>{"รางวัลที่เก็บไว้ ("+walletItems.length+") — ติ๊กเพื่อใช้กับ SO นี้"}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {walletItems.map(w=>{
+                const sel=selectedWalletIds.includes(w.id);
+                return <label key={w.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:6,cursor:"pointer",background:sel?"rgba(52,199,89,0.08)":"var(--bg)",border:"1px solid "+(sel?"var(--green)":"transparent")}}>
+                  <input type="checkbox" checked={sel} onChange={()=>toggleWallet(w.id)}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{rewardLbl(w.tier)}</div>
+                    <div style={{fontSize:10,color:"var(--dim)"}}>{"จาก: "+w.promoName+" • เก็บเมื่อ "+toBE(w.savedAt)}</div>
+                  </div>
+                </label>;
+              })}
+            </div>
+          </div>}
+
+          <div style={{fontSize:11,color:"var(--dim)",marginTop:10,fontStyle:"italic"}}>{matchedPerSo.length?"โปรต่อใบ: ระบบไม่หักให้อัตโนมัติ — กรอกส่วนลดในช่องด้านล่างเอง • ":""}{matchedAccum.length||walletItems.length?"โปรสะสม/wallet: ระบบจะหักให้อัตโนมัติเมื่อบันทึก SO":""}</div>
         </div>;
       })()}
       <div style={{background:"var(--bg)",borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:13}}>
@@ -167,6 +338,7 @@ function SOList({sh}){
           <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(sub)}</span></div>
           {payType==="cash"&&disc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+discPct+"%"}</span><span>{"-฿"+fmt(disc)}</span></div>}
           {ep>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+ep+"%"}</span><span>{"-฿"+fmt(extraDisc)}</span></div>}
+          {totalRewardDisc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:4}}><span>{"ส่วนลด (รางวัล)"+(prevRewPct>0?" "+prevRewPct+"%":"")}</span><span>{"-฿"+fmt(totalRewardDisc)}</span></div>}
           <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12,marginBottom:6}}><input type="checkbox" checked={incVat} onChange={e=>setIncVat(e.target.checked)}/>VAT 7%</label>
           {incVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4,fontSize:12}}><span>VAT</span><span>{"฿"+fmt(vatAmt)}</span></div>}
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15,borderTop:"1px solid var(--line)",paddingTop:8}}><span>ยอดสุทธิ</span><span style={{color:"var(--green)"}}>{"฿"+fmt(after)}</span></div>
@@ -206,7 +378,7 @@ function SOList({sh}){
     </div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
       <SB value={search} onChange={setSearch} placeholder="ค้นหา SO..."/>
-      {ed&&<Btn onClick={()=>{setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);oM("addSO");}}>{"+ สร้างใบขาย"}</Btn>}
+      {ed&&<Btn onClick={()=>{setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);resetPromoStates();oM("addSO");}}>{"+ สร้างใบขาย"}</Btn>}
     </div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
       {[["all","ทั้งหมด",stats.total],["pending_special_approval","รออนุมัติพิเศษ",stats.pendApv],["pending_delivery","รอจัดส่ง",stats.pend],["completed","ส่งแล้ว",stats.comp]].map(([k,lb,cnt])=>{

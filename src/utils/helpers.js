@@ -29,3 +29,49 @@ export const getNotifs = (products,sales,pos,payments,quotes) => {
   (quotes||[]).filter(q=>q.status==="sent"&&q.validUntil).forEach(q=>{const d=Math.floor((new Date(q.validUntil)-now)/864e5);if(d<0)n.push({type:"danger",icon:"QT",msg:q.qtNum+" หมดอายุ"});else if(d<=3)n.push({type:"warning",icon:"QT",msg:q.qtNum+" หมดอายุใน "+d+"d"});});
   return n;
 };
+
+// Promo helpers (accumulate mode) — sum ยอดสะสมของลูกค้าจาก SO ที่จัดส่ง/รอส่ง
+export const calcAccumulatedTotal = (customerId, promo, sales, products) => {
+  if (!promo || promo.mode !== "accumulate" || !customerId) return 0;
+  const validSOs = (sales||[]).filter(s =>
+    +s.customerId === +customerId &&
+    ["completed", "pending_delivery"].includes(s.status)
+  );
+  return validSOs.reduce((sum, so) => {
+    const matchItems = (so.items||[]).filter(it => {
+      const prod = (products||[]).find(p => p.id === +it.productId);
+      if (!prod) return false;
+      if ((promo.brands||[]).length && !promo.brands.includes(prod.brand)) return false;
+      if ((promo.categoryIds||[]).length && !promo.categoryIds.includes(prod.categoryId)) return false;
+      return true;
+    });
+    return sum + matchItems.reduce((s, it) =>
+      promo.measureBy === "qty" ? s + (+it.qty||0) : s + (+it.qty||0) * (+it.price||0)
+    , 0);
+  }, 0);
+};
+
+// คำนวณยอด match ของ items ใน SO ปัจจุบัน (สำหรับ accumulate mode — เพิ่มยอดสะสม)
+export const calcCurrentMatchTotal = (items, promo, products) => {
+  if (!promo) return 0;
+  const matchItems = (items||[]).filter(it => {
+    if (!it.productId || !(+it.qty>0)) return false;
+    const prod = (products||[]).find(p => p.id === +it.productId);
+    if (!prod) return false;
+    if ((promo.brands||[]).length && !promo.brands.includes(prod.brand)) return false;
+    if ((promo.categoryIds||[]).length && !promo.categoryIds.includes(prod.categoryId)) return false;
+    return true;
+  });
+  return matchItems.reduce((s, it) =>
+    promo.measureBy === "qty" ? s + (+it.qty||0) : s + (+it.qty||0) * (+it.price||0)
+  , 0);
+};
+
+// หา tier ที่ลูกค้าสามารถ claim ได้ (ครบขั้น + ยังไม่เคย claim)
+export const findClaimableTiers = (customer, promo, totalAccumulated) => {
+  const claimed = customer?.promoClaims?.[promo.id]?.claimedTierIds || [];
+  return (promo.tiers || [])
+    .filter(t => totalAccumulated >= t.threshold && !claimed.includes(t.id))
+    .slice()
+    .sort((a,b) => a.threshold - b.threshold);
+};
