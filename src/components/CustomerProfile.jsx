@@ -37,7 +37,7 @@ function getLast6Months() {
   });
 }
 
-export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, onClose }) {
+export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], onClose }) {
   const [tab, setTab] = useState("so");
 
   const custSales  = [...sales].filter(so => so.customerId === customer.id).reverse();
@@ -125,16 +125,17 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
       </div>
 
       {/* Stat cards */}
-      <div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+      <div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:16}}>
         <StatCard label="ยอดซื้อสะสม"    value={"฿"+fmt(totalRevenue)} color="var(--green)"/>
         <StatCard label="จำนวนใบขาย"     value={custSales.length}/>
         <StatCard label="ค้างชำระ"        value={"฿"+fmt(outstanding)} color={outstanding>0?"var(--red)":"var(--green)"}/>
         <StatCard label="ใบเสนอราคา"     value={custQuotes.length}/>
+        <StatCard label="รางวัลคงเหลือ"   value={(customer.savedRewards||[]).length} color={(customer.savedRewards||[]).length>0?"var(--purple)":"var(--dim)"}/>
       </div>
 
       {/* Sub-tabs */}
-      <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"2px solid var(--line)"}}>
-        {[["so","ใบขาย"],["qt","ใบเสนอราคา"],["pay","การชำระเงิน"],["summary","สรุป"]].map(([k,label])=>(
+      <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"2px solid var(--line)",flexWrap:"wrap"}}>
+        {[["so","ใบขาย"],["qt","ใบเสนอราคา"],["pay","การชำระเงิน"],["wallet","รางวัล"+((customer.savedRewards||[]).length>0?" ("+(customer.savedRewards).length+")":"")],["summary","สรุป"]].map(([k,label])=>(
           <button key={k} onClick={()=>setTab(k)} style={{padding:"8px 16px",fontSize:13,fontWeight:tab===k?600:400,border:"none",borderBottom:tab===k?"2px solid var(--text)":"2px solid transparent",marginBottom:"-2px",background:"transparent",cursor:"pointer",color:tab===k?"var(--text)":"var(--dim)",whiteSpace:"nowrap"}}>
             {label}
           </button>
@@ -225,6 +226,84 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
             </table>
           </div>
       )}
+
+      {/* Tab: รางวัล (wallet + claim history) */}
+      {tab==="wallet"&&(()=>{
+        const wallet=customer.savedRewards||[];
+        const claims=customer.promoClaims||{};
+        const rewardLbl=(t)=>{
+          if(!t)return"-";
+          if(t.rewardType==="percent")return"ลด "+t.rewardValue+"%";
+          if(t.rewardType==="fixed")return"ลด ฿"+fmt(t.rewardValue);
+          if(t.rewardType==="product"){const rp=products.find(x=>x.id===+t.rewardProductId);return"แถม "+(rp?pN(rp):"สินค้า");}
+          return"-";
+        };
+        const claimEntries=Object.entries(claims).map(([promoId,info])=>{
+          const promo=promos.find(p=>p.id===+promoId);
+          const tierDetails=(info.claimedTierIds||[]).map(tid=>{
+            const t=(promo?.tiers||[]).find(x=>x.id===tid);
+            return t?{tier:t,id:tid}:{tier:null,id:tid};
+          });
+          return{promoId:+promoId,promoName:promo?promo.name:"(โปรถูกลบแล้ว)",info,tierDetails};
+        }).filter(e=>e.tierDetails.length>0);
+
+        return <div>
+          {/* Wallet section */}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:10,color:"var(--purple)",display:"flex",alignItems:"center",gap:8}}>
+              <span>รางวัลที่ยังไม่ได้ใช้ ({wallet.length})</span>
+              <span style={{fontSize:11,color:"var(--dim)",fontWeight:400}}>ใช้ตอนสร้าง SO ใบใหม่ได้</span>
+            </div>
+            {wallet.length===0
+              ?<div style={{textAlign:"center",color:"var(--faint)",padding:"1.5rem",fontSize:13,background:"var(--bg)",borderRadius:8}}>ยังไม่มีรางวัลที่เก็บไว้</div>
+              :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+                {wallet.map(w=><div key={w.id} style={{background:"var(--panel)",border:"1px solid var(--purple)",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
+                    <div style={{fontSize:12,color:"var(--dim)"}}>จากโปร</div>
+                    <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"rgba(175,82,222,0.14)",color:"var(--purple)",fontWeight:600,whiteSpace:"nowrap"}}>คงเหลือ</span>
+                  </div>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:"var(--text)"}}>{w.promoName}</div>
+                  <div style={{background:"var(--bg)",borderRadius:6,padding:"8px 10px",marginBottom:8}}>
+                    <div style={{fontSize:11,color:"var(--dim)",marginBottom:2}}>รางวัล</div>
+                    <div style={{fontSize:14,fontWeight:600,color:"var(--green)"}}>{rewardLbl(w.tier)}</div>
+                    {w.tier&&w.tier.threshold>0&&<div style={{fontSize:10,color:"var(--faint)",marginTop:2}}>{"จากขั้น "+(w.tier.threshold>=1000?"฿"+fmt(w.tier.threshold):w.tier.threshold)}</div>}
+                  </div>
+                  <div style={{fontSize:11,color:"var(--faint)"}}>
+                    {"เก็บเมื่อ "+toBE(w.savedAt)}{w.savedFromSO&&" • จาก "+w.savedFromSO}
+                  </div>
+                </div>)}
+              </div>
+            }
+          </div>
+
+          {/* Claim history */}
+          <div>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:10,color:"var(--text)"}}>ประวัติการเคลม</div>
+            {claimEntries.length===0
+              ?<div style={{textAlign:"center",color:"var(--faint)",padding:"1.5rem",fontSize:13,background:"var(--bg)",borderRadius:8}}>ยังไม่เคยเคลมโปรโมชั่น</div>
+              :<div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
+                  <thead><tr style={{borderBottom:"1px solid var(--line)",background:"var(--bg)"}}>{["โปรโมชั่น","ขั้น/รางวัลที่เคลม","SO ล่าสุด","วันที่ล่าสุด"].map(thTd)}</tr></thead>
+                  <tbody>{claimEntries.map(e=>(
+                    <tr key={e.promoId} style={{borderBottom:"0.5px solid var(--line)"}}>
+                      <td style={{padding:"7px 8px",fontWeight:500}}>{e.promoName}</td>
+                      <td style={{padding:"7px 8px"}}>
+                        {e.tierDetails.map((td,i)=>(
+                          <span key={td.id+"-"+i} style={{display:"inline-block",fontSize:11,padding:"2px 7px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)",marginRight:4,marginBottom:3,fontWeight:500}}>
+                            {td.tier?rewardLbl(td.tier):"tier #"+td.id+" (ถูกลบ)"}
+                          </span>
+                        ))}
+                      </td>
+                      <td style={{padding:"7px 8px",color:"var(--blue)",fontSize:12}}>{e.info.lastClaimedSO||"-"}</td>
+                      <td style={{padding:"7px 8px",color:"var(--dim)",fontSize:12}}>{e.info.lastClaimedAt?toBE(e.info.lastClaimedAt):"-"}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </div>;
+      })()}
 
       {/* Tab: สรุป */}
       {tab==="summary"&&(

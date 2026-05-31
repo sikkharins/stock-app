@@ -622,7 +622,7 @@ export default function FinPage({sh}){
       </Modal>;
     })()}
 
-    {viewProfile&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} onClose={()=>setViewProfile(null)}/>}
+    {viewProfile&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={sh.promos||[]} onClose={()=>setViewProfile(null)}/>}
     {viewSupplier&&<SupplierProfile supplier={viewSupplier} pos={pos} payments={payments} products={products} pN={pN} cN={cN} onClose={()=>setViewSupplier(null)}/>}
 
     {modal==="addPay"&&ed&&<Modal title={(payForm.editId?"แก้ไขชำระ — ":sub==="ap"?"จ่าย — ":"รับ — ")+payForm.refId+" — "+(payForm.name||"")} onClose={cM}>

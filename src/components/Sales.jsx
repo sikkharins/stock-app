@@ -506,7 +506,7 @@ function SOList({sh}){
       </div>
       <MBtns onCancel={()=>setApproveSO(null)} onSave={()=>{setSales(p=>p.map(s=>s.id===so.id?{...s,status:"pending_delivery"}:s));addA("อนุมัติพิเศษ SO",so.soNum);setApproveSO(null);}} saveLabel="อนุมัติ"/>
     </Modal>;})()}
-    {viewProfile&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} onClose={()=>setViewProfile(null)}/>}
+    {viewProfile&&<CustomerProfile customer={viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={promos||[]} onClose={()=>setViewProfile(null)}/>}
   </div>;
 }
 
