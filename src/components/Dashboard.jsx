@@ -118,7 +118,6 @@ export default function DashPage({sh}){
     {(w("products")||w("stock_value")||w("sales_total")||w("profit"))&&
     <div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:14,marginBottom:"1.5rem"}}>
       {w("products")&&<StatCard label="สินค้า" value={myP.length} sub={myLS.length+" ต่ำกว่าขั้นต่ำ"} color="var(--blue)" accentBg="var(--blue-bg)"/>}
-      {w("stock_value")&&<StatCard label="มูลค่าสต็อก" value={"฿"+fmt(myTS)} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>}
       {w("sales_total")&&<StatCard label="ยอดขายรวม" value={"฿"+fmt(mySales)} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>}
       {w("profit")&&<StatCard label="กำไร" value={"฿"+fmt(profit)} color={profit>=0?"var(--green)":"var(--red)"} accentBg={profit>=0?"rgba(52,199,89,0.12)":"rgba(255,59,48,0.12)"}/>}
     </div>}
