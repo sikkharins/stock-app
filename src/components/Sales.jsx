@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -20,7 +20,7 @@ function SOList({sh}){
   const custs=contacts.filter(c=>c.type==="customer"&&(!isSU||c.salesPerson===isSU));
   const myCI=isSU?custs.map(c=>c.id):null;
 
-  const ef={customerId:"",date:todayStr(),items:[{productId:"",qty:1,price:0}],useVatRep:false,vatRepId:"",note:""};
+  const ef={customerId:"",date:todayStr(),items:[{productId:"",qty:1,price:0}],useVatRep:false,vatRepId:"",note:"",legacyNum:""};
   const[form,setForm]=useState(ef);const[viewSO,setViewSO]=useState(null);const[confirmSO,setConfirmSO]=useState(null);const[delSO,setDelSO]=useState(null);const[editSO,setEditSO]=useState(null);const[viewProfile,setViewProfile]=useState(null);const[fSt,setFSt]=useState("all");const[approveSO,setApproveSO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);
 
   const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId))return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
@@ -87,7 +87,7 @@ function SOList({sh}){
     const origPrices=items.map(i=>{const p=products.find(x=>x.id===i.productId);return p?+p.price:+i.price;});
     const priceChanged=baseItems.some((i,idx)=>{const p=products.find(x=>x.id===i.productId);return p&&+i.price!==+p.price;});
     const needsApproval=!hasApv&&(priceChanged||ep>0);
-    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||""};
+    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||"",legacyNum:form.legacyNum||""};
 
     // Update customer: claimedTierIds, savedRewards, savedFromSO
     let newSoNum="";
@@ -142,7 +142,7 @@ function SOList({sh}){
     const cust=contacts.find(c=>c.id===so.customerId);
     const reps=(cust&&cust.vatReps)||[];
     const matchRep=so.useVatRep&&so.vatRepName?reps.find(r=>r.name===so.vatRepName):null;
-    setForm({customerId:String(so.customerId),date:so.date,items:so.items.map(i=>({productId:String(i.productId),qty:i.qty,price:i.price})),useVatRep:!!so.useVatRep,vatRepId:matchRep?String(matchRep.id):"",note:so.note||""});
+    setForm({customerId:String(so.customerId),date:so.date,items:so.items.map(i=>({productId:String(i.productId),qty:i.qty,price:i.price})),useVatRep:!!so.useVatRep,vatRepId:matchRep?String(matchRep.id):"",note:so.note||"",legacyNum:so.legacyNum||""});
     setIncVat(so.includeVat!==false);setPayType(so.payType||"cash");setDiscPct(so.discPct||1);setCreditDays(so.creditDays||45);setExtraDiscPct(so.extraDiscPct?String(so.extraDiscPct):"");resetPromoStates();setEditSO(so);oM("editSO");
   };
 
@@ -178,7 +178,14 @@ function SOList({sh}){
     return <div>
       <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <Field label="ลูกค้า"><CustomSelect searchable value={form.customerId} onChange={v=>setCust(v)} options={[{value:"",label:"เลือก..."},...custs.map(c=>({value:String(c.id),label:cN(c)}))]}/></Field>
-        <Field label="วันที่"><ThaiDateInput value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
+        <Field label="วันที่"><ThaiDateInput value={form.date} onChange={e=>{const newDate=e.target.value;setForm(f=>{const {prefix:oldPx,suffix}=splitLegacyNum(f.legacyNum);const newPx=legacyPrefix(newDate);const newLN=(oldPx===newPx||!f.legacyNum)?(newPx+suffix):(newPx+suffix);return{...f,date:newDate,legacyNum:newLN};});}}/></Field>
+      </div>
+      <div style={{marginBottom:12}}>
+        <Field label="เลข SO ระบบเก่า (อ้างอิง)"><div style={{display:"flex",alignItems:"center",gap:6,background:"var(--bg2)",border:"1px solid var(--line)",borderRadius:7,padding:"3px 10px"}}>
+          <span style={{fontSize:13,color:"var(--dim)",fontFamily:"monospace",whiteSpace:"nowrap"}}>{splitLegacyNum(form.legacyNum||legacyPrefix(form.date)).prefix}</span>
+          <input value={splitLegacyNum(form.legacyNum||legacyPrefix(form.date)).suffix} onChange={e=>{const s=e.target.value.replace(/[^0-9]/g,"").slice(0,3);setForm(f=>({...f,legacyNum:legacyPrefix(f.date)+s}));}} placeholder="001" maxLength={3} style={{flex:1,minWidth:0,border:"none",background:"transparent",color:"var(--text)",fontSize:13,fontFamily:"monospace",outline:"none",padding:"4px 0"}}/>
+          <span style={{fontSize:10,color:"var(--faint)",whiteSpace:"nowrap"}}>เติมเลข 3 หลัก เช่น 001</span>
+        </div></Field>
       </div>
       {renderItems(exId)}
       <button onClick={addItem} style={{fontSize:12,padding:"5px 10px",borderRadius:6,border:"0.5px solid var(--line)",cursor:"pointer",background:"transparent",marginBottom:12}}>{"+ เพิ่ม"}</button>
@@ -389,10 +396,13 @@ function SOList({sh}){
     <div style={{overflowX:"auto"}}><table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}><thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{["SO No.","ลูกค้า","วันที่","รวม","เงื่อนไข","VAT Rep","สถานะ",""].map((h,i)=><th key={i} style={{textAlign:"left",padding:"8px 6px",fontWeight:500,color:"var(--dim)"}}>{h}</th>)}</tr></thead>
     <tbody>{filtered.map(so=>{const cust=contacts.find(c=>c.id===so.customerId);return <tr key={so.id} style={{borderBottom:"0.5px solid var(--line)"}}>
       <td style={{padding:"8px 6px",fontWeight:500}}>
-        <span onClick={()=>{setViewSO(so);oM("viewSO");}} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{cursor:"pointer",color:"var(--blue)"}}>{so.soNum}</span>
-        {so.fromQuote&&<span style={{fontSize:10,background:"rgba(175,82,222,0.12)",color:"var(--purple)",borderRadius:4,padding:"1px 6px",marginLeft:6,fontWeight:500}}>{so.fromQuote}</span>}
-        {so.dropShip&&<span style={{fontSize:10,background:"rgba(10,132,255,0.12)",color:"var(--blue)",borderRadius:4,padding:"1px 6px",marginLeft:6,fontWeight:500}}>{"ส่งนอกสถานที่"}</span>}
-        {so.linkedPO&&<span onClick={e=>{e.stopPropagation();sh.handleTab("purchase");sh.setSearch(so.linkedPO);}} style={{fontSize:10,background:"rgba(255,149,0,0.12)",color:"var(--orange)",borderRadius:4,padding:"1px 6px",marginLeft:4,fontWeight:500,cursor:"pointer"}}>{"← "+so.linkedPO}</span>}
+        <div>
+          <span onClick={()=>{setViewSO(so);oM("viewSO");}} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{cursor:"pointer",color:"var(--blue)"}}>{so.soNum}</span>
+          {so.fromQuote&&<span style={{fontSize:10,background:"rgba(175,82,222,0.12)",color:"var(--purple)",borderRadius:4,padding:"1px 6px",marginLeft:6,fontWeight:500}}>{so.fromQuote}</span>}
+          {so.dropShip&&<span style={{fontSize:10,background:"rgba(10,132,255,0.12)",color:"var(--blue)",borderRadius:4,padding:"1px 6px",marginLeft:6,fontWeight:500}}>{"ส่งนอกสถานที่"}</span>}
+          {so.linkedPO&&<span onClick={e=>{e.stopPropagation();sh.handleTab("purchase");sh.setSearch(so.linkedPO);}} style={{fontSize:10,background:"rgba(255,149,0,0.12)",color:"var(--orange)",borderRadius:4,padding:"1px 6px",marginLeft:4,fontWeight:500,cursor:"pointer"}}>{"← "+so.linkedPO}</span>}
+        </div>
+        {so.legacyNum&&<div style={{fontSize:11,color:"var(--dim)",fontFamily:"monospace",marginTop:2,fontWeight:400}}>{so.legacyNum}</div>}
       </td>
       <td style={{padding:"8px 6px"}}>{cust?<span onClick={()=>setViewProfile(cust)} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{cursor:"pointer",color:"var(--blue)"}}>{cN(cust)}</span>:"-"}</td>
       <td style={{padding:"8px 6px",color:"var(--dim)"}}>{toBE(so.date)}</td>
@@ -488,7 +498,7 @@ function SOList({sh}){
     </Modal>}
     {approveSO&&(()=>{const so=approveSO;const cust=contacts.find(c=>c.id===so.customerId);const aSub=so.items.reduce((s,i)=>s+i.qty*i.price,0);const aDisc=so.discPct?round2(aSub*so.discPct/100):0;const aExtra=(so.extraDiscPct||0)>0?round2(aSub*so.extraDiscPct/100):0;const aVat=so.includeVat?round2((aSub-aDisc-aExtra)*7/107):0;const aTotal=aSub-aDisc-aExtra+aVat;const hasChanges=(so.origPrices||[]).some((op,i)=>so.items[i]&&+so.items[i].price!==+op)||(so.extraDiscPct||0)>0;return<Modal title="ยืนยันอนุมัติ" onClose={()=>setApproveSO(null)}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div><div style={{fontWeight:700,fontSize:15}}>{so.soNum}</div><div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{cust?cN(cust):"-"}{" — "+toBE(so.date)}</div></div>
+        <div><div style={{fontWeight:700,fontSize:15}}>{so.soNum}{so.legacyNum&&<span style={{fontSize:11,color:"var(--dim)",fontFamily:"monospace",marginLeft:8,fontWeight:400}}>{"("+so.legacyNum+")"}</span>}</div><div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{cust?cN(cust):"-"}{" — "+toBE(so.date)}</div></div>
         <Badge status={so.status}/>
       </div>
       {hasChanges&&<div style={{background:"rgba(175,82,222,0.12)",border:"1.5px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12}}>

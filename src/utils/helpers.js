@@ -5,6 +5,10 @@ export const round2 = n => Math.round((+n + Number.EPSILON) * 100) / 100;
 export const todayStr = () => {const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
 export const nowStr = () => {const d=new Date();return String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+(d.getFullYear()+543)+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");};
 export const toBE = d => {if(!d)return"-";const p=(d||"").split("-");if(p.length!==3)return d;return p[2]+"/"+p[1]+"/"+(+p[0]+543);};
+// Legacy SO No. prefix — format "IV{YYYY}/{MM}" based on date string "YYYY-MM-DD"
+export const legacyPrefix = (dateStr) => {const s=dateStr||todayStr();const[y,m]=s.split("-");return "IV"+(y||"")+"/"+(m||"");};
+// Split full legacyNum "IV2026/05003" → {prefix:"IV2026/05", suffix:"003"}
+export const splitLegacyNum = (full) => {const m=(full||"").match(/^(IV\d{4}\/\d{2})(.*)$/);return m?{prefix:m[1],suffix:m[2]}:{prefix:full||"",suffix:""};};
 export const fmtD = s => {if(!s||s==="-")return"-";if(s.includes("-")&&s.split("-").length===3)return toBE(s);const[datePart,timePart]=(s+" ").split(" ");const dp=datePart.split("/");if(dp.length===3){let y=+dp[2];if(y<100)y+=2500;dp[0]=dp[0].padStart(2,"0");dp[1]=dp[1].padStart(2,"0");return dp[0]+"/"+dp[1]+"/"+y+(timePart.trim()?" "+timePart.trim():"");}return s;};
 export const mkLog = (pid,type,qty,before,after,ref,note,user) => ({id:Date.now()+Math.random(),date:nowStr(),productId:+pid,type,qty:+qty,qtyBefore:+before,qtyAfter:+after,ref:ref||"-",note:note||"",user:user||"system"});
 export const mkAudit = (action,detail,user) => ({id:Date.now()+Math.random(),date:nowStr(),action,detail,user:user||"system"});
