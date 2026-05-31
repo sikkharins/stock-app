@@ -15,7 +15,7 @@ import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 import QuotesPage from "./Quotes.jsx";
 
 function SOList({sh}){
-  const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques}=sh;
+  const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques,promos=[]}=sh;
   const ed=canC("sales");const cd=canD("sales");const isSU=cu.role==="SalesManager"?"":cu.salesName||"";
   const custs=contacts.filter(c=>c.type==="customer"&&(!isSU||c.salesPerson===isSU));
   const myCI=isSU?custs.map(c=>c.id):null;
@@ -103,6 +103,61 @@ function SOList({sh}){
       </div>
       {renderItems(exId)}
       <button onClick={addItem} style={{fontSize:12,padding:"5px 10px",borderRadius:6,border:"0.5px solid var(--line)",cursor:"pointer",background:"transparent",marginBottom:12}}>{"+ เพิ่ม"}</button>
+      {(()=>{
+        const today=todayStr();
+        const activePromos=(promos||[]).filter(p=>p.active&&p.startDate<=today&&(!p.endDate||p.endDate>=today));
+        const itemsWithProd=form.items.filter(it=>it.productId&&+it.qty>0).map(it=>({...it,prod:products.find(x=>x.id===+it.productId)})).filter(it=>it.prod);
+        const matched=activePromos.map(p=>{
+          const matching=itemsWithProd.filter(it=>{
+            if((p.brands||[]).length&&!p.brands.includes(it.prod.brand))return false;
+            if((p.categoryIds||[]).length&&!p.categoryIds.includes(it.prod.categoryId))return false;
+            return true;
+          });
+          if(!matching.length)return null;
+          const totalVal=p.measureBy==="qty"?matching.reduce((s,it)=>s+(+it.qty||0),0):matching.reduce((s,it)=>s+(+it.qty||0)*(+it.price||0),0);
+          const tiers=(p.tiers||[]).slice().sort((a,b)=>a.threshold-b.threshold);
+          const eligible=tiers.filter(t=>totalVal>=t.threshold);
+          const bestTier=eligible.length?eligible[eligible.length-1]:null;
+          const nextTier=tiers.find(t=>totalVal<t.threshold);
+          return{promo:p,total:totalVal,bestTier,nextTier,matchCount:matching.length};
+        }).filter(Boolean);
+        if(!matched.length)return null;
+        const rewardLbl=(t,p)=>{
+          if(!t)return"";
+          if(t.rewardType==="percent")return"ลด "+t.rewardValue+"%";
+          if(t.rewardType==="fixed")return"ลด ฿"+fmt(t.rewardValue);
+          if(t.rewardType==="product"){const rp=products.find(x=>x.id===+t.rewardProductId);return"แถม "+(rp?pN(rp):"สินค้า")}
+          return"";
+        };
+        const unitOf=p=>p.measureBy==="qty"?" ชิ้น":"";
+        const fmtVal=(v,p)=>p.measureBy==="qty"?v+" ชิ้น":"฿"+fmt(v);
+        return <div style={{background:"linear-gradient(135deg,rgba(175,82,222,0.08),rgba(0,113,227,0.08))",border:"1px solid rgba(175,82,222,0.3)",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,fontSize:13,fontWeight:600,color:"var(--purple)"}}>
+            <span style={{fontSize:16}}>🎁</span><span>โปรโมชั่นที่ใช้ได้ ({matched.length})</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {matched.map(m=>{
+              const savings=m.bestTier&&m.bestTier.rewardType==="percent"?round2(m.total*m.bestTier.rewardValue/100):m.bestTier&&m.bestTier.rewardType==="fixed"?m.bestTier.rewardValue:0;
+              const pct=m.bestTier?Math.min(100,Math.round(m.total/m.bestTier.threshold*100)):m.nextTier?Math.min(100,Math.round(m.total/m.nextTier.threshold*100)):0;
+              return <div key={m.promo.id} style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:6}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{m.promo.name}</div>
+                    <div style={{fontSize:11,color:"var(--dim)",marginTop:2}}>{"จับคู่ "+m.matchCount+" รายการ • "+fmtVal(m.total,m.promo)}</div>
+                  </div>
+                  {m.bestTier?<span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"rgba(52,199,89,0.14)",color:"var(--green)",fontWeight:600,whiteSpace:"nowrap"}}>✓ {rewardLbl(m.bestTier,m.promo)}</span>:<span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontWeight:600,whiteSpace:"nowrap"}}>ยังไม่ถึงขั้น</span>}
+                </div>
+                {m.bestTier&&savings>0&&<div style={{fontSize:11,color:"var(--green)",fontWeight:500,marginBottom:6}}>{"💰 ประหยัด ฿"+fmt(savings)}</div>}
+                {m.nextTier&&<div style={{fontSize:11,color:"var(--dim)",marginBottom:6}}>{"ขั้นถัดไป: "+fmtVal(m.nextTier.threshold,m.promo)+" → "+rewardLbl(m.nextTier,m.promo)+" (ขาดอีก "+fmtVal(m.nextTier.threshold-m.total,m.promo)+")"}</div>}
+                <div style={{height:4,background:"var(--hover)",borderRadius:99,overflow:"hidden"}}>
+                  <div style={{height:"100%",background:m.bestTier?"var(--green)":"var(--orange)",width:pct+"%",transition:"width 0.3s"}}/>
+                </div>
+              </div>;
+            })}
+          </div>
+          <div style={{fontSize:11,color:"var(--dim)",marginTop:10,fontStyle:"italic"}}>💡 ระบบไม่หักให้อัตโนมัติ — กรอกส่วนลดในช่องด้านล่างเอง</div>
+        </div>;
+      })()}
       <div style={{background:"var(--bg)",borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:13}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["cash","เงินสด"],["credit","เครดิต"]].map(v=><label key={v[0]} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(payType===v[0]?"var(--green)":"var(--line)"),cursor:"pointer",background:payType===v[0]?"rgba(52,199,89,0.12)":"var(--panel)"}}><input type="radio" name="pt" checked={payType===v[0]} onChange={()=>setPayType(v[0])}/><span style={{fontWeight:500,color:payType===v[0]?"var(--green)":"var(--text)"}}>{v[1]}</span></label>)}</div>
         {payType==="cash"&&<div style={{marginBottom:12}}><div style={{fontSize:12,fontWeight:500,marginBottom:6}}>ส่วนลด</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{DISC_OPTS.map(d=><button key={d} onClick={()=>setDiscPct(d)} style={{padding:"5px 14px",borderRadius:99,border:"1.5px solid "+(discPct===d?"var(--green)":"var(--line)"),background:discPct===d?"rgba(52,199,89,0.12)":"var(--panel)",color:discPct===d?"var(--green)":"var(--dim)",cursor:"pointer",fontSize:12}}>{d===0?"ไม่ลด":d+"%"}</button>)}</div></div>}
