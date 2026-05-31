@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import StatCard from "./ui/StatCard.jsx";
 import StockValueDonut from "./ui/StockValueDonut.jsx";
+import SalesAreaChart from "./ui/SalesAreaChart.jsx";
 import { fmt, toBE } from "../utils/helpers.js";
 import { MOVE_TYPES, ALL_WIDGET_KEYS } from "../utils/constants.js";
 
@@ -123,6 +124,8 @@ export default function DashPage({sh}){
     </div>}
 
     {w("stock_value")&&myTS>0&&<StockValueDonut products={myP} cats={cats} theme={theme}/>}
+
+    {!isSup&&w("sales_chart")&&<div style={{marginTop:"1.5rem",marginBottom:"1.5rem"}}><SalesAreaChart sales={myS} pos={pos} theme={theme}/></div>}
 
     {w("low_stock")&&myLS.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",marginBottom:"1.5rem",boxShadow:"var(--shadow)"}}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
