@@ -39,6 +39,7 @@ const KEY_MAP = {
   v3_defectives: "defectives",
   v3_supcnotes: "supcnotes",
   v3_promos: "promos",
+  v3_events: "events",
   v3_bot_config: "bot_config",
 };
 
