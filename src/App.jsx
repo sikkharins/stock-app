@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { ALL_TABS, TAB_LABELS, IB } from "./utils/constants.js";
 import { getNotifs, mkAudit, nowStr, todayStr, round2 } from "./utils/helpers.js";
-import { loadData, saveData, loadAllFromSupabase, saveAllToSupabase, subscribeRealtime, unsubscribeRealtime } from "./utils/storage.js";
+import { loadData, saveData, loadAllFromSupabase, saveAllToSupabase, subscribeRealtime, unsubscribeRealtime, getRemoteMaxUpdate } from "./utils/storage.js";
 import { signIn, signOut, getSession, getProfile, getAllProfiles, migrateUsers } from "./utils/auth.js";
 import { initProducts, initContacts, initPOs, initSales, initCats, initBrands, initUsers, initQuotes, initTargets } from "./data/initData.js";
 import { THEME_CSS } from "./styles/theme.js";
@@ -238,20 +238,55 @@ export default function App(){
   },[]);
 
   const pendingSaveRef=useRef(null);
+  const lastSavedTsRef=useRef(Date.now());
   useEffect(()=>{if(!loaded)return;
     const allEntries=[["v3_products",products],["v3_contacts",contacts],["v3_pos",pos],["v3_sales",sales],["v3_cats",cats],["v3_brands",brands],["v3_logs",logs],["v3_payments",payments],["v3_activity",actLogs],["v3_quotes",quotes],["v3_targets",targets],["v3_audit",audit],["v3_pricehist",priceHist],["v3_cheques",cheques],["v3_bankaccs",bankAccs],["v3_banktxns",bankTxns],["v3_cnotes",cnotes],["v3_billings",billings],["v3_defectives",defectives],["v3_supcnotes",supCNotes],["v3_promos",promos],["v3_events",events]];
     pendingSaveRef.current=allEntries;
-    setSaving(true);const tm=setTimeout(()=>{
+    setSaving(true);const tm=setTimeout(async()=>{
+    // Conflict detection: only check if last save > 60s ago (skip on rapid edits)
+    if(Date.now()-lastSavedTsRef.current>60000&&!reloadingRef.current){
+      const remoteTs=await getRemoteMaxUpdate(cuRef.current?.id);
+      // If remote has updates by another user newer than our last save → conflict! Reload instead of overwriting
+      if(remoteTs&&remoteTs>lastSavedTsRef.current+5000){
+        console.warn("Conflict detected — remote has newer data, reloading instead of saving");
+        reloadingRef.current=true;
+        try{const d=await loadAllFromSupabase();if(d)applyData(d,false);}catch(e){console.warn("Reload-on-conflict failed:",e.message);}
+        finally{reloadingRef.current=false;}
+        lastSavedTsRef.current=Date.now();
+        pendingSaveRef.current=null;
+        setSaving(false);
+        return;
+      }
+    }
     const now=Date.now();const skipTs={...realtimeSkipRef.current};
     allEntries.forEach(([k,v])=>saveData(k,v));
     const entries=allEntries.filter(([k])=>{const sbKey=k.replace("v3_","");const ts=skipTs[sbKey];if(ts&&now-ts<2000)return false;delete realtimeSkipRef.current[sbKey];return true;});
     if(entries.length>0)saveAllToSupabase(entries,cuRef.current?.id).catch(e=>console.warn("Supabase save error:",e.message));
+    lastSavedTsRef.current=Date.now();
     pendingSaveRef.current=null;
     setSaving(false);
   },800);return()=>clearTimeout(tm);},[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
 
   const hiddenAtRef=useRef(null);
   const reloadingRef=useRef(false);
+  const openedAtRef=useRef(Date.now());
+  const[staleWarn,setStaleWarn]=useState(false);
+  const doManualReload=useCallback(async()=>{
+    if(reloadingRef.current)return;
+    reloadingRef.current=true;
+    try{const d=await loadAllFromSupabase();if(d)applyData(d,false);}catch(e){console.warn("Manual reload failed:",e.message);}
+    finally{reloadingRef.current=false;}
+    openedAtRef.current=Date.now();
+    lastSavedTsRef.current=Date.now();
+    setStaleWarn(false);
+  },[]);
+  useEffect(()=>{
+    const t=setInterval(()=>{
+      // Warn if app has been open > 1 hour without reload
+      if(Date.now()-openedAtRef.current>60*60*1000)setStaleWarn(true);
+    },60*1000);
+    return()=>clearInterval(t);
+  },[]);
   useEffect(()=>{
     const flush=()=>{if(pendingSaveRef.current){const pend=pendingSaveRef.current;pend.forEach(([k,v])=>saveData(k,v));saveAllToSupabase(pend,cuRef.current?.id).catch(()=>{});}};
     const onVis=async()=>{
@@ -269,6 +304,9 @@ export default function App(){
             if(d)applyData(d,false);
           }catch(e){console.warn("Visibility reload failed:",e.message);}
           finally{reloadingRef.current=false;}
+          openedAtRef.current=Date.now();
+          lastSavedTsRef.current=Date.now();
+          setStaleWarn(false);
         }
       }
     };
@@ -296,7 +334,14 @@ export default function App(){
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
-    <style>{THEME_CSS+"\n@keyframes ptr-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}\n@keyframes fab-pop{0%{opacity:0;transform:translateY(8px) scale(0.9)}100%{opacity:1;transform:translateY(0) scale(1)}}\n"}</style>
+    <style>{THEME_CSS+"\n@keyframes ptr-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}\n@keyframes fab-pop{0%{opacity:0;transform:translateY(8px) scale(0.9)}100%{opacity:1;transform:translateY(0) scale(1)}}\n@keyframes stale-slide{0%{transform:translateY(-100%)}100%{transform:translateY(0)}}\n"}</style>
+    {staleWarn&&<div style={{position:"fixed",top:0,left:0,right:0,background:"var(--orange)",color:"#fff",padding:"10px 16px",zIndex:99998,display:"flex",alignItems:"center",justifyContent:"center",gap:12,flexWrap:"wrap",fontSize:13,boxShadow:"0 2px 8px rgba(0,0,0,0.18)",animation:"stale-slide 0.3s ease-out"}}>
+      <span style={{fontWeight:500}}>⚠️ แอปเปิดมานานเกิน 1 ชั่วโมง — แนะนำให้ reload เพื่อ sync ข้อมูลใหม่</span>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={doManualReload} style={{padding:"5px 14px",borderRadius:6,border:"1px solid rgba(255,255,255,0.6)",background:"#fff",color:"var(--orange)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Reload ทันที</button>
+        <button onClick={()=>{openedAtRef.current=Date.now()-30*60*1000;setStaleWarn(false);}} style={{padding:"5px 14px",borderRadius:6,border:"1px solid rgba(255,255,255,0.6)",background:"transparent",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>เตือนใน 30 นาที</button>
+      </div>
+    </div>}
     <div className="app-shell" style={{display:"grid",gridTemplateColumns:"240px 1fr",gridTemplateRows:"52px 1fr",minHeight:"100vh",background:"var(--bg)",color:"var(--text)"}}>
 
       {/* Sidebar */}

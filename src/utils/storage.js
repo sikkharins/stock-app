@@ -94,6 +94,24 @@ export const saveAllToSupabase = async (entries, userId) => {
 // Reverse map: Supabase key → localStorage key
 const SB_TO_LS = Object.fromEntries(Object.entries(KEY_MAP).map(([ls, sb]) => [sb, ls]));
 
+// Get max remote updated_at (excluding updates by own user) — for conflict detection
+export const getRemoteMaxUpdate = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from("app_data")
+      .select("updated_at, updated_by")
+      .order("updated_at", { ascending: false })
+      .limit(5);
+    if (error || !data?.length) return null;
+    for (const row of data) {
+      if (row.updated_by !== userId) {
+        return new Date(row.updated_at).getTime();
+      }
+    }
+    return null;
+  } catch { return null; }
+};
+
 // Realtime subscription
 let realtimeChannel = null;
 
