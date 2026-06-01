@@ -245,8 +245,8 @@ export default function App(){
     setSaving(true);const tm=setTimeout(async()=>{
     // Conflict detection: only check if last save > 60s ago (skip on rapid edits)
     if(Date.now()-lastSavedTsRef.current>60000&&!reloadingRef.current){
-      const remoteTs=await getRemoteMaxUpdate(cuRef.current?.id);
-      // If remote has updates by another user newer than our last save → conflict! Reload instead of overwriting
+      const remoteTs=await getRemoteMaxUpdate();
+      // If remote is newer than our last known save (+5s tolerance for own write echo) → conflict! Reload instead of overwriting
       if(remoteTs&&remoteTs>lastSavedTsRef.current+5000){
         console.warn("Conflict detected — remote has newer data, reloading instead of saving");
         reloadingRef.current=true;

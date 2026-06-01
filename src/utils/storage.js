@@ -94,21 +94,18 @@ export const saveAllToSupabase = async (entries, userId) => {
 // Reverse map: Supabase key → localStorage key
 const SB_TO_LS = Object.fromEntries(Object.entries(KEY_MAP).map(([ls, sb]) => [sb, ls]));
 
-// Get max remote updated_at (excluding updates by own user) — for conflict detection
-export const getRemoteMaxUpdate = async (userId) => {
+// Get max remote updated_at (ANY user/device) — for conflict detection
+// We don't filter by userId because same user across devices/tabs would be missed.
+// The 5-second tolerance in caller handles legitimate own-tab writes.
+export const getRemoteMaxUpdate = async () => {
   try {
     const { data, error } = await supabase
       .from("app_data")
-      .select("updated_at, updated_by")
+      .select("updated_at")
       .order("updated_at", { ascending: false })
-      .limit(5);
+      .limit(1);
     if (error || !data?.length) return null;
-    for (const row of data) {
-      if (row.updated_by !== userId) {
-        return new Date(row.updated_at).getTime();
-      }
-    }
-    return null;
+    return new Date(data[0].updated_at).getTime();
   } catch { return null; }
 };
 
