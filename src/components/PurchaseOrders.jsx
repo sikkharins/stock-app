@@ -229,7 +229,7 @@ export default function POPage({sh}){
       </div>
       {form.items.map((item,idx)=><div key={idx} style={{marginBottom:10,padding:"10px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)"}}>
         <div className="item-form-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,alignItems:"center"}}>
-          <CustomSelect searchable value={item.productId} onChange={v=>setIt(idx,"productId",v)} options={[{value:"",label:"เลือกสินค้า..."},...(()=>{const sup=contacts.find(c=>c.id===+form.supplierId);const lb=sup&&sup.linkedBrands&&sup.linkedBrands.length>0?sup.linkedBrands:null;return(lb?products.filter(pr=>lb.includes(pr.brand)):products).map(pr=>({value:String(pr.id),label:pr.brand+" — "+pN(pr),searchText:pr.code||""}));})()]}/>
+          <CustomSelect searchable value={item.productId} onChange={v=>setIt(idx,"productId",v)} options={[{value:"",label:"เลือกสินค้า..."},...(()=>{const sup=contacts.find(c=>c.id===+form.supplierId);const lb=sup&&sup.linkedBrands&&sup.linkedBrands.length>0?sup.linkedBrands:null;const base=lb?products.filter(pr=>lb.includes(pr.brand)):products;return base.filter(pr=>!pr.discontinued||+item.productId===pr.id).map(pr=>({value:String(pr.id),label:pr.brand+" — "+pN(pr),searchText:pr.code||""}));})()]}/>
           <input type="number" min="1" placeholder="Qty" value={item.qty} onChange={e=>setIt(idx,"qty",e.target.value)} style={IB}/>
           <input type="number" min="0" placeholder="ราคา/หน่วย" value={item.cost} onChange={e=>setIt(idx,"cost",e.target.value)} style={IB}/>
           <span onClick={()=>rmItem(idx)} style={{cursor:"pointer",color:"var(--red)",fontSize:20}}>{"×"}</span>

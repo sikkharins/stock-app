@@ -153,7 +153,7 @@ export default function QuotesPage({sh}){
     const sel = item.productId ? products.find(x=>x.id===+item.productId) : null;
     return <div key={idx} style={{marginBottom:10,padding:"10px 12px",background:"var(--bg)",borderRadius:8,border:"1.5px solid var(--line)"}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8,alignItems:"start",marginBottom:8}}>
-        <ProductPicker value={item.productId} onChange={v=>setIt(idx,"productId",v)} products={products} pName={pN} avail={sel?sel.stock:0} unit={sel?sel.unit:""}/>
+        <ProductPicker value={item.productId} onChange={v=>setIt(idx,"productId",v)} products={products.filter(p=>!p.discontinued||+item.productId===p.id)} pName={pN} avail={sel?sel.stock:0} unit={sel?sel.unit:""}/>
         <span onClick={()=>rmItem(idx)} style={{cursor:"pointer",color:"var(--red)",fontSize:20,paddingTop:6}}>{"×"}</span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
