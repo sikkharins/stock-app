@@ -380,6 +380,10 @@ export default function App(){
           </div>
           <span onClick={handleLogout} style={{color:"var(--dim)",cursor:"pointer",fontSize:14,flexShrink:0}} title="ออกจากระบบ">⏻</span>
         </div>
+        <div title={"Build: "+__BUILD_TIME__} style={{fontSize:10,color:"var(--faint)",textAlign:"center",padding:"6px 4px 2px",fontFamily:"monospace",cursor:"help"}}>
+          {__APP_VERSION__}
+          <div style={{fontSize:9,marginTop:1}}>{__BUILD_TIME__.slice(0,16).replace("T"," ")}</div>
+        </div>
       </aside>
 
       {/* Topbar */}

@@ -5,7 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   Object.assign(process.env, env)
+  const buildTime = new Date().toISOString();
   return {
+  define: {
+    __BUILD_TIME__: JSON.stringify(buildTime),
+    __APP_VERSION__: JSON.stringify("v1.5.0-sync-protection"),
+  },
   build: {
     rollupOptions: {
       output: {
