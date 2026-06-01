@@ -250,11 +250,31 @@ export default function App(){
     setSaving(false);
   },800);return()=>clearTimeout(tm);},[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
 
+  const hiddenAtRef=useRef(null);
+  const reloadingRef=useRef(false);
   useEffect(()=>{
     const flush=()=>{if(pendingSaveRef.current){const pend=pendingSaveRef.current;pend.forEach(([k,v])=>saveData(k,v));saveAllToSupabase(pend,cuRef.current?.id).catch(()=>{});}};
+    const onVis=async()=>{
+      if(document.visibilityState==="hidden"){
+        hiddenAtRef.current=Date.now();
+        flush();
+      }else if(document.visibilityState==="visible"){
+        const wasHidden=hiddenAtRef.current;
+        hiddenAtRef.current=null;
+        // If hidden > 5 minutes → reload from server to avoid pushing stale in-memory data
+        if(wasHidden&&Date.now()-wasHidden>5*60*1000&&!reloadingRef.current){
+          reloadingRef.current=true;
+          try{
+            const d=await loadAllFromSupabase();
+            if(d)applyData(d,false);
+          }catch(e){console.warn("Visibility reload failed:",e.message);}
+          finally{reloadingRef.current=false;}
+        }
+      }
+    };
     window.addEventListener("beforeunload",flush);
-    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")flush();});
-    return()=>{window.removeEventListener("beforeunload",flush);};
+    document.addEventListener("visibilitychange",onVis);
+    return()=>{window.removeEventListener("beforeunload",flush);document.removeEventListener("visibilitychange",onVis);};
   },[]);
 
   useEffect(()=>{
