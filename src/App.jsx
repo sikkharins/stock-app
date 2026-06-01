@@ -56,6 +56,9 @@ function LoginScreen({users,onLogin}){
     <div style={{marginBottom:20}}><Field label="Password"><input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&go()} style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field></div>
     {err&&<div style={{fontSize:13,color:"var(--red)",marginBottom:12,textAlign:"center"}}>{err}</div>}
     <button onClick={go} disabled={loading} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:loading?"var(--dim)":"var(--blue)",color:"#fff",fontWeight:500,fontSize:14,cursor:loading?"default":"pointer",fontFamily:"inherit"}}>{loading?"กำลังเข้าสู่ระบบ...":"เข้าสู่ระบบ"}</button>
+    <div title={"Build: "+__BUILD_TIME__} style={{fontSize:10,color:"var(--faint)",textAlign:"center",marginTop:18,fontFamily:"monospace",cursor:"help"}}>
+      {__APP_VERSION__} · {__BUILD_TIME__.slice(0,16).replace("T"," ")}
+    </div>
   </div></div>;
 }
 
