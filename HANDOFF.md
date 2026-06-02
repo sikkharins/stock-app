@@ -1,6 +1,6 @@
 # TS Electronic Stock App — Engineering Handoff
 
-**Document version:** 2.0
+**Document version:** 2.1
 **Last updated:** 2026-06-02
 **Audience:** Incoming developer / maintainer
 
@@ -38,7 +38,7 @@
 | State | `useState` + lift via `sh` prop | No Redux/Zustand |
 | Backend | Supabase (`@supabase/supabase-js`) | Single table `app_data` (key/jsonb) |
 | Auth | Supabase Auth | Username/password; profile stored in users array |
-| Storage | localStorage + Supabase sync | Bulk JSON arrays per "key" (e.g. `v3_products`) |
+| Storage | localStorage + Supabase sync | JSON array per "key" (e.g. `v3_products`); per-key optimistic locking via `version` column |
 | Charts | Custom SVG (no chart library deps) | Donut, AreaChart |
 | Build | Vite | `npm run build` → `dist/` |
 | Hosting | Vercel | Auto-deploy on git push to `main` |
@@ -307,8 +307,15 @@ table app_data:
   key text PRIMARY KEY,     -- e.g. "products", "sales", "events"
   data jsonb,                -- entire array as one JSON blob
   updated_at timestamptz,
-  updated_by text             -- user id
+  updated_by text,            -- user id
+  version integer NOT NULL DEFAULT 0   -- optimistic-lock counter (added 2026-06-02)
 ```
+
+> ⚠ **Prerequisite for the optimistic-sync code:** the `version` column must exist. If it is missing, `loadAllFromSupabase()` (which selects `version`) errors and the app falls back to **localStorage only** — no Supabase load or save. Run once in the Supabase SQL editor:
+> ```sql
+> ALTER TABLE app_data ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 0;
+> ```
+> This is additive and safe to run before deploying the new client.
 
 `KEY_MAP` translates localStorage keys to Supabase keys:
 ```js
@@ -322,34 +329,47 @@ const KEY_MAP = {
 
 > ⚠ **Critical:** When adding a new state array in `App.jsx`, you MUST add its mapping to `KEY_MAP`. Missing entries silently skip sync to Supabase. (Encountered this bug with `v3_events` — see Section 9.)
 
-### Save flow
-1. State change triggers `useEffect` in `App.jsx` (line ~241)
-2. Debounce 800ms
-3. `saveData(key, value)` writes to localStorage
-4. `saveAllToSupabase(entries, userId)` upserts to Supabase
+### Save flow — diff-only + per-key optimistic locking (rewritten 2026-06-02)
+The autosave `useEffect` in `App.jsx` no longer pushes all 22 arrays. Per debounce (800ms):
+1. Compute **dirty keys** — `JSON.stringify(current[key]) !== lastSyncedJsonRef[key]`. Only changed arrays proceed.
+2. Each dirty key is written to localStorage, then saved independently via `saveKeyWithMerge(sbKey, value)`.
+3. `saveKeyWithMerge` calls `saveKeyOptimistic(sbKey, value, expectedVersion, userId)` which does a **conditional UPDATE** (`where key=? AND version=?`, `version → version+1`). This is an atomic compare-and-set at the DB.
+4. On success → bump `versionsRef[key]` and reset the baseline (`lastSyncedValRef`/`lastSyncedJsonRef`).
+5. On **conflict** (no row matched the expected version) → `getRow()` refetches the remote row, then `mergeForKey(sbKey, base, mine, remote)` 3-way merges by record id, the merged result is pushed to state, the baseline is adopted from remote, and the save **retries** (up to 5 attempts).
+
+Key refs: `versionsRef` (per-key version), `lastSyncedValRef` (per-key base = last value in sync with server), `lastSyncedJsonRef` (per-key serialized base for diffing).
+
+### Merge layer (`utils/merge.js` — new 2026-06-02)
+Pure, unit-tested (`node src/utils/merge.test.mjs`, 13 cases). `mergeByKey(base, mine, remote, keyOf)` rules:
+- in **mine & remote**: if I didn't change it but remote did → take remote; else local wins.
+- in **mine only**: honor a remote delete only if I never touched it; else keep mine (insert/edit).
+- in **remote only**: honor my delete only if remote never touched it; else keep remote.
+
+`eq` is an **order-insensitive deepEqual** (jsonb round-trips reorder object keys, so plain `JSON.stringify` would mis-flag edits). `MERGE_CFG` sets `keyOf` per table (`activity` → `userId|loginTime`, `logs` → id-or-composite) and caps (`audit`/`pricehist` 500, `activity` 200).
 
 ### Load flow
-1. On mount, `loadAllFromSupabase()` fetches all rows
-2. `applyData(d, fallbackLS)` populates state
-3. If Supabase row missing for a key, falls back to localStorage (if `fallbackLS=true`)
+1. On mount, `loadAllFromSupabase()` → `{ values:{sbKey:data}, versions:{sbKey:version} }` (selects `key, data, version`).
+2. `applyData(values, fallbackLS)` populates state **and returns** the applied (deduped/normalized) values.
+3. `seedSync(applied, versions)` seeds `lastSyncedVal/Json` + `versionsRef` so the first autosave sees nothing dirty.
+4. If a Supabase row is missing for a key, falls back to localStorage (when `fallbackLS=true`). If the whole load throws (e.g. missing `version` column), falls back to localStorage and seeds versions at 0.
 
 ### Realtime subscription
 ```js
-subscribeRealtime(userId, onUpdate)
+subscribeRealtime(userId, (sbKey, data, version) => ...)
 ```
-Listens to UPDATE events on `app_data`. Skips own updates (`updated_by === userId`). Re-saves to localStorage and calls per-key setter via `RT_SETTERS.current`.
+Listens to **all** events (`*`, catches INSERT for first-time keys) on `app_data`. Skips own updates (`updated_by === userId`). The handler updates `versionsRef`/`lastSyncedVal`/`lastSyncedJson` for that key (prevents a false conflict on the next save) and calls the per-key setter via `RT_SETTERS.current`.
 
-### Conflict detection (added 2026-06-01)
-Before each autosave, if last save was > 60s ago, query `getRemoteMaxUpdate()` — returns max `updated_at` across all rows. If remote > local `lastSavedTsRef + 5s`, the save is **skipped and a reload is triggered instead**. Prevents stale tabs from overwriting newer data.
+### Reload path (`reloadFromServer`)
+Manual reload button, pull-to-refresh, the stale-warning **Reload now** button, and the >5-min visibility reload all route through `reloadFromServer()`: `loadAllFromSupabase` → `applyData` → `seedSync`. Guarded by `reloadingRef` so concurrent reloads can't stack.
 
-### Visibility-based reload (added 2026-06-01)
-When tab becomes visible after being hidden > 5 minutes, automatically reload from Supabase. Resets `openedAtRef` and `lastSavedTsRef`.
+### Visibility-based reload
+When the tab becomes visible after being hidden > 5 minutes, `reloadFromServer()` runs (merge-safe baseline reset) and resets `openedAtRef`.
 
-### Stale-tab warning (added 2026-06-01)
-A `setInterval` fires every minute. If `Date.now() - openedAtRef > 1 hour`, shows an orange banner at top with **Reload now** / **Snooze 30 min** buttons.
+### Stale-tab warning
+A `setInterval` fires every minute. If `Date.now() - openedAtRef > 1 hour`, shows an orange banner at top with **Reload now** / **Snooze 30 min** buttons. Kept as a secondary safety net.
 
-### `beforeunload` flush
-On page unload, any pending save is flushed synchronously (best-effort).
+### `beforeunload` / hidden flush
+On unload or tab-hide, the in-flight save batch (`pendingSaveRef`) is best-effort flushed: written to localStorage (sync) + fire-and-forget `saveKeyOptimistic` (version-guarded, so a stale write fails the version check instead of clobbering). Not awaited; the load-time merge is the real safety net.
 
 ---
 
@@ -398,24 +418,26 @@ CSS variables defined on `<html data-theme="...">` via a `<style>` tag injected 
 
 ## 9. Known Issues & Watch-outs
 
-### A. Bulk-save concurrency
-The autosave pushes **all 22 arrays** in one upsert. With multiple devices on the same account, a stale tab can wipe newer data when it triggers a save. Mitigated by:
-- Conflict detection (Section 6)
-- Visibility reload
-- Stale warning banner
+### A. Bulk-save concurrency — FIXED 2026-06-02
+**Previously:** the autosave pushed **all 22 arrays** in one upsert, so a stale tab could wipe newer data (last-writer-wins at the array level), and a reload-on-conflict path could silently drop unsaved edits.
 
-**Long-term fix recommendation:** Move to per-row updates with version timestamps, or implement CRDT-style merging. See Section 12.
+**Now:** diff-only writes (only changed arrays save) + per-key optimistic locking on the `version` column (atomic compare-and-set) + 3-way merge-by-id on conflict (`utils/merge.js`). Concurrent insert/insert and stale-edit-vs-newer-data no longer silently overwrite. See Section 6 "Save flow".
+
+**Remaining accepted edge case:** if one device **deletes** a record while another **edits the same record** concurrently, the merge keeps the remote version (to avoid data loss) — i.e. the delete is effectively reverted. Rare in practice because the app mostly uses status flags, not hard deletes.
+
+> Requires the `version` column (Section 6 prerequisite). Deploy the new client to all devices together (single Vercel deploy) so no old/new client mix.
 
 ### B. `KEY_MAP` discipline
-Every new state must be added to:
+Every new synced state array must be added to:
 1. `useState` in `App.jsx`
-2. `allEntries` autosave array
-3. `applyData` setter call
-4. `KEY_MAP` in `storage.js`
-5. `RT_SETTERS` for realtime
-6. useEffect dep array
+2. `applyData` — `out.<sbKey>=g(...);set...(out.<sbKey>)` (must set on `out` so `seedSync` baselines it)
+3. autosave `current={...}` map (key = sbKey, e.g. `pricehist:priceHist`)
+4. autosave `useEffect` dep array
+5. `KEY_MAP` in `storage.js`
+6. `RT_SETTERS`/`getSetters` for realtime
+7. `MERGE_CFG` in `utils/merge.js` (default `keyOf=r=>r.id`; add a custom `keyOf`/`cap` if records have no `id` or the list is capped)
 
-Missing any of these causes silent data loss.
+Missing #2/#3 → the key never diffs or never baselines (silent no-sync or false-conflict loops). Missing #5/#6/#7 → silent data loss / merge by wrong key.
 
 ### C. `Set` and `Map` in state
 Components like `Products.jsx` use `Set` for bulk selection (`sel = useState(new Set())`). When toggling, you must create a new `Set` (not mutate).
@@ -463,6 +485,7 @@ Vercel serverless functions check env keys but don't authenticate users. Anyone 
 | 2026-06 | Sync protection (KEY_MAP, conflict detection, visibility reload, stale warning) | `utils/storage.js`, `App.jsx` |
 | 2026-06 | Discontinued product flag | `Products.jsx`, `Sales.jsx`, `PurchaseOrders.jsx`, `Quotes.jsx` |
 | 2026-06 | Version indicator in sidebar + login | `vite.config.js`, `App.jsx` |
+| 2026-06-02 | Per-key optimistic sync: diff-only writes + `version` column + 3-way merge-on-conflict (fixes §9.A data loss) | `utils/storage.js`, `utils/merge.js` (+`merge.test.mjs`), `App.jsx`; **requires `version` column** |
 
 ---
 
@@ -496,9 +519,10 @@ Push to `main` branch on GitHub → Vercel auto-deploys (preset project).
 
 ### Supabase setup
 1. Project `ts-electronics-stock` in Singapore region (Pro plan)
-2. Table `app_data` (key text PK, data jsonb, updated_at timestamptz, updated_by text)
-3. Realtime enabled on `app_data` for UPDATE events
-4. RLS: should be locked to authenticated users. **Verify before further deploy.**
+2. Table `app_data` (key text PK, data jsonb, updated_at timestamptz, updated_by text, **version integer NOT NULL DEFAULT 0**)
+   - If migrating an existing project, run once: `ALTER TABLE app_data ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 0;` (see Section 6 — required by the optimistic-sync client).
+3. Realtime enabled on `app_data` for all events (INSERT + UPDATE)
+4. RLS: should be locked to authenticated users. **Verify before further deploy.** Note: the optimistic save relies on `update(...).eq("version",...).select("version")` returning the affected row — confirm RLS allows the authenticated `UPDATE ... RETURNING`.
 
 ### Daily backup recommendations
 1. **Supabase**: Pro plan includes 7-day daily backups. Optionally enable PITR (extra cost ~$30/mo) for granular recovery.
@@ -510,11 +534,10 @@ Push to `main` branch on GitHub → Vercel auto-deploys (preset project).
 ## 12. Recommended Next Work
 
 ### Stability / data integrity
-1. **Per-row sync** — Replace bulk array upsert with diff-based per-record save. Eliminates last-writer-wins by saving only changed records.
-2. **Version stamps** — Add `_version: number` to each entity. Reject saves where `client_version < server_version`.
-3. **Optimistic locking** — Show conflict UI to user instead of silent reload.
-4. **Soft delete** — Add `deletedAt` instead of array filter; preserve audit.
-5. **Backups on schedule** — Add a button that auto-exports JSON to the user's `Downloads/` daily.
+1. ~~**Per-row sync** + **version stamps** + **optimistic locking**~~ — **DONE 2026-06-02** at the *array* level: diff-only writes, per-key `version` compare-and-set, 3-way merge-on-conflict (§6, §9.A). Remaining: push down to **per-record** rows (Level 3) — a real per-record table + `version`/`updated_at` per row would also fix the concurrent delete-vs-edit edge case and remove whole-array reads/writes.
+2. **Conflict UI** — Current merge is silent (and safe). Optionally surface a non-blocking toast/diff when a merge-retry happens, so users know remote changes were folded in.
+3. **Soft delete** — Add `deletedAt` instead of array filter; preserve audit (also makes delete-vs-edit deterministic in the merge).
+4. **Backups on schedule** — Add a button that auto-exports JSON to the user's `Downloads/` daily.
 
 ### Performance
 1. **Pagination / virtualization** — Sales list, Stock log, Activity log get heavy. Use `react-virtual` or similar.

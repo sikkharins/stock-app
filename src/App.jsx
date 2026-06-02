@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { ALL_TABS, TAB_LABELS, IB } from "./utils/constants.js";
 import { getNotifs, mkAudit, nowStr, todayStr, round2 } from "./utils/helpers.js";
-import { loadData, saveData, loadAllFromSupabase, saveAllToSupabase, subscribeRealtime, unsubscribeRealtime, getRemoteMaxUpdate } from "./utils/storage.js";
+import { loadData, saveData, loadAllFromSupabase, saveKeyOptimistic, subscribeRealtime, unsubscribeRealtime } from "./utils/storage.js";
+import { mergeForKey } from "./utils/merge.js";
 import { signIn, signOut, getSession, getProfile, getAllProfiles, migrateUsers } from "./utils/auth.js";
 import { initProducts, initContacts, initPOs, initSales, initCats, initBrands, initUsers, initQuotes, initTargets } from "./data/initData.js";
 import { THEME_CSS } from "./styles/theme.js";
@@ -35,6 +36,7 @@ const NAV_SECTIONS=[
   {label:{th:"วางแผน",en:"Planning"},tabs:["financial_calendar"]},
   {label:{th:"ระบบ",en:"System"},tabs:["users"]},
 ];
+const INIT_BANKACCS=[{id:1,name:"บัญชี 1",bank:"กสิกรไทย",accNo:""},{id:2,name:"บัญชี 2",bank:"ไทยพาณิชย์",accNo:""},{id:3,name:"บัญชี 3",bank:"TTB",accNo:""}];
 
 function LoginScreen({users,onLogin}){
   const[un,setUn]=useState("");const[pw,setPw]=useState("");const[err,setErr]=useState("");const[loading,setLoading]=useState(false);
@@ -70,7 +72,7 @@ export default function App(){
   const[logs,setLogs]=useState([]);const[payments,setPayments]=useState([]);
   const[quotes,setQuotes]=useState(initQuotes);const[targets,setTargets]=useState(initTargets);
   const[audit,setAudit]=useState([]);const[priceHist,setPriceHist]=useState([]);
-  const[cheques,setCheques]=useState([]);const[bankAccs,setBankAccs]=useState([{id:1,name:"บัญชี 1",bank:"กสิกรไทย",accNo:""},{id:2,name:"บัญชี 2",bank:"ไทยพาณิชย์",accNo:""},{id:3,name:"บัญชี 3",bank:"TTB",accNo:""}]);const[bankTxns,setBankTxns]=useState([]);
+  const[cheques,setCheques]=useState([]);const[bankAccs,setBankAccs]=useState(INIT_BANKACCS);const[bankTxns,setBankTxns]=useState([]);
   const[cnotes,setCNotes]=useState([]);
   const[billings,setBillings]=useState([]);
   const[defectives,setDefectives]=useState([]);
@@ -98,14 +100,20 @@ export default function App(){
   const onFabPointerUp=useCallback(()=>{const d=fabDrag.current;d.dragging=false;if(d.moved&&fabPos.x!=null){const sz=fabSizeRef.current;const snapX=fabPos.x<window.innerWidth/2?8:window.innerWidth-sz-8;const snapped={x:snapX,y:fabPos.y};setFabPos(snapped);localStorage.setItem("fab_pos",JSON.stringify(snapped));}resetFabIdle();},[fabPos,resetFabIdle]);
   useEffect(()=>{window.addEventListener("mousemove",onFabPointerMove);window.addEventListener("mouseup",onFabPointerUp);window.addEventListener("touchmove",onFabPointerMove,{passive:false});window.addEventListener("touchend",onFabPointerUp);return()=>{window.removeEventListener("mousemove",onFabPointerMove);window.removeEventListener("mouseup",onFabPointerUp);window.removeEventListener("touchmove",onFabPointerMove);window.removeEventListener("touchend",onFabPointerUp);};},[onFabPointerMove,onFabPointerUp]);
   const[pullY,setPullY]=useState(0);const[refreshing,setRefreshing]=useState(false);const pullStart=useRef(null);const mainRef=useRef(null);
-  const doRefresh=useCallback(async()=>{setRefreshing(true);try{const sbData=await loadAllFromSupabase();if(sbData)applyData(sbData,false);}catch(e){console.warn("Refresh error:",e.message);}setRefreshing(false);setPullY(0);},[]);
+  const doRefresh=useCallback(async()=>{setRefreshing(true);await reloadFromServer();setRefreshing(false);setPullY(0);},[]);
   const onTouchStart=useCallback(e=>{if(mainRef.current&&mainRef.current.scrollTop<=0)pullStart.current=e.touches[0].clientY;else pullStart.current=null;},[]);
   const onTouchMove=useCallback(e=>{if(pullStart.current===null||refreshing)return;const dy=e.touches[0].clientY-pullStart.current;if(dy>0&&mainRef.current&&mainRef.current.scrollTop<=0){setPullY(Math.min(dy*0.4,80));if(dy>10)e.preventDefault();}else setPullY(0);},{refreshing});
   const onTouchEnd=useCallback(()=>{if(pullY>=60&&!refreshing)doRefresh();else setPullY(0);pullStart.current=null;},[pullY,refreshing,doRefresh]);
   const[sideOpen,setSideOpen]=useState(false);
-  const realtimeSkipRef=useRef({});
   const cuRef=useRef(cu);
   useEffect(()=>{cuRef.current=cu;},[cu]);
+  const versionsRef=useRef({});
+  const lastSyncedValRef=useRef({});
+  const lastSyncedJsonRef=useRef({});
+  const pendingSaveRef=useRef(null);
+  const reloadingRef=useRef(false);
+  const openedAtRef=useRef(Date.now());
+  const hiddenAtRef=useRef(null);
 
   // Back button handler — prevent accidental app close (AssistiveTouch style)
   const[exitConfirm,setExitConfirm]=useState(false);
@@ -154,9 +162,13 @@ export default function App(){
   useEffect(()=>{
     if(!cu)return;
     const setters=getSetters();
-    subscribeRealtime(cu.id,(sbKey,data)=>{
+    subscribeRealtime(cu.id,(sbKey,data,version)=>{
       const setter=setters[sbKey];
-      if(setter){realtimeSkipRef.current[sbKey]=Date.now();setter(data);}
+      if(!setter)return;
+      versionsRef.current[sbKey]=version;
+      lastSyncedValRef.current[sbKey]=data;
+      lastSyncedJsonRef.current[sbKey]=JSON.stringify(data);
+      setter(data);
     });
     return()=>{unsubscribeRealtime();RT_SETTERS.current=null;};
   },[cu,getSetters]);
@@ -174,48 +186,101 @@ export default function App(){
   const notifs=getNotifs(products,sales,pos,payments,quotes);
 
   const applyData=(d,fallbackLS)=>{
+    const out={};
     const g=(sbKey,lsKey,fb)=>{const v=d?.[sbKey];const raw=(v!=null)?v:fallbackLS?loadData(lsKey,fb):fb;return Array.isArray(fb)?(Array.isArray(raw)?raw:fb):raw;};
-    const rawP=g("products","v3_products",initProducts);const seenP=new Set();setProducts(rawP.filter(p=>{if(seenP.has(p.id))return false;seenP.add(p.id);return true;}));
-    setContacts(g("contacts","v3_contacts",initContacts));
-    setPOs(g("pos","v3_pos",initPOs));
-    setSales(g("sales","v3_sales",initSales));
-    setCats(g("cats","v3_cats",initCats));
-    setBrands(g("brands","v3_brands",initBrands));
+    const rawP=g("products","v3_products",initProducts);const seenP=new Set();out.products=rawP.filter(p=>{if(seenP.has(p.id))return false;seenP.add(p.id);return true;});setProducts(out.products);
+    out.contacts=g("contacts","v3_contacts",initContacts);setContacts(out.contacts);
+    out.pos=g("pos","v3_pos",initPOs);setPOs(out.pos);
+    out.sales=g("sales","v3_sales",initSales);setSales(out.sales);
+    out.cats=g("cats","v3_cats",initCats);setCats(out.cats);
+    out.brands=g("brands","v3_brands",initBrands);setBrands(out.brands);
     const rawLogs=g("logs","v3_logs",[]).filter(l=>l.qtyBefore!==undefined);
-    const seen=new Set();setLogs(rawLogs.filter(l=>{const k=l.date+"|"+l.type+"|"+l.productId+"|"+l.ref+"|"+l.qty;if(seen.has(k))return false;seen.add(k);return true;}));
-    setPayments(g("payments","v3_payments",[]));
-    setActLogs(g("activity","v3_activity",[]));
-    setQuotes(g("quotes","v3_quotes",initQuotes));
-    setTargets(g("targets","v3_targets",initTargets));
-    setAudit(g("audit","v3_audit",[]));
-    setPriceHist(g("pricehist","v3_pricehist",[]));
-    setCheques(g("cheques","v3_cheques",[]));
-    setBankAccs(prev=>{const saved=g("bankaccs","v3_bankaccs",null);return saved||prev;});
-    setBankTxns(g("banktxns","v3_banktxns",[]));
-    setCNotes(g("cnotes","v3_cnotes",[]));
-    setBillings(g("billings","v3_billings",[]));
-    setSupCNotes(g("supcnotes","v3_supcnotes",[]));
-    setPromos(g("promos","v3_promos",[]));
-    setEvents(g("events","v3_events",[]));
-    setDefectives(g("defectives","v3_defectives",[]).map(d=>{
+    const seen=new Set();out.logs=rawLogs.filter(l=>{const k=l.date+"|"+l.type+"|"+l.productId+"|"+l.ref+"|"+l.qty;if(seen.has(k))return false;seen.add(k);return true;});setLogs(out.logs);
+    out.payments=g("payments","v3_payments",[]);setPayments(out.payments);
+    out.activity=g("activity","v3_activity",[]);setActLogs(out.activity);
+    out.quotes=g("quotes","v3_quotes",initQuotes);setQuotes(out.quotes);
+    out.targets=g("targets","v3_targets",initTargets);setTargets(out.targets);
+    out.audit=g("audit","v3_audit",[]);setAudit(out.audit);
+    out.pricehist=g("pricehist","v3_pricehist",[]);setPriceHist(out.pricehist);
+    out.cheques=g("cheques","v3_cheques",[]);setCheques(out.cheques);
+    out.bankaccs=g("bankaccs","v3_bankaccs",INIT_BANKACCS);setBankAccs(out.bankaccs);
+    out.banktxns=g("banktxns","v3_banktxns",[]);setBankTxns(out.banktxns);
+    out.cnotes=g("cnotes","v3_cnotes",[]);setCNotes(out.cnotes);
+    out.billings=g("billings","v3_billings",[]);setBillings(out.billings);
+    out.supcnotes=g("supcnotes","v3_supcnotes",[]);setSupCNotes(out.supcnotes);
+    out.promos=g("promos","v3_promos",[]);setPromos(out.promos);
+    out.events=g("events","v3_events",[]);setEvents(out.events);
+    out.defectives=g("defectives","v3_defectives",[]).map(d=>{
       if(d.status==="cn_created"||d.status==="cn_used")return{...d,custStatus:d.status,status:d.custStatus||"pending_inspection"};
       return d;
-    }));
+    });setDefectives(out.defectives);
+    return out;
+  };
+
+  // Seed the sync baseline (base value + version) for each key after a load/reload.
+  const seedSync=(applied,versions)=>{
+    const v=versions||{};
+    for(const k of Object.keys(applied)){
+      lastSyncedValRef.current[k]=applied[k];
+      lastSyncedJsonRef.current[k]=JSON.stringify(applied[k]);
+      versionsRef.current[k]=v[k]??0;
+    }
+  };
+
+  // Pull fresh server state, apply to UI, and reset the sync baseline.
+  const reloadFromServer=async()=>{
+    if(reloadingRef.current)return;
+    reloadingRef.current=true;
+    try{
+      const{values,versions}=await loadAllFromSupabase();
+      const applied=applyData(values,false);
+      seedSync(applied,versions);
+    }catch(e){console.warn("Reload failed:",e.message);}
+    finally{reloadingRef.current=false;}
+  };
+
+  // Save one key with optimistic locking; on conflict, 3-way merge against the
+  // freshly-fetched remote and retry. Never silently drops a local insert/edit.
+  const saveKeyWithMerge=async(sbKey,value,valueJson,attempt=0)=>{
+    const expected=versionsRef.current[sbKey]??0;
+    let res;
+    try{res=await saveKeyOptimistic(sbKey,value,expected,cuRef.current?.id);}
+    catch(e){console.warn("Save threw:",sbKey,e.message);return;}
+    if(res?.ok){
+      versionsRef.current[sbKey]=res.version;
+      lastSyncedValRef.current[sbKey]=value;
+      lastSyncedJsonRef.current[sbKey]=valueJson??JSON.stringify(value);
+      return;
+    }
+    if(res?.conflict){
+      const base=lastSyncedValRef.current[sbKey];
+      const merged=mergeForKey(sbKey,base,value,res.remoteData);
+      // Adopt remote as the new base, then push the merged result on top.
+      lastSyncedValRef.current[sbKey]=res.remoteData;
+      lastSyncedJsonRef.current[sbKey]=JSON.stringify(res.remoteData);
+      versionsRef.current[sbKey]=res.remoteVersion;
+      const setter=getSetters()[sbKey];
+      if(setter)setter(merged);
+      if(attempt<5)return saveKeyWithMerge(sbKey,merged,JSON.stringify(merged),attempt+1);
+      console.warn("Sync merge retry limit reached:",sbKey);
+      return;
+    }
+    if(res?.error)console.warn("Save error:",sbKey,res.error);
   };
 
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
       try{
-        const sbData=await loadAllFromSupabase();
-        if(!cancelled)applyData(sbData,true);
+        const{values,versions}=await loadAllFromSupabase();
+        if(!cancelled){const applied=applyData(values,true);seedSync(applied,versions);}
 
         let profiles=[];
         try{profiles=await getAllProfiles();}catch(e){console.warn("Profile load:",e.message);}
 
         if(profiles.length===0){
-          const appUsers=sbData?.users||loadData("v3_users",initUsers);
-          const appContacts=sbData?.contacts||loadData("v3_contacts",initContacts);
+          const appUsers=values?.users||loadData("v3_users",initUsers);
+          const appContacts=values?.contacts||loadData("v3_contacts",initContacts);
           if(appUsers&&appUsers.length>0){
             console.log("Migrating users to Supabase Auth...");
             const results=await migrateUsers(appUsers,appContacts);
@@ -233,54 +298,37 @@ export default function App(){
         }
       }catch(e){
         console.warn("Load error:",e.message);
-        if(!cancelled)applyData(null,true);
+        if(!cancelled){const applied=applyData(null,true);seedSync(applied,{});}
       }
       if(!cancelled)setLoaded(true);
     })();
     return()=>{cancelled=true;};
   },[]);
 
-  const pendingSaveRef=useRef(null);
-  const lastSavedTsRef=useRef(Date.now());
+  // Autosave: write only the arrays that actually changed (diff vs last-synced),
+  // each as an independent optimistic-locked row save with merge-on-conflict.
   useEffect(()=>{if(!loaded)return;
-    const allEntries=[["v3_products",products],["v3_contacts",contacts],["v3_pos",pos],["v3_sales",sales],["v3_cats",cats],["v3_brands",brands],["v3_logs",logs],["v3_payments",payments],["v3_activity",actLogs],["v3_quotes",quotes],["v3_targets",targets],["v3_audit",audit],["v3_pricehist",priceHist],["v3_cheques",cheques],["v3_bankaccs",bankAccs],["v3_banktxns",bankTxns],["v3_cnotes",cnotes],["v3_billings",billings],["v3_defectives",defectives],["v3_supcnotes",supCNotes],["v3_promos",promos],["v3_events",events]];
-    pendingSaveRef.current=allEntries;
-    setSaving(true);const tm=setTimeout(async()=>{
-    // Conflict detection: only check if last save > 60s ago (skip on rapid edits)
-    if(Date.now()-lastSavedTsRef.current>60000&&!reloadingRef.current){
-      const remoteTs=await getRemoteMaxUpdate();
-      // If remote is newer than our last known save (+5s tolerance for own write echo) → conflict! Reload instead of overwriting
-      if(remoteTs&&remoteTs>lastSavedTsRef.current+5000){
-        console.warn("Conflict detected — remote has newer data, reloading instead of saving");
-        reloadingRef.current=true;
-        try{const d=await loadAllFromSupabase();if(d)applyData(d,false);}catch(e){console.warn("Reload-on-conflict failed:",e.message);}
-        finally{reloadingRef.current=false;}
-        lastSavedTsRef.current=Date.now();
-        pendingSaveRef.current=null;
-        setSaving(false);
-        return;
+    const current={products,contacts,pos,sales,cats,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events};
+    setSaving(true);
+    const tm=setTimeout(async()=>{
+      const dirty=[];
+      for(const k in current){
+        const v=current[k];const js=JSON.stringify(v);
+        if(js!==lastSyncedJsonRef.current[k]){dirty.push([k,v,js]);saveData("v3_"+k,v);}
       }
-    }
-    const now=Date.now();const skipTs={...realtimeSkipRef.current};
-    allEntries.forEach(([k,v])=>saveData(k,v));
-    const entries=allEntries.filter(([k])=>{const sbKey=k.replace("v3_","");const ts=skipTs[sbKey];if(ts&&now-ts<2000)return false;delete realtimeSkipRef.current[sbKey];return true;});
-    if(entries.length>0)saveAllToSupabase(entries,cuRef.current?.id).catch(e=>console.warn("Supabase save error:",e.message));
-    lastSavedTsRef.current=Date.now();
-    pendingSaveRef.current=null;
-    setSaving(false);
-  },800);return()=>clearTimeout(tm);},[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
+      pendingSaveRef.current=dirty.map(([k,v])=>[k,v]);
+      if(dirty.length===0){setSaving(false);return;}
+      try{await Promise.all(dirty.map(([k,v,js])=>saveKeyWithMerge(k,v,js)));}
+      catch(e){console.warn("Autosave error:",e.message);}
+      pendingSaveRef.current=null;setSaving(false);
+    },800);
+    return()=>clearTimeout(tm);
+  },[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
 
-  const hiddenAtRef=useRef(null);
-  const reloadingRef=useRef(false);
-  const openedAtRef=useRef(Date.now());
   const[staleWarn,setStaleWarn]=useState(false);
   const doManualReload=useCallback(async()=>{
-    if(reloadingRef.current)return;
-    reloadingRef.current=true;
-    try{const d=await loadAllFromSupabase();if(d)applyData(d,false);}catch(e){console.warn("Manual reload failed:",e.message);}
-    finally{reloadingRef.current=false;}
+    await reloadFromServer();
     openedAtRef.current=Date.now();
-    lastSavedTsRef.current=Date.now();
     setStaleWarn(false);
   },[]);
   useEffect(()=>{
@@ -291,7 +339,16 @@ export default function App(){
     return()=>clearInterval(t);
   },[]);
   useEffect(()=>{
-    const flush=()=>{if(pendingSaveRef.current){const pend=pendingSaveRef.current;pend.forEach(([k,v])=>saveData(k,v));saveAllToSupabase(pend,cuRef.current?.id).catch(()=>{});}};
+    // Best-effort flush of an in-flight save batch: persist to localStorage (sync)
+    // and fire-and-forget an optimistic save (version-guarded, so it can't clobber).
+    const flush=()=>{
+      const pend=pendingSaveRef.current;
+      if(!pend)return;
+      pend.forEach(([k,v])=>{
+        saveData("v3_"+k,v);
+        saveKeyOptimistic(k,v,versionsRef.current[k]??0,cuRef.current?.id).catch(()=>{});
+      });
+    };
     const onVis=async()=>{
       if(document.visibilityState==="hidden"){
         hiddenAtRef.current=Date.now();
@@ -299,16 +356,10 @@ export default function App(){
       }else if(document.visibilityState==="visible"){
         const wasHidden=hiddenAtRef.current;
         hiddenAtRef.current=null;
-        // If hidden > 5 minutes → reload from server to avoid pushing stale in-memory data
-        if(wasHidden&&Date.now()-wasHidden>5*60*1000&&!reloadingRef.current){
-          reloadingRef.current=true;
-          try{
-            const d=await loadAllFromSupabase();
-            if(d)applyData(d,false);
-          }catch(e){console.warn("Visibility reload failed:",e.message);}
-          finally{reloadingRef.current=false;}
+        // If hidden > 5 minutes → reload from server (merge-safe) before trusting in-memory data.
+        if(wasHidden&&Date.now()-wasHidden>5*60*1000){
+          await reloadFromServer();
           openedAtRef.current=Date.now();
-          lastSavedTsRef.current=Date.now();
           setStaleWarn(false);
         }
       }
@@ -401,7 +452,7 @@ export default function App(){
           <GlobalSearch products={products} sales={sales} quotes={quotes} pos={pos} contacts={contacts} pN={pN} cN={cN} cu={cu} canA={canA} onNavigate={(t,s)=>{handleTab(t);setSearch(s);}}/>
         </div>
         <div className="topbar-actions" style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
-          <button onClick={async()=>{setSaving(true);try{const d=await loadAllFromSupabase();applyData(d,false);}catch(e){console.warn("Reload error:",e.message);}setSaving(false);}} style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--dim)",cursor:"pointer",background:"none",border:"none",fontSize:15}} title="โหลดข้อมูลใหม่">↻</button>
+          <button onClick={async()=>{setSaving(true);await reloadFromServer();setSaving(false);}} style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--dim)",cursor:"pointer",background:"none",border:"none",fontSize:15}} title="โหลดข้อมูลใหม่">↻</button>
           {saving?<span style={{fontSize:11,color:"var(--dim)"}}>...</span>:<span style={{fontSize:11,color:"var(--green)"}}>OK</span>}
           <div style={{position:"relative"}}>
             <button onClick={()=>setShowNotif(!showNotif)} style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--dim)",cursor:"pointer",background:"none",border:"none",fontSize:15}}>N{notifs.length>0&&<span style={{position:"absolute",top:4,right:5,width:7,height:7,borderRadius:"50%",background:"var(--red)"}}/>}</button>

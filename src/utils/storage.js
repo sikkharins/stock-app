@@ -43,70 +43,74 @@ const KEY_MAP = {
   v3_bot_config: "bot_config",
 };
 
-// Load all data from Supabase in one query (with 5s timeout)
+// Reverse map: Supabase key → localStorage key
+const SB_TO_LS = Object.fromEntries(Object.entries(KEY_MAP).map(([ls, sb]) => [sb, ls]));
+
+// Load all data + per-key version in one query (with 5s timeout).
+// Returns { values: {sbKey: data}, versions: {sbKey: version} }.
 export const loadAllFromSupabase = async () => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
     const { data, error } = await supabase
       .from("app_data")
-      .select("key, data")
+      .select("key, data, version")
       .abortSignal(controller.signal);
     clearTimeout(timer);
     if (error) throw error;
-    const result = {};
+    const values = {};
+    const versions = {};
     (data || []).forEach((row) => {
-      result[row.key] = row.data;
+      values[row.key] = row.data;
+      versions[row.key] = row.version ?? 0;
     });
-    return result;
+    return { values, versions };
   } catch (e) {
     clearTimeout(timer);
     throw e;
   }
 };
 
-// Save one key to Supabase
-export const saveToSupabase = async (lsKey, value, userId) => {
-  const sbKey = KEY_MAP[lsKey];
-  if (!sbKey) return;
-  const row = { key: sbKey, data: value, updated_at: new Date().toISOString() };
-  if (userId) row.updated_by = userId;
-  const { error } = await supabase.from("app_data").upsert(row);
-  if (error) console.error("Supabase save error:", sbKey, error.message);
+// Fetch a single row's data + version (for conflict refetch).
+export const getRow = async (sbKey) => {
+  const { data, error } = await supabase
+    .from("app_data")
+    .select("data, version")
+    .eq("key", sbKey)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { data: data.data, version: data.version ?? 0 };
 };
 
-// Save multiple keys at once
-export const saveAllToSupabase = async (entries, userId) => {
-  const rows = entries
-    .map(([lsKey, value]) => {
-      const sbKey = KEY_MAP[lsKey];
-      if (!sbKey) return null;
-      const row = { key: sbKey, data: value, updated_at: new Date().toISOString() };
-      if (userId) row.updated_by = userId;
-      return row;
-    })
-    .filter(Boolean);
-  if (rows.length === 0) return;
-  const { error } = await supabase.from("app_data").upsert(rows);
-  if (error) console.error("Supabase bulk save error:", error.message);
-};
+// Optimistic per-key save. Conditional UPDATE on version = atomic compare-and-set at the DB.
+// Returns { ok, version } on success, { conflict, remoteData, remoteVersion } if another
+// writer won, or { error } on transport failure.
+export const saveKeyOptimistic = async (sbKey, value, expectedVersion, userId) => {
+  const expected = expectedVersion || 0;
+  const patch = { data: value, updated_at: new Date().toISOString(), version: expected + 1 };
+  if (userId) patch.updated_by = userId;
 
-// Reverse map: Supabase key → localStorage key
-const SB_TO_LS = Object.fromEntries(Object.entries(KEY_MAP).map(([ls, sb]) => [sb, ls]));
+  const { data, error } = await supabase
+    .from("app_data")
+    .update(patch)
+    .eq("key", sbKey)
+    .eq("version", expected)
+    .select("version");
+  if (error) return { error: error.message };
+  if (data && data.length === 1) return { ok: true, version: expected + 1 };
 
-// Get max remote updated_at (ANY user/device) — for conflict detection
-// We don't filter by userId because same user across devices/tabs would be missed.
-// The 5-second tolerance in caller handles legitimate own-tab writes.
-export const getRemoteMaxUpdate = async () => {
-  try {
-    const { data, error } = await supabase
-      .from("app_data")
-      .select("updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(1);
-    if (error || !data?.length) return null;
-    return new Date(data[0].updated_at).getTime();
-  } catch { return null; }
+  // No row matched: either the row doesn't exist yet, or our version is stale.
+  const cur = await getRow(sbKey);
+  if (!cur) {
+    const row = { key: sbKey, data: value, updated_at: new Date().toISOString(), version: 1 };
+    if (userId) row.updated_by = userId;
+    const { error: insErr } = await supabase.from("app_data").insert(row);
+    if (!insErr) return { ok: true, version: 1 };
+    const after = await getRow(sbKey);
+    if (after) return { conflict: true, remoteData: after.data, remoteVersion: after.version };
+    return { error: insErr.message };
+  }
+  return { conflict: true, remoteData: cur.data, remoteVersion: cur.version };
 };
 
 // Realtime subscription
@@ -118,14 +122,15 @@ export const subscribeRealtime = (userId, onUpdate) => {
     .channel("app_data_changes")
     .on(
       "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "app_data" },
+      { event: "*", schema: "public", table: "app_data" },
       (payload) => {
         const row = payload.new;
+        if (!row || !row.key) return;
         if (row.updated_by === userId) return;
         const lsKey = SB_TO_LS[row.key];
         if (!lsKey) return;
         saveData(lsKey, row.data);
-        onUpdate(row.key, row.data);
+        onUpdate(row.key, row.data, row.version ?? 0);
       }
     )
     .subscribe((status, err) => {
