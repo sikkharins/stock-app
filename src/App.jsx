@@ -7,7 +7,6 @@ import { signIn, signOut, getSession, getProfile, getAllProfiles, migrateUsers }
 import { initProducts, initContacts, initPOs, initSales, initCats, initBrands, initUsers, initQuotes, initTargets } from "./data/initData.js";
 import { THEME_CSS } from "./styles/theme.js";
 import Field from "./components/ui/Field.jsx";
-import Badge from "./components/ui/Badge.jsx";
 import GlobalSearch from "./components/ui/GlobalSearch.jsx";
 import AppSkeleton from "./components/ui/Skeleton.jsx";
 
@@ -38,7 +37,7 @@ const NAV_SECTIONS=[
 ];
 const INIT_BANKACCS=[{id:1,name:"บัญชี 1",bank:"กสิกรไทย",accNo:""},{id:2,name:"บัญชี 2",bank:"ไทยพาณิชย์",accNo:""},{id:3,name:"บัญชี 3",bank:"TTB",accNo:""}];
 
-function LoginScreen({users,onLogin}){
+function LoginScreen({onLogin}){
   const[un,setUn]=useState("");const[pw,setPw]=useState("");const[err,setErr]=useState("");const[loading,setLoading]=useState(false);
   const go=async()=>{
     if(!un||!pw)return;
@@ -47,7 +46,7 @@ function LoginScreen({users,onLogin}){
       const{user}=await signIn(un,pw);
       const profile=await getProfile(user.id);
       onLogin(profile);
-    }catch(e){
+    }catch{
       setErr("Username หรือ Password ไม่ถูกต้อง");
     }
     setLoading(false);
@@ -91,13 +90,10 @@ export default function App(){
   const updateFabCustom=useCallback((next)=>{setFabCustom(next);if(cu?.id)localStorage.setItem(`fab_custom_${cu.id}`,JSON.stringify(next));},[cu?.id]);
   // Draggable FAB (AssistiveTouch style)
   const fabRef=useRef(null);const fabDrag=useRef({dragging:false,startX:0,startY:0,startLeft:0,startTop:0,moved:false});
-  const [fabPos,setFabPos]=useState(()=>{try{const s=JSON.parse(localStorage.getItem("fab_pos"));const sz=44;if(s&&s.x!=null&&s.x>=0&&s.y>=0&&s.x<=window.innerWidth-sz&&s.y<=window.innerHeight-sz)return s;}catch{}return{x:null,y:null};});
-  const [fabTouched,setFabTouched]=useState(false);
-  const fabIdleTimer=useRef(null);
-  const resetFabIdle=useCallback(()=>{setFabTouched(true);clearTimeout(fabIdleTimer.current);fabIdleTimer.current=setTimeout(()=>setFabTouched(false),3000);},[]);
-  const onFabPointerDown=useCallback((e)=>{const t=e.touches?e.touches[0]:e;const el=fabRef.current;if(!el)return;const r=el.getBoundingClientRect();fabDrag.current={dragging:true,startX:t.clientX,startY:t.clientY,startLeft:r.left,startTop:r.top,moved:false};resetFabIdle();},[resetFabIdle]);
+  const [fabPos,setFabPos]=useState(()=>{try{const s=JSON.parse(localStorage.getItem("fab_pos"));const sz=44;if(s&&s.x!=null&&s.x>=0&&s.y>=0&&s.x<=window.innerWidth-sz&&s.y<=window.innerHeight-sz)return s;}catch{/* invalid JSON */}return{x:null,y:null};});
+  const onFabPointerDown=useCallback((e)=>{const t=e.touches?e.touches[0]:e;const el=fabRef.current;if(!el)return;const r=el.getBoundingClientRect();fabDrag.current={dragging:true,startX:t.clientX,startY:t.clientY,startLeft:r.left,startTop:r.top,moved:false};},[]);
   const onFabPointerMove=useCallback((e)=>{const d=fabDrag.current;if(!d.dragging)return;const t=e.touches?e.touches[0]:e;const dx=t.clientX-d.startX,dy=t.clientY-d.startY;if(Math.abs(dx)>5||Math.abs(dy)>5)d.moved=true;if(!d.moved)return;e.preventDefault();const sz=fabSizeRef.current;const nx=Math.max(0,Math.min(window.innerWidth-sz,d.startLeft+dx));const ny=Math.max(0,Math.min(window.innerHeight-sz,d.startTop+dy));setFabPos({x:nx,y:ny});},[]);
-  const onFabPointerUp=useCallback(()=>{const d=fabDrag.current;d.dragging=false;if(d.moved&&fabPos.x!=null){const sz=fabSizeRef.current;const snapX=fabPos.x<window.innerWidth/2?8:window.innerWidth-sz-8;const snapped={x:snapX,y:fabPos.y};setFabPos(snapped);localStorage.setItem("fab_pos",JSON.stringify(snapped));}resetFabIdle();},[fabPos,resetFabIdle]);
+  const onFabPointerUp=useCallback(()=>{const d=fabDrag.current;d.dragging=false;if(d.moved&&fabPos.x!=null){const sz=fabSizeRef.current;const snapX=fabPos.x<window.innerWidth/2?8:window.innerWidth-sz-8;const snapped={x:snapX,y:fabPos.y};setFabPos(snapped);localStorage.setItem("fab_pos",JSON.stringify(snapped));}},[fabPos]);
   useEffect(()=>{window.addEventListener("mousemove",onFabPointerMove);window.addEventListener("mouseup",onFabPointerUp);window.addEventListener("touchmove",onFabPointerMove,{passive:false});window.addEventListener("touchend",onFabPointerUp);return()=>{window.removeEventListener("mousemove",onFabPointerMove);window.removeEventListener("mouseup",onFabPointerUp);window.removeEventListener("touchmove",onFabPointerMove);window.removeEventListener("touchend",onFabPointerUp);};},[onFabPointerMove,onFabPointerUp]);
   const[pullY,setPullY]=useState(0);const[refreshing,setRefreshing]=useState(false);const pullStart=useRef(null);const mainRef=useRef(null);
   const doRefresh=useCallback(async()=>{setRefreshing(true);await reloadFromServer();setRefreshing(false);setPullY(0);},[]);
@@ -285,7 +281,7 @@ export default function App(){
             console.log("Migrating users to Supabase Auth...");
             const results=await migrateUsers(appUsers,appContacts);
             console.log("Migration results:",results);
-            try{profiles=await getAllProfiles();}catch(e){}
+            try{profiles=await getAllProfiles();}catch{/* migration may partially fail; continue */}
           }
         }
 
@@ -380,7 +376,7 @@ export default function App(){
   const handleLogout=()=>{if(sess){const now=Date.now();const hist=[...sess.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}setActLogs(p=>[{...sess,logoutTime:now,logoutTimeStr:nowStr(),totalDuration:Math.floor((now-sess.loginTime)/1000),tabHistory:hist},...p].slice(0,200));}signOut().catch(()=>{});Object.keys(localStorage).filter(k=>k.startsWith("v3_")&&k!=="v3_theme").forEach(k=>localStorage.removeItem(k));setSess(null);setCu(null);};
 
   if(!loaded)return <><style>{THEME_CSS}</style><AppSkeleton/></>;
-  if(!cu)return <><style>{THEME_CSS}</style><LoginScreen users={users} onLogin={handleLogin}/></>;
+  if(!cu)return <><style>{THEME_CSS}</style><LoginScreen onLogin={handleLogin}/></>;
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
