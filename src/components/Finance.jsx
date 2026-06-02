@@ -695,18 +695,8 @@ export default function FinPage({sh}){
         <Field label="จาก/ถึง"><input value={txnForm.from} onChange={e=>setTxnForm(f=>({...f,from:e.target.value}))} style={IB}/></Field>
         <Field label="อ้างอิง (SO/PO)"><input value={txnForm.refId} onChange={e=>setTxnForm(f=>({...f,refId:e.target.value}))} style={IB}/></Field>
         <div style={{gridColumn:"1/-1"}}><Field label="หมายเหตุ"><input value={txnForm.note} onChange={e=>setTxnForm(f=>({...f,note:e.target.value}))} style={IB}/></Field></div>
-        <Field label="หมวด">
-          <select value={txnForm.catId} onChange={e=>setTxnForm({...txnForm,catId:e.target.value,subCatId:""})} style={IB}>
-            <option value="">(ไม่ระบุ)</option>
-            {catsForDir(txnForm.type).map(c=>(<option key={c.id} value={c.id}>{c.name}</option>))}
-          </select>
-        </Field>
-        {txnForm.catId&&subsForCat(txnForm.catId).length>0&&<Field label="หมวดย่อย">
-          <select value={txnForm.subCatId} onChange={e=>setTxnForm({...txnForm,subCatId:e.target.value})} style={IB}>
-            <option value="">(ไม่ระบุ)</option>
-            {subsForCat(txnForm.catId).map(s=>(<option key={s.id} value={s.id}>{s.name}</option>))}
-          </select>
-        </Field>}
+        <Field label="หมวด"><CustomSelect value={String(txnForm.catId||"")} onChange={v=>setTxnForm(f=>({...f,catId:v,subCatId:""}))} options={[{value:"",label:"(ไม่ระบุ)"},...catsForDir(txnForm.type).map(c=>({value:String(c.id),label:c.name}))]}/></Field>
+        {txnForm.catId&&subsForCat(txnForm.catId).length>0&&<Field label="หมวดย่อย"><CustomSelect value={String(txnForm.subCatId||"")} onChange={v=>setTxnForm(f=>({...f,subCatId:v}))} options={[{value:"",label:"(ไม่ระบุ)"},...subsForCat(txnForm.catId).map(s=>({value:String(s.id),label:s.name}))]}/></Field>}
       </div>
       <MBtns onCancel={cM} onSave={saveTxn}/>
     </Modal>}
