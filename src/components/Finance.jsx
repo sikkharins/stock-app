@@ -48,6 +48,7 @@ export default function FinPage({sh}){
   const[newSubName,setNewSubName]=useState("");
   const[catUsageWarn,setCatUsageWarn]=useState(null);
   const[tfForm,setTfForm]=useState({fromAccId:"",toAccId:"",amount:"",date:todayStr(),note:""});
+  const[adjForm,setAdjForm]=useState({accId:null,actualBalance:"",date:todayStr(),note:""});
   const[wdForm,setWdForm]=useState({accId:"",amount:"",date:todayStr(),note:""});
   const[batchCust,setBatchCust]=useState("");
   const[batchSOs,setBatchSOs]=useState([]);
@@ -69,7 +70,7 @@ export default function FinPage({sh}){
   const tagPO=()=>{const c=findCat("ซื้อ");return c?{catId:c.id,subCatId:findSub(c,"จ่ายซัพ (PO)")?.id||null}:{catId:null,subCatId:null};};
   // Consumed by saveTransfer (Task 6) — depositToBank / withdrawFromBank / interAccount
   const tagTransfer=(dir)=>{const c=findCat("โอน/ถอน/ฝาก");if(!c)return{catId:null,subCatId:null};const subName=dir==="depositToBank"?"ฝากเข้าธนาคาร":dir==="withdrawFromBank"?"ถอนจากธนาคาร":"โอนระหว่างบัญชี";return{catId:c.id,subCatId:findSub(c,subName)?.id||null};};
-  // eslint-disable-next-line no-unused-vars -- consumed in Task 7 (cash adjust/reconcile flow)
+  // Consumed by saveAdjust (Task 7) — cash adjust/reconcile flow
   const tagAdjust=(diff)=>{const c=findCat("ปรับยอด");if(!c)return{catId:null,subCatId:null};return{catId:c.id,subCatId:findSub(c,diff>=0?"เกิน":"ขาด")?.id||null};};
 
   const cnTot=cn=>{if(cn.type==="promo")return +cn.amount||0;const items=cn.items||[];if(cn.type!=="defective"&&cn.soNum){const so=sales.find(s=>s.soNum===cn.soNum);if(so&&so.discountAmt>0){const sub=(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);const r=sub>0?(sub-so.discountAmt)/sub:1;const raw=items.reduce((s,it)=>{const si=(so.items||[]).find(x=>x.productId===it.productId);return s+it.qty*(si?si.price*r:it.price);},0);return round2(raw);}}return items.reduce((s,i)=>s+i.qty*i.price,0);};
@@ -238,6 +239,20 @@ export default function FinPage({sh}){
       catId:tag.catId,subCatId:tag.subCatId,transferPair:pairId};
     setBankTxns(p=>[...p,outTxn,inTxn]);
     setTfForm({fromAccId:"",toAccId:"",amount:"",date:todayStr(),note:""});
+    cM();
+  };
+  const saveAdjust=()=>{
+    if(!adjForm.accId||adjForm.actualBalance===""||isNaN(+adjForm.actualBalance))return;
+    const current=getAccBal(adjForm.accId);
+    const actual=+adjForm.actualBalance;
+    const diff=round2(actual-current);
+    if(diff===0){cM();return;}
+    const tag=tagAdjust(diff);
+    setBankTxns(p=>[...p,{id:Date.now(),accId:adjForm.accId,type:"adjust",
+      amount:diff,date:adjForm.date,from:"",refId:"",
+      note:adjForm.note||"ปรับยอด ("+(diff>0?"+":"")+fmt(diff)+")",
+      catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);
+    setAdjForm({accId:null,actualBalance:"",date:todayStr(),note:""});
     cM();
   };
   const getBankColor=b=>b.includes("กสิกร")?"#138f2d":b.includes("กรุงไทย")?"#1ba5e0":b.includes("กรุงเทพ")?"#012e6b":b.includes("ไทยพาณิชย์")||b.includes("พาณิชย์")?"#4e2a84":b.toUpperCase().includes("TTB")||b.includes("ทหารไทยธนชาต")?"#fc6e20":"var(--blue)";
@@ -478,6 +493,7 @@ export default function FinPage({sh}){
           </div>
           {ed&&<div style={{display:"flex",gap:6,marginTop:8}}>
             {bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAccId:acc.id,toAccId:"",amount:"",date:todayStr(),note:""});oM("transfer");}} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--blue)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit"}}>โอน</button>}
+            {acc.isCash&&<button onClick={()=>{setAdjForm({accId:acc.id,actualBalance:"",date:todayStr(),note:""});oM("adjust");}} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--orange)",background:"transparent",color:"var(--orange)",cursor:"pointer",fontFamily:"inherit"}}>ปรับยอด</button>}
             <button onClick={()=>{setAccForm({name:acc.name,bank:acc.bank,accNo:acc.accNo||"",perms:{receive:hasPerm(acc,"receive"),clearCheque:hasPerm(acc,"clearCheque"),transferOut:hasPerm(acc,"transferOut"),payEPP:hasPerm(acc,"payEPP")}});setEditAcc(acc);oM("addAcc");}} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit"}}>แก้ไข</button>
             {cd&&<button onClick={()=>setDelAcc(acc)} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--red)",background:"transparent",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
           </div>}
@@ -872,6 +888,21 @@ export default function FinPage({sh}){
         <button onClick={saveTransfer} disabled={!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:(!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId)?"var(--hover)":"var(--blue)",color:(!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId)?"var(--dim)":"#fff",fontWeight:500,fontSize:14,cursor:(!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId)?"not-allowed":"pointer",fontFamily:"inherit"}}>บันทึก</button>
       </div>
     </Modal>}
+
+    {modal==="adjust"&&ed&&adjForm.accId&&(()=>{
+      const acc=bankAccs.find(a=>a.id===adjForm.accId);
+      const current=getAccBal(adjForm.accId);
+      const actual=+adjForm.actualBalance||0;
+      const diff=round2(actual-current);
+      return <Modal title={"ปรับยอด — "+(acc?.name||"")} onClose={cM}>
+        <div style={{padding:"8px 0",fontSize:13}}>ยอดในระบบตอนนี้: <strong>{"฿"+fmt(current)}</strong></div>
+        <Field label="ยอดที่นับจริง (บาท)"><input type="number" value={adjForm.actualBalance} onChange={e=>setAdjForm(f=>({...f,actualBalance:e.target.value}))} style={IB}/></Field>
+        {adjForm.actualBalance!==""&&<div style={{padding:"6px 0",fontSize:13,color:diff===0?"var(--dim)":diff>0?"var(--green)":"var(--red)"}}>{"ส่วนต่าง: "+(diff>=0?"+":"")+"฿"+fmt(diff)+" "+(diff>0?"(เกิน)":diff<0?"(ขาด)":"")}</div>}
+        <Field label="วันที่"><input type="date" value={adjForm.date} onChange={e=>setAdjForm(f=>({...f,date:e.target.value}))} style={IB}/></Field>
+        <Field label="หมายเหตุ"><input value={adjForm.note} onChange={e=>setAdjForm(f=>({...f,note:e.target.value}))} style={IB}/></Field>
+        <MBtns onCancel={cM} onSave={saveAdjust} saveLabel="บันทึก" disabled={adjForm.actualBalance===""||diff===0}/>
+      </Modal>;
+    })()}
 
     {modal==="withdraw"&&ed&&<Modal title="ถอนเงินสด" onClose={cM}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
