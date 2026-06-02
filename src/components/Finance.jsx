@@ -29,7 +29,7 @@ const DEF_PERMS={receive:true,clearCheque:true,payEPP:true,transferOut:true};
 const hasPerm=(acc,key)=>{const p=acc.perms;if(!p)return true;if(key==="payEPP")return p.payEPP!==undefined?!!p.payEPP:p.payOnline!==undefined?!!p.payOnline:true;if(key==="transferOut")return p.transferOut!==undefined?!!p.transferOut:true;return p[key]!==undefined?!!p[key]:true;};
 
 export default function FinPage({sh}){
-  const{cN,pN,contacts,setContacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes,cashCats}=sh;
+  const{cN,pN,contacts,setContacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes,cashCats,setCashCats}=sh;
   const ed=canE("finance");const cd=canD("finance");
   const[sub,setSub]=useState("ap");const[viewProfile,setViewProfile]=useState(null);
   const[payForm,setPayForm]=useState({refId:"",type:"",amount:"",method:"โอนเงิน",date:todayStr(),note:""});
@@ -42,6 +42,11 @@ export default function FinPage({sh}){
   const[editAcc,setEditAcc]=useState(null);const[delAcc,setDelAcc]=useState(null);
   const[acctType,setAcctType]=useState(null);
   const[cashAcctForm,setCashAcctForm]=useState({name:"",openingBalance:"",openingDate:todayStr()});
+  const[selCatId,setSelCatId]=useState(null);
+  const[newCatName,setNewCatName]=useState("");
+  const[newCatType,setNewCatType]=useState("both");
+  const[newSubName,setNewSubName]=useState("");
+  const[catUsageWarn,setCatUsageWarn]=useState(null);
   const[tfForm,setTfForm]=useState({fromAcc:"",toAcc:"",amount:"",date:todayStr(),note:""});
   const[wdForm,setWdForm]=useState({accId:"",amount:"",date:todayStr(),note:""});
   const[batchCust,setBatchCust]=useState("");
@@ -176,6 +181,32 @@ export default function FinPage({sh}){
     cM();
   };
   const deleteAcc=id=>{setBankAccs(p=>p.filter(a=>a.id!==id));setBankTxns(p=>p.filter(t=>t.accId!==id));setDelAcc(null);};
+  const catUsageCount=(catId,subCatId=null)=>bankTxns.filter(t=>subCatId==null?t.catId===catId:(t.catId===catId&&t.subCatId===subCatId)).length;
+  const addCat=()=>{
+    if(!newCatName.trim())return;
+    const id=Date.now();
+    setCashCats(p=>[...p,{id,name:newCatName.trim(),type:newCatType,subs:[]}]);
+    setNewCatName("");setNewCatType("both");setSelCatId(id);
+  };
+  const renameCat=(id,name)=>setCashCats(p=>p.map(c=>c.id===id?{...c,name}:c));
+  const changeCatType=(id,type)=>setCashCats(p=>p.map(c=>c.id===id?{...c,type}:c));
+  const delCat=(id)=>{
+    const used=catUsageCount(id);
+    if(used>0){setCatUsageWarn({type:"cat",id,count:used});return;}
+    setCashCats(p=>p.filter(c=>c.id!==id));
+    if(selCatId===id)setSelCatId(null);
+  };
+  const addSub=(catId)=>{
+    if(!newSubName.trim())return;
+    setCashCats(p=>p.map(c=>c.id===catId?{...c,subs:[...(c.subs||[]),{id:Date.now(),name:newSubName.trim()}]}:c));
+    setNewSubName("");
+  };
+  const renameSub=(catId,subId,name)=>setCashCats(p=>p.map(c=>c.id===catId?{...c,subs:c.subs.map(s=>s.id===subId?{...s,name}:s)}:c));
+  const delSub=(catId,subId)=>{
+    const used=catUsageCount(catId,subId);
+    if(used>0){setCatUsageWarn({type:"sub",catId,subId,count:used});return;}
+    setCashCats(p=>p.map(c=>c.id===catId?{...c,subs:c.subs.filter(s=>s.id!==subId)}:c));
+  };
   const saveTransfer=()=>{if(!tfForm.fromAcc||!tfForm.toAcc||tfForm.fromAcc===tfForm.toAcc||!tfForm.amount||+tfForm.amount<=0)return;const ts=Date.now();const fromA=bankAccs.find(a=>a.id===+tfForm.fromAcc);const toA=bankAccs.find(a=>a.id===+tfForm.toAcc);setBankTxns(p=>[...p,{id:ts,accId:+tfForm.fromAcc,type:"out",amount:+tfForm.amount,date:tfForm.date,from:"โอนไป "+toA?.name,refId:"TF-"+ts,note:tfForm.note},{id:ts+1,accId:+tfForm.toAcc,type:"in",amount:+tfForm.amount,date:tfForm.date,from:"โอนจาก "+fromA?.name,refId:"TF-"+ts,note:tfForm.note}]);cM();};
   const getBankColor=b=>b.includes("กสิกร")?"#138f2d":b.includes("กรุงไทย")?"#1ba5e0":b.includes("กรุงเทพ")?"#012e6b":b.includes("ไทยพาณิชย์")||b.includes("พาณิชย์")?"#4e2a84":b.toUpperCase().includes("TTB")||b.includes("ทหารไทยธนชาต")?"#fc6e20":"var(--blue)";
   const txnFiltered=(accFilter==="all"?bankTxns:bankTxns.filter(t=>t.accId===+accFilter)).filter(t=>{if(!search)return true;const q=search.toLowerCase();return(t.from||"").toLowerCase().includes(q)||(t.refId||"").toLowerCase().includes(q)||(t.note||"").toLowerCase().includes(q);});
@@ -388,6 +419,7 @@ export default function FinPage({sh}){
         {ed&&<button onClick={()=>{setAcctType(null);oM("newAccount");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ เพิ่มบัญชี</button>}
         {ed&&bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAcc:String(bankAccs[0]?.id||""),toAcc:String(bankAccs[1]?.id||""),amount:"",date:todayStr(),note:""});oM("transfer");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>โอนระหว่างบัญชี</button>}
         {ed&&bankAccs.length>0&&<button onClick={()=>{setWdForm({accId:String(bankAccs[0]?.id||""),amount:"",date:todayStr(),note:""});oM("withdraw");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>ถอนเงินสด</button>}
+        {ed&&<button onClick={()=>{setSelCatId(null);setNewCatName("");setNewCatType("both");setNewSubName("");oM("manageCats");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontWeight:500,marginLeft:"auto"}}>จัดการหมวด</button>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12,marginBottom:16}}>
         {bankAccs.map(acc=>{const bal=getAccBal(acc.id);const txns=bankTxns.filter(t=>t.accId===acc.id);const todayIn=txns.filter(t=>t.type==="in"&&(t.date||"").startsWith(todayStr())).reduce((s,t)=>s+t.amount,0);const todayOut=txns.filter(t=>t.type==="out"&&(t.date||"").startsWith(todayStr())).reduce((s,t)=>s+t.amount,0);const last=txns.length>0?txns[txns.length-1]:null;const bankColor=getBankColor(acc.bank);
@@ -734,6 +766,57 @@ export default function FinPage({sh}){
           <button onClick={saveCashAccount} disabled={!cashAcctForm.name.trim()} style={{padding:"6px 13px",borderRadius:7,border:"none",cursor:!cashAcctForm.name.trim()?"not-allowed":"pointer",background:!cashAcctForm.name.trim()?"var(--hover2)":"var(--blue)",color:!cashAcctForm.name.trim()?"var(--dim)":"#fff",fontFamily:"inherit",fontSize:13,fontWeight:500,opacity:!cashAcctForm.name.trim()?0.6:1}}>บันทึก</button>
         </div>
       </div>}
+    </Modal>}
+
+    {modal==="manageCats"&&ed&&<Modal title="จัดการหมวดเงินสด" onClose={cM} wide>
+      <div style={{display:"flex",gap:16,minHeight:420}}>
+        <div style={{flex:"0 0 280px",borderRight:"1px solid var(--line)",paddingRight:16}}>
+          <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>หมวดหลัก</div>
+          {cashCats.map(c=>(
+            <div key={c.id} onClick={()=>setSelCatId(c.id)} style={{padding:"8px 10px",borderRadius:6,marginBottom:4,cursor:"pointer",background:selCatId===c.id?"var(--blue-bg)":"transparent",display:"flex",alignItems:"center",gap:8}}>
+              <input value={c.name} onChange={e=>renameCat(c.id,e.target.value)} onClick={e=>e.stopPropagation()} style={{flex:1,background:"transparent",border:"none",color:"var(--text)",fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+              <select value={c.type} onChange={e=>changeCatType(c.id,e.target.value)} onClick={e=>e.stopPropagation()} style={{fontSize:11,padding:"2px 4px",background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)",borderRadius:3}}>
+                <option value="in">รับ</option>
+                <option value="out">จ่าย</option>
+                <option value="both">ทั้งคู่</option>
+              </select>
+              {cd&&<button onClick={e=>{e.stopPropagation();delCat(c.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,padding:"0 4px"}}>×</button>}
+            </div>
+          ))}
+          <div style={{marginTop:12,display:"flex",gap:6,alignItems:"center"}}>
+            <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="ชื่อหมวดใหม่" style={{...IB,fontSize:12}}/>
+            <select value={newCatType} onChange={e=>setNewCatType(e.target.value)} style={{fontSize:12,padding:"4px 6px",background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)",borderRadius:4}}>
+              <option value="in">รับ</option><option value="out">จ่าย</option><option value="both">ทั้งคู่</option>
+            </select>
+            <button onClick={addCat} disabled={!newCatName.trim()} style={{padding:"5px 10px",fontSize:13,borderRadius:6,border:"none",cursor:!newCatName.trim()?"not-allowed":"pointer",background:!newCatName.trim()?"var(--hover2)":"var(--blue)",color:!newCatName.trim()?"var(--dim)":"#fff",fontFamily:"inherit",fontWeight:600,opacity:!newCatName.trim()?0.6:1}}>+</button>
+          </div>
+        </div>
+        <div style={{flex:1}}>
+          {!selCatId&&<div style={{color:"var(--dim)",padding:20,textAlign:"center"}}>เลือกหมวดหลักทางซ้ายเพื่อจัดการหมวดย่อย</div>}
+          {selCatId&&(()=>{
+            const c=cashCats.find(x=>x.id===selCatId);
+            if(!c)return null;
+            return <>
+              <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>{"หมวดย่อยของ \""+c.name+"\""}</div>
+              {(c.subs||[]).map(s=>(
+                <div key={s.id} style={{padding:"6px 10px",display:"flex",alignItems:"center",gap:8,marginBottom:4,borderRadius:6,background:"var(--bg2)"}}>
+                  <input value={s.name} onChange={e=>renameSub(c.id,s.id,e.target.value)} style={{flex:1,background:"transparent",border:"none",color:"var(--text)",fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                  {cd&&<button onClick={()=>delSub(c.id,s.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,padding:"0 4px"}}>×</button>}
+                </div>
+              ))}
+              <div style={{marginTop:12,display:"flex",gap:6,alignItems:"center"}}>
+                <input value={newSubName} onChange={e=>setNewSubName(e.target.value)} placeholder="ชื่อหมวดย่อยใหม่" style={{...IB,fontSize:12}}/>
+                <button onClick={()=>addSub(c.id)} disabled={!newSubName.trim()} style={{padding:"5px 10px",fontSize:13,borderRadius:6,border:"none",cursor:!newSubName.trim()?"not-allowed":"pointer",background:!newSubName.trim()?"var(--hover2)":"var(--blue)",color:!newSubName.trim()?"var(--dim)":"#fff",fontFamily:"inherit",fontWeight:600,opacity:!newSubName.trim()?0.6:1}}>+</button>
+              </div>
+            </>;
+          })()}
+        </div>
+      </div>
+    </Modal>}
+
+    {catUsageWarn&&<Modal title="ลบไม่ได้" onClose={()=>setCatUsageWarn(null)}>
+      <div style={{padding:12,fontSize:13,lineHeight:1.5}}>{"มีรายการเงินสด "}<strong>{catUsageWarn.count}</strong>{" รายการใช้หมวด"+(catUsageWarn.type==="sub"?"ย่อย":"")+"นี้อยู่ — กรุณาแก้ไขหรือลบรายการเหล่านั้นก่อน"}</div>
+      <div style={{padding:"0 12px 12px",display:"flex",justifyContent:"flex-end"}}><button onClick={()=>setCatUsageWarn(null)} style={{padding:"6px 13px",borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:500}}>ปิด</button></div>
     </Modal>}
 
     {delAcc&&<Modal title="ยืนยันลบบัญชี" onClose={()=>setDelAcc(null)}>
