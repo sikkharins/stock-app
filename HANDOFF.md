@@ -323,7 +323,9 @@ const KEY_MAP = {
   v3_products: "products",
   v3_contacts: "contacts",
   v3_events: "events",
-  // ... 22 mappings
+  v3_cats: "cats",
+  v3_cashcats: "cashcats",  // new in v1.7 — cash categories with sub-cats (2-level user-managed)
+  // ... 23 mappings total
 };
 ```
 
@@ -486,6 +488,7 @@ Vercel serverless functions check env keys but don't authenticate users. Anyone 
 | 2026-06 | Discontinued product flag | `Products.jsx`, `Sales.jsx`, `PurchaseOrders.jsx`, `Quotes.jsx` |
 | 2026-06 | Version indicator in sidebar + login | `vite.config.js`, `App.jsx` |
 | 2026-06-02 | Per-key optimistic sync: diff-only writes + `version` column + 3-way merge-on-conflict (fixes §9.A data loss) | `utils/storage.js`, `utils/merge.js` (+`merge.test.mjs`), `App.jsx`; **requires `version` column** |
+| 2026-06-02 | Cash accounts + categories: `bankAccs.isCash` flag, new `cashCats`, Finance "บัญชี" tab unifies bank+cash, transfer modal, adjust modal, SO/PO cash payment method, auto-tagged categories (2-level, user-managed) | `Finance.jsx`, `Sales.jsx`, `PurchaseOrders.jsx`, `App.jsx`, `utils/storage.js` |
 
 ---
 

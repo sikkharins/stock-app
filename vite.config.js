@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   return {
   define: {
     __BUILD_TIME__: JSON.stringify(buildTime),
-    __APP_VERSION__: JSON.stringify("v1.6.0-optimistic-sync"),
+    __APP_VERSION__: JSON.stringify("v1.7.0-cash-accounts"),
   },
   build: {
     rollupOptions: {

@@ -311,7 +311,7 @@ export default function FinPage({sh}){
   };
   const openEditBill=b=>{setBillForm({id:b.id,billNum:b.billNum,customerId:b.customerId,soNums:[...b.soNums],cnIds:[...(b.cnIds||[])],date:b.date,note:b.note||""});oM("addBill");};
 
-  const TAB_GROUPS=[[["ap","จ่ายซัพพลายเออร์"],["supcn","ใบลดหนี้ (ซัพฯ)"]],[["ar","เก็บเงินลูกค้า"],["billing","ใบวางบิล"],["cn","ใบลดหนี้"]],[["cheque","เช็ค"],["bank","บัญชีธนาคาร"]]];
+  const TAB_GROUPS=[[["ap","จ่ายซัพพลายเออร์"],["supcn","ใบลดหนี้ (ซัพฯ)"]],[["ar","เก็บเงินลูกค้า"],["billing","ใบวางบิล"],["cn","ใบลดหนี้"]],[["cheque","เช็ค"],["bank","บัญชี"]]];
 
   return <div>
     <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid var(--line)",overflowX:"auto"}}>{TAB_GROUPS.map((grp,gi)=><React.Fragment key={gi}>{gi>0&&<span style={{borderLeft:"1.5px solid var(--line)",margin:"6px 4px",alignSelf:"stretch"}}/>}{grp.map(v=><button key={v[0]} onClick={()=>{setSub(v[0]);setFSt("all");setChqFilter("all");setAccFilter("all");setSearch("");}} style={{...TB,fontWeight:sub===v[0]?600:400,borderBottom:sub===v[0]?"2px solid var(--text)":"2px solid transparent",color:sub===v[0]?"var(--text)":"var(--dim)"}}>{v[1]}</button>)}</React.Fragment>)}</div>
@@ -462,6 +462,17 @@ export default function FinPage({sh}){
     </>}
 
     {sub==="bank"&&<>
+      {(()=>{
+        const cashTotal=bankAccs.filter(a=>a.isCash).reduce((s,a)=>s+getAccBal(a.id),0);
+        const bankTotal=bankAccs.filter(a=>!a.isCash).reduce((s,a)=>s+getAccBal(a.id),0);
+        return <div style={{display:"flex",gap:12,padding:"8px 0",borderBottom:"1px solid var(--line)",marginBottom:12,fontSize:13,alignItems:"center"}}>
+          <span>เงินสด: <strong style={{color:"var(--green)"}}>฿{fmt(cashTotal)}</strong></span>
+          <span style={{color:"var(--faint)"}}>·</span>
+          <span>ธนาคาร: <strong style={{color:"var(--blue)"}}>฿{fmt(bankTotal)}</strong></span>
+          <span style={{color:"var(--faint)"}}>·</span>
+          <span>รวมทั้งหมด: <strong>฿{fmt(cashTotal+bankTotal)}</strong></span>
+        </div>;
+      })()}
       <div style={{display:"flex",gap:8,marginBottom:14}}>
         {ed&&<button onClick={()=>{setAcctType(null);oM("newAccount");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ เพิ่มบัญชี</button>}
         {ed&&bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAccId:bankAccs[0]?.id||"",toAccId:bankAccs[1]?.id||"",amount:"",date:todayStr(),note:""});oM("transfer");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>โอนระหว่างบัญชี</button>}
