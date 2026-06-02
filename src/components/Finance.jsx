@@ -47,7 +47,7 @@ export default function FinPage({sh}){
   const[newCatType,setNewCatType]=useState("both");
   const[newSubName,setNewSubName]=useState("");
   const[catUsageWarn,setCatUsageWarn]=useState(null);
-  const[tfForm,setTfForm]=useState({fromAcc:"",toAcc:"",amount:"",date:todayStr(),note:""});
+  const[tfForm,setTfForm]=useState({fromAccId:"",toAccId:"",amount:"",date:todayStr(),note:""});
   const[wdForm,setWdForm]=useState({accId:"",amount:"",date:todayStr(),note:""});
   const[batchCust,setBatchCust]=useState("");
   const[batchSOs,setBatchSOs]=useState([]);
@@ -67,7 +67,7 @@ export default function FinPage({sh}){
   const findSub=(cat,subName)=>cat?.subs?.find(s=>s.name===subName);
   const tagSO=()=>{const c=findCat("ขาย");return c?{catId:c.id,subCatId:findSub(c,"ขายสด (SO)")?.id||null}:{catId:null,subCatId:null};};
   const tagPO=()=>{const c=findCat("ซื้อ");return c?{catId:c.id,subCatId:findSub(c,"จ่ายซัพ (PO)")?.id||null}:{catId:null,subCatId:null};};
-  // eslint-disable-next-line no-unused-vars -- consumed in Task 6 (transfer/deposit/withdraw flows)
+  // Consumed by saveTransfer (Task 6) — depositToBank / withdrawFromBank / interAccount
   const tagTransfer=(dir)=>{const c=findCat("โอน/ถอน/ฝาก");if(!c)return{catId:null,subCatId:null};const subName=dir==="depositToBank"?"ฝากเข้าธนาคาร":dir==="withdrawFromBank"?"ถอนจากธนาคาร":"โอนระหว่างบัญชี";return{catId:c.id,subCatId:findSub(c,subName)?.id||null};};
   // eslint-disable-next-line no-unused-vars -- consumed in Task 7 (cash adjust/reconcile flow)
   const tagAdjust=(diff)=>{const c=findCat("ปรับยอด");if(!c)return{catId:null,subCatId:null};return{catId:c.id,subCatId:findSub(c,diff>=0?"เกิน":"ขาด")?.id||null};};
@@ -218,7 +218,28 @@ export default function FinPage({sh}){
     if(used>0){setCatUsageWarn({type:"sub",catId,subId,count:used});return;}
     setCashCats(p=>p.map(c=>c.id===catId?{...c,subs:c.subs.filter(s=>s.id!==subId)}:c));
   };
-  const saveTransfer=()=>{if(!tfForm.fromAcc||!tfForm.toAcc||tfForm.fromAcc===tfForm.toAcc||!tfForm.amount||+tfForm.amount<=0)return;const ts=Date.now();const fromA=bankAccs.find(a=>a.id===+tfForm.fromAcc);const toA=bankAccs.find(a=>a.id===+tfForm.toAcc);setBankTxns(p=>[...p,{id:ts,accId:+tfForm.fromAcc,type:"out",amount:+tfForm.amount,date:tfForm.date,from:"โอนไป "+toA?.name,refId:"TF-"+ts,note:tfForm.note},{id:ts+1,accId:+tfForm.toAcc,type:"in",amount:+tfForm.amount,date:tfForm.date,from:"โอนจาก "+fromA?.name,refId:"TF-"+ts,note:tfForm.note}]);cM();};
+  const saveTransfer=()=>{
+    const amt=+tfForm.amount;
+    if(!tfForm.fromAccId||!tfForm.toAccId||+tfForm.fromAccId===+tfForm.toAccId)return;
+    if(!amt||amt<=0)return;
+    const fromAcc=bankAccs.find(a=>a.id===+tfForm.fromAccId);
+    const toAcc=bankAccs.find(a=>a.id===+tfForm.toAccId);
+    if(!fromAcc||!toAcc)return;
+    const dir=(fromAcc.isCash&&!toAcc.isCash)?"depositToBank":
+              (!fromAcc.isCash&&toAcc.isCash)?"withdrawFromBank":
+              "interAccount";
+    const tag=tagTransfer(dir);
+    const pairId=Date.now();
+    const outTxn={id:pairId,accId:fromAcc.id,type:"transfer",amount:-amt,date:tfForm.date,
+      from:toAcc.name,refId:"",note:tfForm.note||"โอนไป "+toAcc.name,
+      catId:tag.catId,subCatId:tag.subCatId,transferPair:pairId};
+    const inTxn={id:pairId+1,accId:toAcc.id,type:"transfer",amount:amt,date:tfForm.date,
+      from:fromAcc.name,refId:"",note:tfForm.note||"โอนจาก "+fromAcc.name,
+      catId:tag.catId,subCatId:tag.subCatId,transferPair:pairId};
+    setBankTxns(p=>[...p,outTxn,inTxn]);
+    setTfForm({fromAccId:"",toAccId:"",amount:"",date:todayStr(),note:""});
+    cM();
+  };
   const getBankColor=b=>b.includes("กสิกร")?"#138f2d":b.includes("กรุงไทย")?"#1ba5e0":b.includes("กรุงเทพ")?"#012e6b":b.includes("ไทยพาณิชย์")||b.includes("พาณิชย์")?"#4e2a84":b.toUpperCase().includes("TTB")||b.includes("ทหารไทยธนชาต")?"#fc6e20":"var(--blue)";
   const txnFiltered=(accFilter==="all"?bankTxns:bankTxns.filter(t=>t.accId===+accFilter)).filter(t=>{if(!search)return true;const q=search.toLowerCase();return(t.from||"").toLowerCase().includes(q)||(t.refId||"").toLowerCase().includes(q)||(t.note||"").toLowerCase().includes(q);});
 
@@ -428,7 +449,7 @@ export default function FinPage({sh}){
     {sub==="bank"&&<>
       <div style={{display:"flex",gap:8,marginBottom:14}}>
         {ed&&<button onClick={()=>{setAcctType(null);oM("newAccount");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ เพิ่มบัญชี</button>}
-        {ed&&bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAcc:String(bankAccs[0]?.id||""),toAcc:String(bankAccs[1]?.id||""),amount:"",date:todayStr(),note:""});oM("transfer");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>โอนระหว่างบัญชี</button>}
+        {ed&&bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAccId:bankAccs[0]?.id||"",toAccId:bankAccs[1]?.id||"",amount:"",date:todayStr(),note:""});oM("transfer");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>โอนระหว่างบัญชี</button>}
         {ed&&bankAccs.length>0&&<button onClick={()=>{setWdForm({accId:String(bankAccs[0]?.id||""),amount:"",date:todayStr(),note:""});oM("withdraw");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>ถอนเงินสด</button>}
         {ed&&<button onClick={()=>{setSelCatId(null);setNewCatName("");setNewCatType("both");setNewSubName("");oM("manageCats");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontWeight:500,marginLeft:"auto"}}>จัดการหมวด</button>}
       </div>
@@ -456,6 +477,7 @@ export default function FinPage({sh}){
             <span style={{marginLeft:"auto"}}>{txns.length+" รายการ"}</span>
           </div>
           {ed&&<div style={{display:"flex",gap:6,marginTop:8}}>
+            {bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAccId:acc.id,toAccId:"",amount:"",date:todayStr(),note:""});oM("transfer");}} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--blue)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit"}}>โอน</button>}
             <button onClick={()=>{setAccForm({name:acc.name,bank:acc.bank,accNo:acc.accNo||"",perms:{receive:hasPerm(acc,"receive"),clearCheque:hasPerm(acc,"clearCheque"),transferOut:hasPerm(acc,"transferOut"),payEPP:hasPerm(acc,"payEPP")}});setEditAcc(acc);oM("addAcc");}} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit"}}>แก้ไข</button>
             {cd&&<button onClick={()=>setDelAcc(acc)} style={{fontSize:11,padding:"3px 10px",borderRadius:5,border:"1px solid var(--red)",background:"transparent",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}
           </div>}
@@ -835,18 +857,20 @@ export default function FinPage({sh}){
       <MBtns onCancel={()=>setDelAcc(null)} onSave={()=>deleteAcc(delAcc.id)} saveLabel="ลบ"/>
     </Modal>}
 
-    {modal==="transfer"&&ed&&<Modal title="โอนระหว่างบัญชี" onClose={cM}>
+    {modal==="transfer"&&ed&&<Modal title="โอนเงินระหว่างบัญชี" onClose={cM}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Field label="จากบัญชี"><CustomSelect value={tfForm.fromAcc} onChange={v=>setTfForm(f=>({...f,fromAcc:v}))} options={bankAccs.filter(a=>hasPerm(a,"transferOut")).map(a=>({value:String(a.id),label:a.name+" — "+a.bank+" (฿"+fmt(getAccBal(a.id))+")" }))}/></Field>
-        <Field label="ไปบัญชี"><CustomSelect value={tfForm.toAcc} onChange={v=>setTfForm(f=>({...f,toAcc:v}))} options={bankAccs.filter(a=>String(a.id)!==tfForm.fromAcc&&hasPerm(a,"receive")).map(a=>({value:String(a.id),label:a.name+" — "+a.bank+" (฿"+fmt(getAccBal(a.id))+")" }))}/></Field>
-        <Field label="จำนวนเงิน (฿)"><input type="number" value={tfForm.amount} onChange={e=>setTfForm(f=>({...f,amount:e.target.value}))} style={IB}/></Field>
+        <Field label="จากบัญชี"><CustomSelect value={String(tfForm.fromAccId||"")} onChange={v=>setTfForm(f=>({...f,fromAccId:v?+v:""}))} options={[{value:"",label:"— เลือก —"},...bankAccs.map(a=>({value:String(a.id),label:a.name+(a.isCash?" (เงินสด)":" — "+a.bank)}))]}/></Field>
+        <Field label="ไปบัญชี"><CustomSelect value={String(tfForm.toAccId||"")} onChange={v=>setTfForm(f=>({...f,toAccId:v?+v:""}))} options={[{value:"",label:"— เลือก —"},...bankAccs.filter(a=>a.id!==+tfForm.fromAccId).map(a=>({value:String(a.id),label:a.name+(a.isCash?" (เงินสด)":" — "+a.bank)}))]}/></Field>
+        <Field label="จำนวน (บาท)"><input type="number" value={tfForm.amount} onChange={e=>setTfForm(f=>({...f,amount:e.target.value}))} style={IB}/></Field>
         <Field label="วันที่"><ThaiDateInput value={tfForm.date} onChange={e=>setTfForm(f=>({...f,date:e.target.value}))}/></Field>
         <div style={{gridColumn:"1/-1"}}><Field label="หมายเหตุ"><input value={tfForm.note} onChange={e=>setTfForm(f=>({...f,note:e.target.value}))} style={IB}/></Field></div>
       </div>
-      {tfForm.fromAcc&&tfForm.toAcc&&tfForm.amount&&+tfForm.amount>0&&<div style={{background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:8,padding:"12px",marginTop:12,fontSize:13,color:"var(--blue)"}}>
-        {"โอน ฿"+fmt(+tfForm.amount)+" จาก "+((bankAccs.find(a=>a.id===+tfForm.fromAcc)||{}).name||"")+" → "+((bankAccs.find(a=>a.id===+tfForm.toAcc)||{}).name||"")}
+      {tfForm.fromAccId&&tfForm.toAccId&&tfForm.amount&&+tfForm.amount>0&&<div style={{background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:8,padding:"12px",marginTop:12,fontSize:13,color:"var(--blue)"}}>
+        {"โอน ฿"+fmt(+tfForm.amount)+" จาก "+((bankAccs.find(a=>a.id===+tfForm.fromAccId)||{}).name||"")+" → "+((bankAccs.find(a=>a.id===+tfForm.toAccId)||{}).name||"")}
       </div>}
-      <MBtns onCancel={cM} onSave={saveTransfer} saveLabel="ยืนยันโอน"/>
+      <div style={{padding:"12px 0 0"}}>
+        <button onClick={saveTransfer} disabled={!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:(!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId)?"var(--hover)":"var(--blue)",color:(!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId)?"var(--dim)":"#fff",fontWeight:500,fontSize:14,cursor:(!tfForm.fromAccId||!tfForm.toAccId||!+tfForm.amount||+tfForm.fromAccId===+tfForm.toAccId)?"not-allowed":"pointer",fontFamily:"inherit"}}>บันทึก</button>
+      </div>
     </Modal>}
 
     {modal==="withdraw"&&ed&&<Modal title="ถอนเงินสด" onClose={cM}>
@@ -1038,10 +1062,10 @@ export default function FinPage({sh}){
     </Modal>}
 
     {confirmDelTxn&&<Modal title="ยืนยันลบรายการธนาคาร" onClose={()=>setConfirmDelTxn(null)}>
-      <div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px",marginBottom:16,fontSize:13,color:"var(--red)"}}>{"จะลบรายการ "+(confirmDelTxn.type==="in"?"เงินเข้า":"เงินออก")+" ฿"+fmt(confirmDelTxn.amount)+" ("+(confirmDelTxn.from||"—")+") ถาวร"}</div>
+      <div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px",marginBottom:16,fontSize:13,color:"var(--red)"}}>{"จะลบรายการ "+(confirmDelTxn.type==="in"?"เงินเข้า":confirmDelTxn.type==="out"?"เงินออก":"โอน")+" ฿"+fmt(Math.abs(confirmDelTxn.amount))+" ("+(confirmDelTxn.from||"—")+") ถาวร"+(confirmDelTxn.transferPair?" (ลบทั้งสองฝั่งของการโอน)":"")}</div>
       <div style={{display:"flex",gap:10}}>
         <button onClick={()=>setConfirmDelTxn(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid var(--line)",background:"var(--hover)",color:"var(--text)",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ยกเลิก</button>
-        <button onClick={()=>{setBankTxns(p=>p.filter(x=>x.id!==confirmDelTxn.id));setConfirmDelTxn(null);}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"var(--red)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>
+        <button onClick={()=>{if(confirmDelTxn.transferPair){setBankTxns(p=>p.filter(x=>x.transferPair!==confirmDelTxn.transferPair));}else{setBankTxns(p=>p.filter(x=>x.id!==confirmDelTxn.id));}setConfirmDelTxn(null);}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"var(--red)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>
       </div>
     </Modal>}
 
