@@ -102,7 +102,7 @@ export default function App(){
   const[pullY,setPullY]=useState(0);const[refreshing,setRefreshing]=useState(false);const pullStart=useRef(null);const mainRef=useRef(null);
   const doRefresh=useCallback(async()=>{setRefreshing(true);await reloadFromServer();setRefreshing(false);setPullY(0);},[]);
   const onTouchStart=useCallback(e=>{if(mainRef.current&&mainRef.current.scrollTop<=0)pullStart.current=e.touches[0].clientY;else pullStart.current=null;},[]);
-  const onTouchMove=useCallback(e=>{if(pullStart.current===null||refreshing)return;const dy=e.touches[0].clientY-pullStart.current;if(dy>0&&mainRef.current&&mainRef.current.scrollTop<=0){setPullY(Math.min(dy*0.4,80));if(dy>10)e.preventDefault();}else setPullY(0);},{refreshing});
+  const onTouchMove=useCallback(e=>{if(pullStart.current===null||refreshing)return;const dy=e.touches[0].clientY-pullStart.current;if(dy>0&&mainRef.current&&mainRef.current.scrollTop<=0){setPullY(Math.min(dy*0.4,80));if(dy>10)e.preventDefault();}else setPullY(0);},[refreshing]);
   const onTouchEnd=useCallback(()=>{if(pullY>=60&&!refreshing)doRefresh();else setPullY(0);pullStart.current=null;},[pullY,refreshing,doRefresh]);
   const[sideOpen,setSideOpen]=useState(false);
   const cuRef=useRef(cu);
