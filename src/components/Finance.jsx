@@ -710,7 +710,7 @@ export default function FinPage({sh}){
 
     {modal==="newAccount"&&ed&&<Modal title="สร้างบัญชีใหม่" onClose={()=>{setAcctType(null);cM();}}>
       {!acctType&&<div style={{display:"flex",gap:12,padding:8}}>
-        <button onClick={()=>{cM();setTimeout(()=>{setAccForm({name:"",bank:"",accNo:"",perms:{...DEF_PERMS}});setEditAcc(null);oM("addAcc");},0);}} style={{flex:1,padding:"24px 16px",border:"1px solid var(--line)",borderRadius:10,background:"var(--panel)",cursor:"pointer",fontFamily:"inherit",fontSize:14,color:"var(--text)"}}>
+        <button onClick={()=>{setAccForm({name:"",bank:"",accNo:"",perms:{...DEF_PERMS}});setEditAcc(null);setAcctType(null);oM("addAcc");}} style={{flex:1,padding:"24px 16px",border:"1px solid var(--line)",borderRadius:10,background:"var(--panel)",cursor:"pointer",fontFamily:"inherit",fontSize:14,color:"var(--text)"}}>
           <div style={{fontSize:16,fontWeight:500,marginBottom:6}}>บัญชีธนาคาร</div>
           <div style={{fontSize:12,color:"var(--dim)"}}>กสิกร · SCB · TTB · ฯลฯ</div>
         </button>
@@ -720,9 +720,9 @@ export default function FinPage({sh}){
         </button>
       </div>}
       {acctType==="cash"&&<div>
-        <Field label="ชื่อบัญชี"><input value={cashAcctForm.name} onChange={e=>setCashAcctForm({...cashAcctForm,name:e.target.value})} placeholder="เช่น เงินสดหน้าร้าน" style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field>
-        <Field label="ยอดเริ่มต้น (บาท)"><input type="number" value={cashAcctForm.openingBalance} onChange={e=>setCashAcctForm({...cashAcctForm,openingBalance:e.target.value})} placeholder="0" style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field>
-        <Field label="วันที่ตั้งยอด"><input type="date" value={cashAcctForm.openingDate} onChange={e=>setCashAcctForm({...cashAcctForm,openingDate:e.target.value})} style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field>
+        <Field label="ชื่อบัญชี"><input value={cashAcctForm.name} onChange={e=>setCashAcctForm({...cashAcctForm,name:e.target.value})} placeholder="เช่น เงินสดหน้าร้าน" style={IB}/></Field>
+        <Field label="ยอดเริ่มต้น (บาท)"><input type="number" value={cashAcctForm.openingBalance} onChange={e=>setCashAcctForm({...cashAcctForm,openingBalance:e.target.value})} placeholder="0" style={IB}/></Field>
+        <Field label="วันที่ตั้งยอด"><input type="date" value={cashAcctForm.openingDate} onChange={e=>setCashAcctForm({...cashAcctForm,openingDate:e.target.value})} style={IB}/></Field>
         <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,gap:10}}>
           <button onClick={()=>setAcctType(null)} style={{padding:"6px 13px",borderRadius:7,border:"1px solid var(--line)",cursor:"pointer",background:"var(--bg2)",color:"var(--text)",fontFamily:"inherit",fontSize:13,fontWeight:500}}>ย้อนกลับ</button>
           <button onClick={saveCashAccount} disabled={!cashAcctForm.name.trim()} style={{padding:"6px 13px",borderRadius:7,border:"none",cursor:!cashAcctForm.name.trim()?"not-allowed":"pointer",background:!cashAcctForm.name.trim()?"var(--hover2)":"var(--blue)",color:!cashAcctForm.name.trim()?"var(--dim)":"#fff",fontFamily:"inherit",fontSize:13,fontWeight:500,opacity:!cashAcctForm.name.trim()?0.6:1}}>บันทึก</button>
