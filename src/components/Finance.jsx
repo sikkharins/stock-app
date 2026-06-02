@@ -40,6 +40,8 @@ export default function FinPage({sh}){
   const[accFilter,setAccFilter]=useState("all");
   const[accForm,setAccForm]=useState({name:"",bank:"",accNo:"",perms:{...DEF_PERMS}});
   const[editAcc,setEditAcc]=useState(null);const[delAcc,setDelAcc]=useState(null);
+  const[acctType,setAcctType]=useState(null);
+  const[cashAcctForm,setCashAcctForm]=useState({name:"",openingBalance:"",openingDate:todayStr()});
   const[tfForm,setTfForm]=useState({fromAcc:"",toAcc:"",amount:"",date:todayStr(),note:""});
   const[wdForm,setWdForm]=useState({accId:"",amount:"",date:todayStr(),note:""});
   const[batchCust,setBatchCust]=useState("");
@@ -150,8 +152,26 @@ export default function FinPage({sh}){
   const chqTotalPending=cheques.filter(c=>c.status==="pending").reduce((s,c)=>s+c.amount,0);
 
   const saveTxn=()=>{if(!txnForm.amount||+txnForm.amount<=0)return;setBankTxns(p=>[...p,{id:Date.now(),...txnForm,amount:+txnForm.amount}]);cM();};
-  const getAccBal=accId=>bankTxns.filter(t=>t.accId===accId).reduce((s,t)=>s+(t.type==="in"?t.amount:-t.amount),0);
+  const getAccBal=accId=>{const acc=bankAccs.find(a=>a.id===accId);const opening=acc&&acc.openingBalance?+acc.openingBalance||0:0;return opening+bankTxns.filter(t=>t.accId===accId).reduce((s,t)=>{if(t.type==="in")return s+(+t.amount||0);if(t.type==="out")return s-(+t.amount||0);if(t.type==="opening")return s;if(t.type==="transfer")return s+(+t.amount||0);if(t.type==="adjust")return s+(+t.amount||0);return s;},0);};
   const saveAcc=()=>{if(!accForm.name||!accForm.bank)return;const data={...accForm,perms:accForm.perms||{...DEF_PERMS}};if(editAcc){setBankAccs(p=>p.map(a=>a.id===editAcc.id?{...a,...data}:a));setEditAcc(null);}else{setBankAccs(p=>[...p,{id:Date.now(),...data}]);}cM();};
+  const saveCashAccount=()=>{
+    if(!cashAcctForm.name.trim())return;
+    const openingAmt=+cashAcctForm.openingBalance||0;
+    const newId=Date.now();
+    const newAcc={id:newId,name:cashAcctForm.name.trim(),bank:"เงินสด",accNo:"",
+      isCash:true,openingBalance:openingAmt,openingDate:cashAcctForm.openingDate,
+      perms:{receive:true,payOut:true,transfer:true,clearCheque:false}};
+    setBankAccs(p=>[...p,newAcc]);
+    if(openingAmt>0){
+      setBankTxns(p=>[...p,{id:newId+1,accId:newId,type:"opening",
+        amount:openingAmt,date:cashAcctForm.openingDate,
+        from:"ตั้งยอดเริ่มต้น",refId:"",note:"ยอดเริ่มต้น",
+        catId:null,subCatId:null,transferPair:null}]);
+    }
+    setCashAcctForm({name:"",openingBalance:"",openingDate:todayStr()});
+    setAcctType(null);
+    cM();
+  };
   const deleteAcc=id=>{setBankAccs(p=>p.filter(a=>a.id!==id));setBankTxns(p=>p.filter(t=>t.accId!==id));setDelAcc(null);};
   const saveTransfer=()=>{if(!tfForm.fromAcc||!tfForm.toAcc||tfForm.fromAcc===tfForm.toAcc||!tfForm.amount||+tfForm.amount<=0)return;const ts=Date.now();const fromA=bankAccs.find(a=>a.id===+tfForm.fromAcc);const toA=bankAccs.find(a=>a.id===+tfForm.toAcc);setBankTxns(p=>[...p,{id:ts,accId:+tfForm.fromAcc,type:"out",amount:+tfForm.amount,date:tfForm.date,from:"โอนไป "+toA?.name,refId:"TF-"+ts,note:tfForm.note},{id:ts+1,accId:+tfForm.toAcc,type:"in",amount:+tfForm.amount,date:tfForm.date,from:"โอนจาก "+fromA?.name,refId:"TF-"+ts,note:tfForm.note}]);cM();};
   const getBankColor=b=>b.includes("กสิกร")?"#138f2d":b.includes("กรุงไทย")?"#1ba5e0":b.includes("กรุงเทพ")?"#012e6b":b.includes("ไทยพาณิชย์")||b.includes("พาณิชย์")?"#4e2a84":b.toUpperCase().includes("TTB")||b.includes("ทหารไทยธนชาต")?"#fc6e20":"var(--blue)";
@@ -362,7 +382,7 @@ export default function FinPage({sh}){
 
     {sub==="bank"&&<>
       <div style={{display:"flex",gap:8,marginBottom:14}}>
-        {ed&&<button onClick={()=>{setAccForm({name:"",bank:"",accNo:"",perms:{...DEF_PERMS}});setEditAcc(null);oM("addAcc");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ เพิ่มบัญชี</button>}
+        {ed&&<button onClick={()=>{setAcctType(null);oM("newAccount");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ เพิ่มบัญชี</button>}
         {ed&&bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAcc:String(bankAccs[0]?.id||""),toAcc:String(bankAccs[1]?.id||""),amount:"",date:todayStr(),note:""});oM("transfer");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>โอนระหว่างบัญชี</button>}
         {ed&&bankAccs.length>0&&<button onClick={()=>{setWdForm({accId:String(bankAccs[0]?.id||""),amount:"",date:todayStr(),note:""});oM("withdraw");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>ถอนเงินสด</button>}
       </div>
@@ -372,7 +392,10 @@ export default function FinPage({sh}){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
             <div>
               <div style={{fontSize:11,color:bankColor,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>{acc.bank}</div>
-              <div style={{fontWeight:600,fontSize:15}}>{acc.name}</div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{background:acc.isCash?"rgba(52,199,89,0.12)":"var(--blue-bg)",color:acc.isCash?"var(--green)":"var(--blue)",padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:500}}>{acc.isCash?"เงินสด":"ธนาคาร"}</span>
+                <div style={{fontWeight:600,fontSize:15}}>{acc.name}</div>
+              </div>
               {acc.accNo&&<div style={{fontSize:11,color:"var(--faint)",marginTop:1,fontFamily:"monospace"}}>{acc.accNo}</div>}
               <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>{hasPerm(acc,"receive")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)"}}>รับโอน</span>}{hasPerm(acc,"clearCheque")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"var(--blue-bg)",color:"var(--blue)"}}>เคลียร์เช็ค</span>}{hasPerm(acc,"transferOut")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(255,149,0,0.12)",color:"var(--orange)"}}>โอนเงินออก</span>}{hasPerm(acc,"payEPP")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(175,82,222,0.14)",color:"var(--purple)"}}>จ่าย EPP</span>}</div>
             </div>
@@ -683,6 +706,28 @@ export default function FinPage({sh}){
         </div>
       </div>
       <MBtns onCancel={()=>{setEditAcc(null);cM();}} onSave={saveAcc} saveLabel={editAcc?"บันทึก":"เพิ่มบัญชี"}/>
+    </Modal>}
+
+    {modal==="newAccount"&&ed&&<Modal title="สร้างบัญชีใหม่" onClose={()=>{setAcctType(null);cM();}}>
+      {!acctType&&<div style={{display:"flex",gap:12,padding:8}}>
+        <button onClick={()=>{cM();setTimeout(()=>{setAccForm({name:"",bank:"",accNo:"",perms:{...DEF_PERMS}});setEditAcc(null);oM("addAcc");},0);}} style={{flex:1,padding:"24px 16px",border:"1px solid var(--line)",borderRadius:10,background:"var(--panel)",cursor:"pointer",fontFamily:"inherit",fontSize:14,color:"var(--text)"}}>
+          <div style={{fontSize:16,fontWeight:500,marginBottom:6}}>บัญชีธนาคาร</div>
+          <div style={{fontSize:12,color:"var(--dim)"}}>กสิกร · SCB · TTB · ฯลฯ</div>
+        </button>
+        <button onClick={()=>setAcctType("cash")} style={{flex:1,padding:"24px 16px",border:"1px solid var(--line)",borderRadius:10,background:"var(--panel)",cursor:"pointer",fontFamily:"inherit",fontSize:14,color:"var(--text)"}}>
+          <div style={{fontSize:16,fontWeight:500,marginBottom:6}}>บัญชีเงินสด</div>
+          <div style={{fontSize:12,color:"var(--dim)"}}>ลิ้นชักหน้าร้าน / Petty cash</div>
+        </button>
+      </div>}
+      {acctType==="cash"&&<div>
+        <Field label="ชื่อบัญชี"><input value={cashAcctForm.name} onChange={e=>setCashAcctForm({...cashAcctForm,name:e.target.value})} placeholder="เช่น เงินสดหน้าร้าน" style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field>
+        <Field label="ยอดเริ่มต้น (บาท)"><input type="number" value={cashAcctForm.openingBalance} onChange={e=>setCashAcctForm({...cashAcctForm,openingBalance:e.target.value})} placeholder="0" style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field>
+        <Field label="วันที่ตั้งยอด"><input type="date" value={cashAcctForm.openingDate} onChange={e=>setCashAcctForm({...cashAcctForm,openingDate:e.target.value})} style={{...IB,background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)"}}/></Field>
+        <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,gap:10}}>
+          <button onClick={()=>setAcctType(null)} style={{padding:"6px 13px",borderRadius:7,border:"1px solid var(--line)",cursor:"pointer",background:"var(--bg2)",color:"var(--text)",fontFamily:"inherit",fontSize:13,fontWeight:500}}>ย้อนกลับ</button>
+          <button onClick={saveCashAccount} disabled={!cashAcctForm.name.trim()} style={{padding:"6px 13px",borderRadius:7,border:"none",cursor:!cashAcctForm.name.trim()?"not-allowed":"pointer",background:!cashAcctForm.name.trim()?"var(--hover2)":"var(--blue)",color:!cashAcctForm.name.trim()?"var(--dim)":"#fff",fontFamily:"inherit",fontSize:13,fontWeight:500,opacity:!cashAcctForm.name.trim()?0.6:1}}>บันทึก</button>
+        </div>
+      </div>}
     </Modal>}
 
     {delAcc&&<Modal title="ยืนยันลบบัญชี" onClose={()=>setDelAcc(null)}>
