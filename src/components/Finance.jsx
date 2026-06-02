@@ -45,8 +45,13 @@ export default function FinPage({sh}){
   const[selCatId,setSelCatId]=useState(null);
   const[newCatName,setNewCatName]=useState("");
   const[newCatType,setNewCatType]=useState("both");
-  const[newSubName,setNewSubName]=useState("");
+  const[newSubName,setNewSubName]=useState({});
   const[catUsageWarn,setCatUsageWarn]=useState(null);
+  const[editingCatId,setEditingCatId]=useState(null);
+  const[editCatName,setEditCatName]=useState("");
+  const[editCatType,setEditCatType]=useState("both");
+  const[editingSubId,setEditingSubId]=useState(null);
+  const[editSubName,setEditSubName]=useState("");
   const[tfForm,setTfForm]=useState({fromAccId:"",toAccId:"",amount:"",date:todayStr(),note:""});
   const[adjForm,setAdjForm]=useState({accId:null,actualBalance:"",date:todayStr(),note:""});
   const[wdForm,setWdForm]=useState({accId:"",amount:"",date:todayStr(),note:""});
@@ -209,9 +214,10 @@ export default function FinPage({sh}){
     if(selCatId===id)setSelCatId(null);
   };
   const addSub=(catId)=>{
-    if(!newSubName.trim())return;
-    setCashCats(p=>p.map(c=>c.id===catId?{...c,subs:[...(c.subs||[]),{id:Date.now(),name:newSubName.trim()}]}:c));
-    setNewSubName("");
+    const n=(newSubName[catId]||"").trim();
+    if(!n)return;
+    setCashCats(p=>p.map(c=>c.id===catId?{...c,subs:[...(c.subs||[]),{id:Date.now(),name:n}]}:c));
+    setNewSubName(p=>({...p,[catId]:""}));
   };
   const renameSub=(catId,subId,name)=>setCashCats(p=>p.map(c=>c.id===catId?{...c,subs:c.subs.map(s=>s.id===subId?{...s,name}:s)}:c));
   const delSub=(catId,subId)=>{
@@ -477,7 +483,7 @@ export default function FinPage({sh}){
         {ed&&<button onClick={()=>{setAcctType(null);oM("newAccount");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ เพิ่มบัญชี</button>}
         {ed&&bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAccId:bankAccs[0]?.id||"",toAccId:bankAccs[1]?.id||"",amount:"",date:todayStr(),note:""});oM("transfer");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>โอนระหว่างบัญชี</button>}
         {ed&&bankAccs.length>0&&<button onClick={()=>{setWdForm({accId:String(bankAccs[0]?.id||""),amount:"",date:todayStr(),note:""});oM("withdraw");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>ถอนเงินสด</button>}
-        {ed&&<button onClick={()=>{setSelCatId(null);setNewCatName("");setNewCatType("both");setNewSubName("");oM("manageCats");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontWeight:500,marginLeft:"auto"}}>จัดการหมวด</button>}
+        {ed&&<button onClick={()=>{setSelCatId(null);setNewCatName("");setNewCatType("both");setNewSubName({});setEditingCatId(null);setEditingSubId(null);oM("manageCats");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontWeight:500,marginLeft:"auto"}}>จัดการหมวด</button>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12,marginBottom:16}}>
         {bankAccs.map(acc=>{const bal=getAccBal(acc.id);const txns=bankTxns.filter(t=>t.accId===acc.id);const todayIn=txns.filter(t=>t.type==="in"&&(t.date||"").startsWith(todayStr())).reduce((s,t)=>s+t.amount,0);const todayOut=txns.filter(t=>t.type==="out"&&(t.date||"").startsWith(todayStr())).reduce((s,t)=>s+t.amount,0);const last=txns.length>0?txns[txns.length-1]:null;const bankColor=getBankColor(acc.bank);
@@ -829,51 +835,74 @@ export default function FinPage({sh}){
       </div>}
     </Modal>}
 
-    {modal==="manageCats"&&ed&&<Modal title="จัดการหมวดเงินสด" onClose={cM} wide>
-      <div style={{display:"flex",gap:16,minHeight:420}}>
-        <div style={{flex:"0 0 280px",borderRight:"1px solid var(--line)",paddingRight:16}}>
-          <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>หมวดหลัก</div>
-          {cashCats.map(c=>(
-            <div key={c.id} onClick={()=>setSelCatId(c.id)} style={{padding:"8px 10px",borderRadius:6,marginBottom:4,cursor:"pointer",background:selCatId===c.id?"var(--blue-bg)":"transparent",display:"flex",alignItems:"center",gap:8}}>
-              <input value={c.name} onChange={e=>renameCat(c.id,e.target.value)} onClick={e=>e.stopPropagation()} style={{flex:1,background:"transparent",border:"none",color:"var(--text)",fontSize:13,fontFamily:"inherit",outline:"none"}}/>
-              <select value={c.type} onChange={e=>changeCatType(c.id,e.target.value)} onClick={e=>e.stopPropagation()} style={{fontSize:11,padding:"2px 4px",background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)",borderRadius:3}}>
-                <option value="in">รับ</option>
-                <option value="out">จ่าย</option>
-                <option value="both">ทั้งคู่</option>
-              </select>
-              {cd&&<button onClick={e=>{e.stopPropagation();delCat(c.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,padding:"0 4px"}}>×</button>}
+    {modal==="manageCats"&&ed&&(()=>{
+      const typeBadge=(t)=>{
+        const cfg=t==="in"?{label:"รับ",color:"var(--green)",bg:"rgba(52,199,89,0.14)"}:t==="out"?{label:"จ่าย",color:"var(--red)",bg:"rgba(255,59,48,0.12)"}:{label:"ทั้งคู่",color:"var(--blue)",bg:"var(--blue-bg)"};
+        return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:10,color:cfg.color,background:cfg.bg,border:"1px solid "+cfg.color}}>{cfg.label}</span>;
+      };
+      const saveCat=(id)=>{const n=editCatName.trim();if(!n)return;renameCat(id,n);changeCatType(id,editCatType);setEditingCatId(null);};
+      const saveSub=(cid,sid)=>{const n=editSubName.trim();if(!n)return;renameSub(cid,sid,n);setEditingSubId(null);};
+      return <Modal title="จัดการหมวดเงินสด" onClose={cM} wide>
+        <div style={{display:"flex",gap:8,marginBottom:20,alignItems:"center"}}>
+          <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCat()} placeholder="ชื่อหมวดใหม่..." style={{...IB,flex:1}}/>
+          <select value={newCatType} onChange={e=>setNewCatType(e.target.value)} style={{fontSize:13,padding:"7px 8px",background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)",borderRadius:6,fontFamily:"inherit"}}>
+            <option value="in">รับ</option><option value="out">จ่าย</option><option value="both">ทั้งคู่</option>
+          </select>
+          <button onClick={addCat} style={{padding:"8px 16px",borderRadius:6,border:"none",background:"var(--green)",color:"#fff",fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"+ เพิ่มหมวด"}</button>
+        </div>
+        {cashCats.length===0&&<div style={{textAlign:"center",color:"var(--faint)",padding:"2rem"}}>ยังไม่มีหมวด</div>}
+        {cashCats.map(cat=>{
+          const isEdit=editingCatId===cat.id;
+          return <div key={cat.id} style={{border:"1.5px solid var(--line)",borderRadius:10,marginBottom:12,overflow:"hidden"}}>
+            <div style={{background:"var(--bg)",padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}>
+              {isEdit
+                ? <div style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
+                    <input value={editCatName} onChange={e=>setEditCatName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveCat(cat.id)} style={{...IB,flex:1,padding:"5px 8px"}} autoFocus/>
+                    <select value={editCatType} onChange={e=>setEditCatType(e.target.value)} style={{fontSize:12,padding:"5px 6px",background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)",borderRadius:6,fontFamily:"inherit"}}>
+                      <option value="in">รับ</option><option value="out">จ่าย</option><option value="both">ทั้งคู่</option>
+                    </select>
+                    <button onClick={()=>saveCat(cat.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:"var(--green)",color:"#fff",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>บันทึก</button>
+                    <button onClick={()=>setEditingCatId(null)} style={{padding:"5px 10px",borderRadius:6,border:"1px solid var(--line)",background:"transparent",cursor:"pointer",fontSize:12,color:"var(--dim)",fontFamily:"inherit"}}>ยกเลิก</button>
+                  </div>
+                : <div style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
+                    <span style={{fontWeight:600,fontSize:14}}>{cat.name}</span>
+                    {typeBadge(cat.type)}
+                    <span style={{fontSize:11,color:"var(--faint)",marginLeft:"auto"}}>{(cat.subs||[]).length+" หมวดย่อย"}</span>
+                    <button onClick={()=>{setEditingCatId(cat.id);setEditCatName(cat.name);setEditCatType(cat.type||"both");}} style={{padding:"4px 10px",borderRadius:6,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>{"แก้ไข"}</button>
+                    {cd&&<button onClick={()=>delCat(cat.id)} style={{padding:"4px 10px",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>{"ลบ"}</button>}
+                  </div>
+              }
             </div>
-          ))}
-          <div style={{marginTop:12,display:"flex",gap:6,alignItems:"center"}}>
-            <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="ชื่อหมวดใหม่" style={{...IB,fontSize:12}}/>
-            <select value={newCatType} onChange={e=>setNewCatType(e.target.value)} style={{fontSize:12,padding:"4px 6px",background:"var(--bg2)",border:"1px solid var(--line)",color:"var(--text)",borderRadius:4}}>
-              <option value="in">รับ</option><option value="out">จ่าย</option><option value="both">ทั้งคู่</option>
-            </select>
-            <button onClick={addCat} disabled={!newCatName.trim()} style={{padding:"5px 10px",fontSize:13,borderRadius:6,border:"none",cursor:!newCatName.trim()?"not-allowed":"pointer",background:!newCatName.trim()?"var(--hover2)":"var(--blue)",color:!newCatName.trim()?"var(--dim)":"#fff",fontFamily:"inherit",fontWeight:600,opacity:!newCatName.trim()?0.6:1}}>+</button>
-          </div>
-        </div>
-        <div style={{flex:1}}>
-          {!selCatId&&<div style={{color:"var(--dim)",padding:20,textAlign:"center"}}>เลือกหมวดหลักทางซ้ายเพื่อจัดการหมวดย่อย</div>}
-          {selCatId&&(()=>{
-            const c=cashCats.find(x=>x.id===selCatId);
-            if(!c)return null;
-            return <>
-              <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>{"หมวดย่อยของ \""+c.name+"\""}</div>
-              {(c.subs||[]).map(s=>(
-                <div key={s.id} style={{padding:"6px 10px",display:"flex",alignItems:"center",gap:8,marginBottom:4,borderRadius:6,background:"var(--bg2)"}}>
-                  <input value={s.name} onChange={e=>renameSub(c.id,s.id,e.target.value)} style={{flex:1,background:"transparent",border:"none",color:"var(--text)",fontSize:13,fontFamily:"inherit",outline:"none"}}/>
-                  {cd&&<button onClick={()=>delSub(c.id,s.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,padding:"0 4px"}}>×</button>}
-                </div>
-              ))}
-              <div style={{marginTop:12,display:"flex",gap:6,alignItems:"center"}}>
-                <input value={newSubName} onChange={e=>setNewSubName(e.target.value)} placeholder="ชื่อหมวดย่อยใหม่" style={{...IB,fontSize:12}}/>
-                <button onClick={()=>addSub(c.id)} disabled={!newSubName.trim()} style={{padding:"5px 10px",fontSize:13,borderRadius:6,border:"none",cursor:!newSubName.trim()?"not-allowed":"pointer",background:!newSubName.trim()?"var(--hover2)":"var(--blue)",color:!newSubName.trim()?"var(--dim)":"#fff",fontFamily:"inherit",fontWeight:600,opacity:!newSubName.trim()?0.6:1}}>+</button>
+            <div style={{padding:"12px 14px"}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+                {(cat.subs||[]).map(sub=>{
+                  const isES=editingSubId===sub.id;
+                  return <div key={sub.id} style={{display:"flex",alignItems:"center",gap:4,background:"var(--panel)",border:"1px solid "+(isES?"var(--green)":"var(--line)"),borderRadius:6,padding:"4px 8px"}}>
+                    {isES
+                      ? <div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <input value={editSubName} onChange={e=>setEditSubName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveSub(cat.id,sub.id)} style={{...IB,width:120,padding:"3px 6px",fontSize:12}} autoFocus/>
+                          <button onClick={()=>saveSub(cat.id,sub.id)} style={{padding:"2px 8px",borderRadius:4,border:"none",background:"var(--green)",color:"#fff",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>{"OK"}</button>
+                          <button onClick={()=>setEditingSubId(null)} style={{padding:"2px 6px",borderRadius:4,border:"1px solid var(--line)",background:"transparent",cursor:"pointer",fontSize:11,color:"var(--dim)",fontFamily:"inherit"}}>{"X"}</button>
+                        </div>
+                      : <div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <span style={{fontSize:13}}>{sub.name}</span>
+                          <button onClick={()=>{setEditingSubId(sub.id);setEditSubName(sub.name);}} style={{padding:"1px 6px",borderRadius:4,border:"none",background:"transparent",color:"var(--blue)",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>{"แก้ไข"}</button>
+                          {cd&&<button onClick={()=>delSub(cat.id,sub.id)} style={{padding:"1px 6px",borderRadius:4,border:"none",background:"transparent",color:"var(--red)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>{"×"}</button>}
+                        </div>
+                    }
+                  </div>;
+                })}
               </div>
-            </>;
-          })()}
-        </div>
-      </div>
-    </Modal>}
+              <div style={{display:"flex",gap:6}}>
+                <input value={newSubName[cat.id]||""} onChange={e=>setNewSubName(p=>({...p,[cat.id]:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addSub(cat.id)} placeholder="เพิ่มหมวดย่อย..." style={{...IB,flex:1,padding:"5px 8px",fontSize:12}}/>
+                <button onClick={()=>addSub(cat.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>{"+ เพิ่ม"}</button>
+              </div>
+            </div>
+          </div>;
+        })}
+        <MBtns onCancel={cM}/>
+      </Modal>;
+    })()}
 
     {catUsageWarn&&<Modal title="ลบไม่ได้" onClose={()=>setCatUsageWarn(null)}>
       <div style={{padding:12,fontSize:13,lineHeight:1.5}}>{"มีรายการเงินสด "}<strong>{catUsageWarn.count}</strong>{" รายการใช้หมวด"+(catUsageWarn.type==="sub"?"ย่อย":"")+"นี้อยู่ — กรุณาแก้ไขหรือลบรายการเหล่านั้นก่อน"}</div>
