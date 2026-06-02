@@ -29,14 +29,14 @@ const DEF_PERMS={receive:true,clearCheque:true,payEPP:true,transferOut:true};
 const hasPerm=(acc,key)=>{const p=acc.perms;if(!p)return true;if(key==="payEPP")return p.payEPP!==undefined?!!p.payEPP:p.payOnline!==undefined?!!p.payOnline:true;if(key==="transferOut")return p.transferOut!==undefined?!!p.transferOut:true;return p[key]!==undefined?!!p[key]:true;};
 
 export default function FinPage({sh}){
-  const{cN,pN,contacts,setContacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes}=sh;
+  const{cN,pN,contacts,setContacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes,cashCats}=sh;
   const ed=canE("finance");const cd=canD("finance");
   const[sub,setSub]=useState("ap");const[viewProfile,setViewProfile]=useState(null);
   const[payForm,setPayForm]=useState({refId:"",type:"",amount:"",method:"โอนเงิน",date:todayStr(),note:""});
   const[fSt,setFSt]=useState("all");
   const[chqForm,setChqForm]=useState({chequeNo:"",bank:"",amount:"",date:todayStr(),dueDate:"",from:"",refId:"",note:"",status:"pending"});
   const[chqFilter,setChqFilter]=useState("all");
-  const[txnForm,setTxnForm]=useState({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:""});
+  const[txnForm,setTxnForm]=useState({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:"",catId:"",subCatId:""});
   const[accFilter,setAccFilter]=useState("all");
   const[accForm,setAccForm]=useState({name:"",bank:"",accNo:"",perms:{...DEF_PERMS}});
   const[editAcc,setEditAcc]=useState(null);const[delAcc,setDelAcc]=useState(null);
@@ -54,6 +54,9 @@ export default function FinPage({sh}){
   const[confirmDelScn,setConfirmDelScn]=useState(null);
   const[bapSup,setBapSup]=useState("");const[bapPOs,setBapPOs]=useState([]);const[bapCNs,setBapCNs]=useState([]);
   const[bapMethod,setBapMethod]=useState("โอนเงินออก");const[bapAccId,setBapAccId]=useState(bankAccs[0]?.id||1);const[bapDate,setBapDate]=useState(todayStr());const[bapNote,setBapNote]=useState("");
+
+  const catsForDir=(dir)=>{if(!dir)return cashCats;return cashCats.filter(c=>c.type===dir||c.type==="both");};
+  const subsForCat=(catId)=>{if(!catId)return [];const c=cashCats.find(x=>x.id===+catId);return c?.subs||[];};
 
   const cnTot=cn=>{if(cn.type==="promo")return +cn.amount||0;const items=cn.items||[];if(cn.type!=="defective"&&cn.soNum){const so=sales.find(s=>s.soNum===cn.soNum);if(so&&so.discountAmt>0){const sub=(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);const r=sub>0?(sub-so.discountAmt)/sub:1;const raw=items.reduce((s,it)=>{const si=(so.items||[]).find(x=>x.productId===it.productId);return s+it.qty*(si?si.price*r:it.price);},0);return round2(raw);}}return items.reduce((s,i)=>s+i.qty*i.price,0);};
 
@@ -151,7 +154,7 @@ export default function FinPage({sh}){
   const chqFiltered=cheques.filter(c=>chqFilter==="all"||c.status===chqFilter).filter(c=>{if(!search)return true;const q=search.toLowerCase();return(c.chequeNo||"").toLowerCase().includes(q)||(c.bank||"").toLowerCase().includes(q)||(c.from||"").toLowerCase().includes(q)||(c.refId||"").toLowerCase().includes(q);});
   const chqTotalPending=cheques.filter(c=>c.status==="pending").reduce((s,c)=>s+c.amount,0);
 
-  const saveTxn=()=>{if(!txnForm.amount||+txnForm.amount<=0)return;setBankTxns(p=>[...p,{id:Date.now(),...txnForm,amount:+txnForm.amount}]);cM();};
+  const saveTxn=()=>{if(!txnForm.amount||+txnForm.amount<=0)return;const newTxn={id:Date.now(),accId:txnForm.accId,type:txnForm.type,amount:+txnForm.amount,date:txnForm.date,from:txnForm.from,refId:txnForm.refId,note:txnForm.note,catId:txnForm.catId?+txnForm.catId:null,subCatId:txnForm.subCatId?+txnForm.subCatId:null,transferPair:null};setBankTxns(p=>[...p,newTxn]);cM();};
   const getAccBal=accId=>{const acc=bankAccs.find(a=>a.id===accId);const opening=acc&&acc.openingBalance?+acc.openingBalance||0:0;return opening+bankTxns.filter(t=>t.accId===accId).reduce((s,t)=>{if(t.type==="in")return s+(+t.amount||0);if(t.type==="out")return s-(+t.amount||0);if(t.type==="opening")return s;if(t.type==="transfer")return s+(+t.amount||0);if(t.type==="adjust")return s+(+t.amount||0);return s;},0);};
   const saveAcc=()=>{if(!accForm.name||!accForm.bank)return;const data={...accForm,perms:accForm.perms||{...DEF_PERMS}};if(editAcc){setBankAccs(p=>p.map(a=>a.id===editAcc.id?{...a,...data}:a));setEditAcc(null);}else{setBankAccs(p=>[...p,{id:Date.now(),...data}]);}cM();};
   const saveCashAccount=()=>{
@@ -420,10 +423,10 @@ export default function FinPage({sh}){
           <button onClick={()=>setAccFilter("all")} style={{fontSize:12,padding:"5px 12px",borderRadius:99,border:"1px solid "+(accFilter==="all"?"var(--text)":"var(--line)"),background:accFilter==="all"?"var(--text)":"transparent",color:accFilter==="all"?"var(--bg)":"var(--dim)",cursor:"pointer"}}>ทั้งหมด</button>
           {bankAccs.map(acc=><button key={acc.id} onClick={()=>setAccFilter(String(acc.id))} style={{fontSize:12,padding:"5px 12px",borderRadius:99,border:"1px solid "+(accFilter===String(acc.id)?"var(--text)":"var(--line)"),background:accFilter===String(acc.id)?"var(--text)":"transparent",color:accFilter===String(acc.id)?"var(--bg)":"var(--dim)",cursor:"pointer"}}>{acc.name+" — "+acc.bank}</button>)}
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหา..." style={{...IB,width:160,padding:"5px 10px",fontSize:12}}/>{ed&&<button onClick={()=>{setTxnForm({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:""});oM("addTxn");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ บันทึกรายการ</button>}</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหา..." style={{...IB,width:160,padding:"5px 10px",fontSize:12}}/>{ed&&<button onClick={()=>{setTxnForm({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:"",catId:"",subCatId:""});oM("addTxn");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:"var(--blue)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ บันทึกรายการ</button>}</div>
       </div>
-      <div style={{overflowX:"auto"}}><table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}><thead><tr style={{borderBottom:"0.5px solid var(--line)",background:"var(--bg)"}}>{["วันที่","บัญชี","ประเภท","จำนวน","จาก/ถึง","อ้างอิง","หมายเหตุ",""].map((h,i)=><th key={i} style={{textAlign:"left",padding:"8px",fontWeight:500,color:"var(--dim)",fontSize:12}}>{h}</th>)}</tr></thead>
-      <tbody>{txnFiltered.length===0?<tr><td colSpan={8} style={{padding:"3rem 2rem",textAlign:"center"}}><div style={{color:"var(--dim)",fontSize:28,marginBottom:6}}>---</div><div style={{color:"var(--faint)",fontSize:13,marginBottom:10}}>ยังไม่มีรายการเคลื่อนไหว</div>{ed&&<button onClick={()=>{setTxnForm({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:""});oM("addTxn");}} style={{padding:"6px 16px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ บันทึกรายการแรก</button>}</td></tr>:[...txnFiltered].reverse().map(t=>{
+      <div style={{overflowX:"auto"}}><table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}><thead><tr style={{borderBottom:"0.5px solid var(--line)",background:"var(--bg)"}}>{["วันที่","บัญชี","ประเภท","จำนวน","จาก/ถึง","อ้างอิง","หมวด","หมายเหตุ",""].map((h,i)=><th key={i} style={{textAlign:"left",padding:"8px",fontWeight:500,color:"var(--dim)",fontSize:12}}>{h}</th>)}</tr></thead>
+      <tbody>{txnFiltered.length===0?<tr><td colSpan={9} style={{padding:"3rem 2rem",textAlign:"center"}}><div style={{color:"var(--dim)",fontSize:28,marginBottom:6}}>---</div><div style={{color:"var(--faint)",fontSize:13,marginBottom:10}}>ยังไม่มีรายการเคลื่อนไหว</div>{ed&&<button onClick={()=>{setTxnForm({accId:bankAccs[0]?.id||1,type:"in",amount:"",date:todayStr(),from:"",refId:"",note:"",catId:"",subCatId:""});oM("addTxn");}} style={{padding:"6px 16px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>+ บันทึกรายการแรก</button>}</td></tr>:[...txnFiltered].reverse().map(t=>{
         const acc=bankAccs.find(a=>a.id===t.accId);
         return<tr key={t.id} style={{borderBottom:"0.5px solid var(--line)"}}>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{toBE(t.date)}</td>
@@ -432,6 +435,7 @@ export default function FinPage({sh}){
           <td style={{padding:"8px",fontWeight:600,color:t.type==="in"?"var(--green)":"var(--red)"}}>{(t.type==="in"?"+":"-")+"฿"+fmt(t.amount)}</td>
           <td style={{padding:"8px"}}>{t.from||"—"}</td>
           <td style={{padding:"8px",color:"var(--blue)",fontSize:12}}>{t.refId||"—"}</td>
+          <td style={{padding:"8px"}}>{t.catId?(()=>{const c=cashCats.find(x=>x.id===t.catId);if(!c)return <span style={{color:"var(--faint)",fontSize:11}}>(หาไม่เจอ)</span>;const s=t.subCatId?(c.subs||[]).find(x=>x.id===t.subCatId):null;return <span style={{fontSize:11,background:"var(--blue-bg)",color:"var(--blue)",padding:"2px 7px",borderRadius:4}}>{c.name}{s?" / "+s.name:""}</span>;})():<span style={{color:"var(--faint)",fontSize:11}}>(ไม่ระบุ)</span>}</td>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{t.note||"—"}</td>
           <td style={{padding:"8px",whiteSpace:"nowrap"}}>{cd&&<button onClick={()=>setConfirmDelTxn(t)} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>
         </tr>;})}
@@ -691,6 +695,18 @@ export default function FinPage({sh}){
         <Field label="จาก/ถึง"><input value={txnForm.from} onChange={e=>setTxnForm(f=>({...f,from:e.target.value}))} style={IB}/></Field>
         <Field label="อ้างอิง (SO/PO)"><input value={txnForm.refId} onChange={e=>setTxnForm(f=>({...f,refId:e.target.value}))} style={IB}/></Field>
         <div style={{gridColumn:"1/-1"}}><Field label="หมายเหตุ"><input value={txnForm.note} onChange={e=>setTxnForm(f=>({...f,note:e.target.value}))} style={IB}/></Field></div>
+        <Field label="หมวด">
+          <select value={txnForm.catId} onChange={e=>setTxnForm({...txnForm,catId:e.target.value,subCatId:""})} style={IB}>
+            <option value="">(ไม่ระบุ)</option>
+            {catsForDir(txnForm.type).map(c=>(<option key={c.id} value={c.id}>{c.name}</option>))}
+          </select>
+        </Field>
+        {txnForm.catId&&subsForCat(txnForm.catId).length>0&&<Field label="หมวดย่อย">
+          <select value={txnForm.subCatId} onChange={e=>setTxnForm({...txnForm,subCatId:e.target.value})} style={IB}>
+            <option value="">(ไม่ระบุ)</option>
+            {subsForCat(txnForm.catId).map(s=>(<option key={s.id} value={s.id}>{s.name}</option>))}
+          </select>
+        </Field>}
       </div>
       <MBtns onCancel={cM} onSave={saveTxn}/>
     </Modal>}
