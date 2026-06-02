@@ -859,8 +859,8 @@ export default function FinPage({sh}){
 
     {modal==="transfer"&&ed&&<Modal title="โอนเงินระหว่างบัญชี" onClose={cM}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Field label="จากบัญชี"><CustomSelect value={String(tfForm.fromAccId||"")} onChange={v=>setTfForm(f=>({...f,fromAccId:v?+v:""}))} options={[{value:"",label:"— เลือก —"},...bankAccs.map(a=>({value:String(a.id),label:a.name+(a.isCash?" (เงินสด)":" — "+a.bank)}))]}/></Field>
-        <Field label="ไปบัญชี"><CustomSelect value={String(tfForm.toAccId||"")} onChange={v=>setTfForm(f=>({...f,toAccId:v?+v:""}))} options={[{value:"",label:"— เลือก —"},...bankAccs.filter(a=>a.id!==+tfForm.fromAccId).map(a=>({value:String(a.id),label:a.name+(a.isCash?" (เงินสด)":" — "+a.bank)}))]}/></Field>
+        <Field label="จากบัญชี"><CustomSelect value={String(tfForm.fromAccId||"")} onChange={v=>setTfForm(f=>({...f,fromAccId:v?+v:""}))} options={[{value:"",label:"— เลือก —"},...bankAccs.filter(a=>a.isCash||hasPerm(a,"transferOut")).map(a=>({value:String(a.id),label:a.name+(a.isCash?" (เงินสด)":" — "+a.bank)+" (฿"+fmt(getAccBal(a.id))+")"}))]}/></Field>
+        <Field label="ไปบัญชี"><CustomSelect value={String(tfForm.toAccId||"")} onChange={v=>setTfForm(f=>({...f,toAccId:v?+v:""}))} options={[{value:"",label:"— เลือก —"},...bankAccs.filter(a=>a.id!==+tfForm.fromAccId&&(a.isCash||hasPerm(a,"receive"))).map(a=>({value:String(a.id),label:a.name+(a.isCash?" (เงินสด)":" — "+a.bank)+" (฿"+fmt(getAccBal(a.id))+")"}))]}/></Field>
         <Field label="จำนวน (บาท)"><input type="number" value={tfForm.amount} onChange={e=>setTfForm(f=>({...f,amount:e.target.value}))} style={IB}/></Field>
         <Field label="วันที่"><ThaiDateInput value={tfForm.date} onChange={e=>setTfForm(f=>({...f,date:e.target.value}))}/></Field>
         <div style={{gridColumn:"1/-1"}}><Field label="หมายเหตุ"><input value={tfForm.note} onChange={e=>setTfForm(f=>({...f,note:e.target.value}))} style={IB}/></Field></div>
