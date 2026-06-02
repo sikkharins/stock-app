@@ -4,7 +4,7 @@ import { getNotifs, mkAudit, nowStr, todayStr, round2 } from "./utils/helpers.js
 import { loadData, saveData, loadAllFromSupabase, saveKeyOptimistic, subscribeRealtime, unsubscribeRealtime } from "./utils/storage.js";
 import { mergeForKey } from "./utils/merge.js";
 import { signIn, signOut, getSession, getProfile, getAllProfiles, migrateUsers } from "./utils/auth.js";
-import { initProducts, initContacts, initPOs, initSales, initCats, initBrands, initUsers, initQuotes, initTargets } from "./data/initData.js";
+import { initProducts, initContacts, initPOs, initSales, initCats, initCashCats, initBrands, initUsers, initQuotes, initTargets } from "./data/initData.js";
 import { THEME_CSS } from "./styles/theme.js";
 import Field from "./components/ui/Field.jsx";
 import GlobalSearch from "./components/ui/GlobalSearch.jsx";
@@ -77,7 +77,7 @@ export default function App(){
   const[defectives,setDefectives]=useState([]);
   const[supCNotes,setSupCNotes]=useState([]);
   const[promos,setPromos]=useState([]);const[events,setEvents]=useState([]);
-  const[cats,setCats]=useState(initCats);const[brands,setBrands]=useState(initBrands);
+  const[cats,setCats]=useState(initCats);const[cashCats,setCashCats]=useState(initCashCats);const[brands,setBrands]=useState(initBrands);
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
   const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[fabOpen,setFabOpen]=useState(false);const[showFabCustomizer,setShowFabCustomizer]=useState(false);
@@ -153,7 +153,7 @@ export default function App(){
 
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
-    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents};
+    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents};
     return RT_SETTERS.current;
   },[]);
 
@@ -193,6 +193,7 @@ export default function App(){
     out.pos=g("pos","v3_pos",initPOs);setPOs(out.pos);
     out.sales=g("sales","v3_sales",initSales);setSales(out.sales);
     out.cats=g("cats","v3_cats",initCats);setCats(out.cats);
+    out.cashcats=g("cashcats","v3_cashcats",initCashCats);setCashCats(out.cashcats);
     out.brands=g("brands","v3_brands",initBrands);setBrands(out.brands);
     const rawLogs=g("logs","v3_logs",[]).filter(l=>l.qtyBefore!==undefined);
     const seen=new Set();out.logs=rawLogs.filter(l=>{const k=l.date+"|"+l.type+"|"+l.productId+"|"+l.ref+"|"+l.qty;if(seen.has(k))return false;seen.add(k);return true;});setLogs(out.logs);
@@ -308,7 +309,7 @@ export default function App(){
   // Autosave: write only the arrays that actually changed (diff vs last-synced),
   // each as an independent optimistic-locked row save with merge-on-conflict.
   useEffect(()=>{if(!loaded)return;
-    const current={products,contacts,pos,sales,cats,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events};
+    const current={products,contacts,pos,sales,cats,cashcats:cashCats,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events};
     setSaving(true);
     const tm=setTimeout(async()=>{
       const dirty=[];
@@ -327,7 +328,7 @@ export default function App(){
     // the 800ms timer every render → autosave would never fire. The deps below
     // are exactly what should trigger a new save (any tracked array changed).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
+  },[products,contacts,pos,sales,cats,cashCats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
 
   const[staleWarn,setStaleWarn]=useState(false);
   // Same as doRefresh: reloadFromServer reads only refs, stable identity unneeded.
@@ -398,7 +399,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>

@@ -103,9 +103,39 @@ test("mergeForKey('audit') caps to 500, keeping newest by id", () => {
   assert.ok(!ids.has(99), "should drop id 99 (beyond cap)");
 });
 
-test("MERGE_CFG covers all 22 synced keys", () => {
-  const keys = ["products","contacts","pos","sales","cats","brands","logs","payments","activity","quotes","targets","audit","pricehist","cheques","bankaccs","banktxns","cnotes","billings","defectives","supcnotes","promos","events"];
+test("MERGE_CFG covers all 23 synced keys", () => {
+  const keys = ["products","contacts","pos","sales","cats","cashcats","brands","logs","payments","activity","quotes","targets","audit","pricehist","cheques","bankaccs","banktxns","cnotes","billings","defectives","supcnotes","promos","events"];
   for (const k of keys) assert.ok(MERGE_CFG[k], `missing MERGE_CFG entry: ${k}`);
+});
+
+test("cashcats: concurrent insert different subs survives", () => {
+  const base = [{ id: 1, name: "ขาย", type: "in", subs: [{ id: 11, name: "ขายสด (SO)" }] }];
+  const mine = [{ id: 1, name: "ขาย", type: "in", subs: [{ id: 11, name: "ขายสด (SO)" }] }, { id: 99, name: "Custom A", type: "out", subs: [] }];
+  const remote = [{ id: 1, name: "ขาย", type: "in", subs: [{ id: 11, name: "ขายสด (SO)" }] }, { id: 100, name: "Custom B", type: "out", subs: [] }];
+  const merged = mergeForKey("cashcats", base, mine, remote);
+  assert.equal(merged.length, 3, "should keep base + both inserts");
+  assert.ok(merged.some(c => c.id === 99));
+  assert.ok(merged.some(c => c.id === 100));
+});
+
+test("banktxns: new catId field merged with deep equality", () => {
+  const base = [{ id: 1, accId: 1, type: "in", amount: 100, catId: null, subCatId: null }];
+  const mine = [{ id: 1, accId: 1, type: "in", amount: 100, catId: 1, subCatId: 11 }];
+  const remote = [{ id: 1, accId: 1, type: "in", amount: 100, catId: null, subCatId: null }];
+  const merged = mergeForKey("banktxns", base, mine, remote);
+  assert.equal(merged[0].catId, 1);
+  assert.equal(merged[0].subCatId, 11);
+});
+
+test("bankaccs: isCash flag merged correctly", () => {
+  const base = [{ id: 1, name: "บัญชี 1", bank: "กสิกร" }];
+  const mine = [{ id: 1, name: "บัญชี 1", bank: "กสิกร" }, { id: 2, name: "เงินสดหน้าร้าน", bank: "เงินสด", isCash: true, openingBalance: 5000 }];
+  const remote = [{ id: 1, name: "บัญชี 1", bank: "กสิกร" }];
+  const merged = mergeForKey("bankaccs", base, mine, remote);
+  assert.equal(merged.length, 2);
+  const cash = merged.find(a => a.isCash);
+  assert.ok(cash, "cash account should be in merged result");
+  assert.equal(cash.openingBalance, 5000);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

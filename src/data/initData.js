@@ -16,3 +16,39 @@ const _wAC=["sales_total","profit"];
 const _wSP=["products","sales_total","profit","low_stock"];
 const _wSup=["products","stock_value","recent_po","recent_log"];
 export const initUsers = [{id:1,username:"admin",password:"admin123",role:"Admin",dashboardWidgets:_wAll,perms:{dashboard:"edit",products:"edit",stock_log:"view",purchase:"edit",sales:"edit",finance:"edit",reports:"edit",suppliers:"edit",customers:"edit",defective:"edit",users:"edit"}},{id:2,username:"manager",password:"manager123",role:"Manager",dashboardWidgets:_wAll,perms:{dashboard:"view",products:"view",stock_log:"view",purchase:"view",sales:"view",finance:"view",reports:"view",suppliers:"view",customers:"view",defective:"view",users:"none"}},{id:3,username:"warehouse",password:"warehouse123",role:"Warehouse",dashboardWidgets:_wWH,perms:{dashboard:"view",products:"edit",stock_log:"view",purchase:"edit",sales:"none",finance:"none",reports:"none",suppliers:"view",customers:"none",defective:"edit",users:"none"}},{id:4,username:"accountant",password:"accountant123",role:"Accountant",dashboardWidgets:_wAC,perms:{dashboard:"view",products:"none",stock_log:"view",purchase:"none",sales:"none",finance:"edit",reports:"view",suppliers:"none",customers:"none",users:"none"}},{id:5,username:"somchai",password:"123456",role:"Sales",salesName:"สมชาย",dashboardWidgets:_wSP,perms:_mkSP()},{id:6,username:"somying",password:"123456",role:"Sales",salesName:"สมหญิง",dashboardWidgets:_wSP,perms:_mkSP()},{id:7,username:"wichai",password:"123456",role:"Sales",salesName:"วิชัย",dashboardWidgets:_wSP,perms:_mkSP()},{id:8,username:"pimjai",password:"123456",role:"Sales",salesName:"พิมพ์ใจ",dashboardWidgets:_wSP,perms:_mkSP()},{id:9,username:"bkksupply",password:"supplier1",role:"Supplier",supplierName:"Bangkok Supply Co.",dashboardWidgets:_wSup,perms:_mkSupP()},{id:10,username:"siamind",password:"supplier2",role:"Supplier",supplierName:"Siam Industrial",dashboardWidgets:_wSup,perms:_mkSupP()}];
+
+export const initCashCats = [
+  { id: 1, name: "ขาย", type: "in", subs: [
+    { id: 11, name: "ขายสด (SO)" },
+    { id: 12, name: "ขายเศษ" },
+    { id: 13, name: "อื่นๆ" },
+  ]},
+  { id: 2, name: "ซื้อ", type: "out", subs: [
+    { id: 21, name: "จ่ายซัพ (PO)" },
+    { id: 22, name: "จ่ายซื้อจิปาถะ" },
+  ]},
+  { id: 3, name: "ค่าใช้จ่ายร้าน", type: "out", subs: [
+    { id: 31, name: "ค่ากาแฟ/น้ำดื่ม" },
+    { id: 32, name: "ค่าน้ำมัน/เดินทาง" },
+    { id: 33, name: "ค่าทำความสะอาด" },
+  ]},
+  { id: 4, name: "ค่าสาธารณูปโภค", type: "out", subs: [
+    { id: 41, name: "ค่าน้ำ" },
+    { id: 42, name: "ค่าไฟ" },
+    { id: 43, name: "ค่าโทรศัพท์/เน็ต" },
+  ]},
+  { id: 5, name: "ค่าสถานที่", type: "out", subs: [
+    { id: 51, name: "ค่าเช่า" },
+    { id: 52, name: "ค่าซ่อมแซม" },
+  ]},
+  { id: 6, name: "โอน/ถอน/ฝาก", type: "both", subs: [
+    { id: 61, name: "ฝากเข้าธนาคาร" },
+    { id: 62, name: "ถอนจากธนาคาร" },
+    { id: 63, name: "โอนระหว่างบัญชี" },
+  ]},
+  { id: 7, name: "ปรับยอด", type: "both", subs: [
+    { id: 71, name: "เกิน" },
+    { id: 72, name: "ขาด" },
+  ]},
+  { id: 8, name: "อื่นๆ", type: "both", subs: [] },
+];

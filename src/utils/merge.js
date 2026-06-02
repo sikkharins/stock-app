@@ -60,7 +60,7 @@ const byId = (x) => x.id;
 
 // keyOf: how to identify a record. cap/ts: trim capped lists to their original size, newest first.
 export const MERGE_CFG = {
-  products: {}, contacts: {}, pos: {}, sales: {}, cats: {}, brands: {},
+  products: {}, contacts: {}, pos: {}, sales: {}, cats: {}, cashcats: {}, brands: {},
   payments: {}, quotes: {}, targets: {}, cheques: {}, bankaccs: {},
   banktxns: {}, cnotes: {}, billings: {}, defectives: {}, supcnotes: {},
   promos: {}, events: {},
