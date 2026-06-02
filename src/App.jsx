@@ -96,6 +96,10 @@ export default function App(){
   const onFabPointerUp=useCallback(()=>{const d=fabDrag.current;d.dragging=false;if(d.moved&&fabPos.x!=null){const sz=fabSizeRef.current;const snapX=fabPos.x<window.innerWidth/2?8:window.innerWidth-sz-8;const snapped={x:snapX,y:fabPos.y};setFabPos(snapped);localStorage.setItem("fab_pos",JSON.stringify(snapped));}},[fabPos]);
   useEffect(()=>{window.addEventListener("mousemove",onFabPointerMove);window.addEventListener("mouseup",onFabPointerUp);window.addEventListener("touchmove",onFabPointerMove,{passive:false});window.addEventListener("touchend",onFabPointerUp);return()=>{window.removeEventListener("mousemove",onFabPointerMove);window.removeEventListener("mouseup",onFabPointerUp);window.removeEventListener("touchmove",onFabPointerMove);window.removeEventListener("touchend",onFabPointerUp);};},[onFabPointerMove,onFabPointerUp]);
   const[pullY,setPullY]=useState(0);const[refreshing,setRefreshing]=useState(false);const pullStart=useRef(null);const mainRef=useRef(null);
+  // reloadFromServer is recreated every render but only reads refs (stable) →
+  // capturing first-render version is safe. Adding to deps would force doRefresh
+  // to change every render, cascading into onTouchEnd deps for no benefit.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const doRefresh=useCallback(async()=>{setRefreshing(true);await reloadFromServer();setRefreshing(false);setPullY(0);},[]);
   const onTouchStart=useCallback(e=>{if(mainRef.current&&mainRef.current.scrollTop<=0)pullStart.current=e.touches[0].clientY;else pullStart.current=null;},[]);
   const onTouchMove=useCallback(e=>{if(pullStart.current===null||refreshing)return;const dy=e.touches[0].clientY-pullStart.current;if(dy>0&&mainRef.current&&mainRef.current.scrollTop<=0){setPullY(Math.min(dy*0.4,80));if(dy>10)e.preventDefault();}else setPullY(0);},[refreshing]);
@@ -319,13 +323,19 @@ export default function App(){
       pendingSaveRef.current=null;setSaving(false);
     },800);
     return()=>clearTimeout(tm);
+    // saveKeyWithMerge is recreated every render. Adding to deps would reset
+    // the 800ms timer every render → autosave would never fire. The deps below
+    // are exactly what should trigger a new save (any tracked array changed).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[products,contacts,pos,sales,cats,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
 
   const[staleWarn,setStaleWarn]=useState(false);
+  // Same as doRefresh: reloadFromServer reads only refs, stable identity unneeded.
   const doManualReload=useCallback(async()=>{
     await reloadFromServer();
     openedAtRef.current=Date.now();
     setStaleWarn(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   useEffect(()=>{
     const t=setInterval(()=>{
@@ -363,12 +373,20 @@ export default function App(){
     window.addEventListener("beforeunload",flush);
     document.addEventListener("visibilitychange",onVis);
     return()=>{window.removeEventListener("beforeunload",flush);document.removeEventListener("visibilitychange",onVis);};
+    // Install listeners once on mount. reloadFromServer reads only refs (stable),
+    // so capturing first-render version is correct. Re-running this effect would
+    // detach and re-attach the listeners every render uselessly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
   useEffect(()=>{
     if(!cu)return;
     const u=users.find(x=>x.id===cu.id);
     if(u)setCu(u);
+    // Intentionally re-runs only on users change (e.g., admin edits profile);
+    // cu in deps would cause useless re-runs (cu is read fresh from closure each
+    // render anyway). cu changes alone don't need this lookup to re-fire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[users]);
 
   const handleTab=nt=>{history.pushState({app:true},"");setTab(nt);setSearch("");setSideOpen(false);setSess(s=>{if(!s)return s;const now=Date.now();const hist=[...s.tabHistory];if(hist.length>0){const last=hist[hist.length-1];hist[hist.length-1]={...last,endTime:now,duration:Math.floor((now-last.enterTime)/1000)};}hist.push({tab:nt,enterTime:now,endTime:null,duration:null});return{...s,tabHistory:hist};});};
