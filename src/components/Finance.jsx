@@ -122,7 +122,7 @@ export default function FinPage({sh}){
     }
     for(const ln of batchLines){
       const amt=+ln.amount;
-      if(ln.method==="โอนเงิน"&&ln.accId){newTxns.push({id:ts++,accId:ln.accId,type:"in",amount:amt,date:ln.date,from:custName,refId:batchSOs.join(","),note:"รับชำระรวม"});}
+      if(ln.method==="โอนเงิน"&&ln.accId){newTxns.push({id:ts++,accId:ln.accId,type:"in",amount:amt,date:ln.date,from:custName,refId:batchSOs.join(","),note:"รับชำระรวม",catId:null,subCatId:null,transferPair:null});}
       if(ln.method==="เช็ค"){newChqs.push({id:ts++,chequeNo:ln.chequeNo,bank:ln.chequeBank,amount:amt,date:ln.date,dueDate:ln.chequeDue,from:custName,refId:batchSOs.join(","),note:"รับชำระรวม",status:"pending"});}
     }
     setPayments(p=>[...p,...newPays]);
@@ -150,7 +150,7 @@ export default function FinPage({sh}){
       if(rem>0)newPays.push({id:ts++,refId:poNum,type:"ap",amount:rem,method:bapMethod,date:bapDate,note:"จ่ายรวม"+cnNote,name:supName,accId:bapAccId});
     }
     setPayments(p=>[...p,...newPays]);
-    if(bapNetTotal>0&&bapAccId){setBankTxns(p=>[...p,{id:ts++,accId:bapAccId,type:"out",amount:bapNetTotal,date:bapDate,from:supName,refId:refPOs,note:(bapMethod==="จ่ายEPP"?"จ่ายEPP ":"จ่าย ")+"จ่ายรวม "+refPOs}]);}
+    if(bapNetTotal>0&&bapAccId){setBankTxns(p=>[...p,{id:ts++,accId:bapAccId,type:"out",amount:bapNetTotal,date:bapDate,from:supName,refId:refPOs,note:(bapMethod==="จ่ายEPP"?"จ่ายEPP ":"จ่าย ")+"จ่ายรวม "+refPOs,catId:null,subCatId:null,transferPair:null}]);}
     if(bapCNs.length>0){setSupCNotes(p=>p.map(c=>bapCNs.includes(c.id)?{...c,used:true}:c));}
     cM();
   };
@@ -163,8 +163,8 @@ export default function FinPage({sh}){
     const old=cheques.find(c=>c.id===id);if(!old)return;
     if(st==="cleared"&&old.status==="bounced"){setWarnMsg("เช็คเด้งแล้ว ไม่สามารถเคลียร์ได้");return;}
     setCheques(p=>p.map(c=>c.id===id?{...c,status:st,...(extra||{})}:c));
-    if(st==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now(),accId:old.depositAccId,type:"in",amount:old.amount,date:todayStr(),from:"เช็ค "+old.chequeNo,refId:old.refId||"",note:"เคลียร์เช็ค"}]);}
-    if(st==="bounced"&&old.status==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now()+1,accId:old.depositAccId,type:"out",amount:old.amount,date:todayStr(),from:"เช็คเด้ง "+old.chequeNo,refId:old.refId||"",note:"เช็คเด้ง (กลับรายการเคลียร์)"}]);}
+    if(st==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now(),accId:old.depositAccId,type:"in",amount:old.amount,date:todayStr(),from:"เช็ค "+old.chequeNo,refId:old.refId||"",note:"เคลียร์เช็ค",catId:null,subCatId:null,transferPair:null}]);}
+    if(st==="bounced"&&old.status==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now()+1,accId:old.depositAccId,type:"out",amount:old.amount,date:todayStr(),from:"เช็คเด้ง "+old.chequeNo,refId:old.refId||"",note:"เช็คเด้ง (กลับรายการเคลียร์)",catId:null,subCatId:null,transferPair:null}]);}
   };
   const[chqConfirm,setChqConfirm]=useState(null);
   const[bounceConfirm,setBounceConfirm]=useState(null);
@@ -454,7 +454,7 @@ export default function FinPage({sh}){
           if(bounceConfirm.resolve==="new_cheque"){
             setCheques(p=>[...p,{id:newChqId,chequeNo:bounceConfirm.newChequeNo,bank:bounceConfirm.newBank,amount:bounceConfirm.amount,receiveDate:todayStr(),dueDate:bounceConfirm.newDueDate,from:bounceConfirm.from||"",refId:bounceConfirm.refId||"",note:"แทนเช็คเด้ง "+bounceConfirm.chequeNo,status:"pending"}]);
           }else if(bounceConfirm.resolve==="transfer"){
-            setBankTxns(p=>[...p,{id:newTxnId,accId:bounceConfirm.txnAccId,type:"in",amount:bounceConfirm.amount,date:bounceConfirm.txnDate,from:bounceConfirm.from||"ลูกค้า",refId:bounceConfirm.refId||"",note:"โอนแทนเช็คเด้ง "+bounceConfirm.chequeNo}]);
+            setBankTxns(p=>[...p,{id:newTxnId,accId:bounceConfirm.txnAccId,type:"in",amount:bounceConfirm.amount,date:bounceConfirm.txnDate,from:bounceConfirm.from||"ลูกค้า",refId:bounceConfirm.refId||"",note:"โอนแทนเช็คเด้ง "+bounceConfirm.chequeNo,catId:null,subCatId:null,transferPair:null}]);
           }
           setBounceConfirm(null);
         }} saveLabel="ยืนยัน"/>
@@ -917,7 +917,7 @@ export default function FinPage({sh}){
 
     {modal==="withdraw"&&ed&&<Modal title="ถอนเงินสด" onClose={cM}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Field label="จากบัญชี"><CustomSelect value={wdForm.accId} onChange={v=>setWdForm(f=>({...f,accId:v}))} options={bankAccs.map(a=>({value:String(a.id),label:a.name+" — "+a.bank+" (฿"+fmt(getAccBal(a.id))+")" }))}/></Field>
+        <Field label="จากบัญชี"><CustomSelect value={wdForm.accId} onChange={v=>setWdForm(f=>({...f,accId:v}))} options={bankAccs.filter(a=>!a.isCash).map(a=>({value:String(a.id),label:a.name+" — "+a.bank+" (฿"+fmt(getAccBal(a.id))+")" }))}/></Field>
         <Field label="จำนวนเงิน (฿)"><input type="number" value={wdForm.amount} onChange={e=>setWdForm(f=>({...f,amount:e.target.value}))} style={IB}/></Field>
         <Field label="วันที่"><ThaiDateInput value={wdForm.date} onChange={e=>setWdForm(f=>({...f,date:e.target.value}))}/></Field>
         <Field label="หมายเหตุ"><input value={wdForm.note} onChange={e=>setWdForm(f=>({...f,note:e.target.value}))} style={IB} placeholder="เช่น ถอนเงินสดย่อย"/></Field>
@@ -925,7 +925,7 @@ export default function FinPage({sh}){
       {wdForm.accId&&wdForm.amount&&+wdForm.amount>0&&<div style={{background:"rgba(255,149,0,0.12)",border:"1px solid var(--orange)",borderRadius:8,padding:"12px",marginTop:12,fontSize:13,color:"var(--orange)"}}>
         {"ถอนเงินสด ฿"+fmt(+wdForm.amount)+" จาก "+((bankAccs.find(a=>a.id===+wdForm.accId)||{}).name||"")}
       </div>}
-      <MBtns onCancel={cM} onSave={()=>{if(!wdForm.accId||!wdForm.amount||+wdForm.amount<=0)return;setBankTxns(p=>[...p,{id:Date.now(),accId:+wdForm.accId,type:"out",amount:+wdForm.amount,date:wdForm.date,from:"ถอนเงินสด",refId:"WD-"+Date.now(),note:wdForm.note}]);cM();}} saveLabel="ยืนยันถอน"/>
+      <MBtns onCancel={cM} onSave={()=>{if(!wdForm.accId||!wdForm.amount||+wdForm.amount<=0)return;setBankTxns(p=>[...p,{id:Date.now(),accId:+wdForm.accId,type:"out",amount:+wdForm.amount,date:wdForm.date,from:"ถอนเงินสด",refId:"WD-"+Date.now(),note:wdForm.note,catId:null,subCatId:null,transferPair:null}]);cM();}} saveLabel="ยืนยันถอน"/>
     </Modal>}
 
     {modal==="batchPay"&&ed&&<Modal title="รับชำระรวม" onClose={cM} wide>
