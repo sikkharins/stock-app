@@ -109,11 +109,11 @@ export function printDoc(type, data, products, contacts, opts = {}) {
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;background:#fff;}
-@media screen{body{padding:${isExclusive ? "16px" : "24px"};max-width:${isExclusive ? "560px" : "860px"};margin:0 auto;}}
+@media screen{body{padding:24px;max-width:860px;margin:0 auto;}}
 @media print{
   .no-print{display:none!important;}
   body{padding:0;font-size:12px;}
-  @page{size:${isExclusive ? "A5" : "A4"};margin:${isExclusive ? "10mm" : "15mm"};}
+  @page{size:A4;margin:15mm;}
 }
 </style>
 </head>
