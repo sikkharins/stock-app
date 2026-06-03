@@ -82,7 +82,7 @@ export default function POPage({sh}){
         const soItems=po.items.map(i=>({productId:i.productId,qty:i.qty,price:i.sellPrice||(products.find(x=>x.id===i.productId)||{}).price||0}));
         const cust=contacts.find(c=>c.id===+po.dropShipCustomerId);const sub=soItems.reduce((s,i)=>s+i.qty*i.price,0);
         const defCredit=cust?.defaultCreditDays||45;const defVat=cust?.defaultVat!==false;const vatAmt=defVat?round2(sub*7/107):0;
-        setSales(p=>[...p,{id:Date.now(),soNum:sn,customerId:+po.dropShipCustomerId,date:todayStr(),status:"pending_delivery",items:soItems,origPrices:soItems.map(i=>+i.price),includeVat:defVat,vatAmount:vatAmt,payType:"credit",discountAmt:0,discPct:0,extraDiscPct:0,creditDays:defCredit,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างอัตโนมัติจาก "+po.poNum+" (ส่งนอกสถานที่)",fromQuote:"",linkedPO:po.poNum,dropShip:true}]);
+        setSales(p=>[...p,{id:Date.now(),soNum:sn,customerId:+po.dropShipCustomerId,date:todayStr(),status:"pending_delivery",items:soItems,origPrices:soItems.map(i=>+i.price),includeVat:defVat,vatAmount:vatAmt,payType:"credit",discountAmt:0,discPct:0,extraDiscPct:0,extraDiscAmt:0,creditDays:defCredit,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างอัตโนมัติจาก "+po.poNum+" (ส่งนอกสถานที่)",fromQuote:"",linkedPO:po.poNum,dropShip:true}]);
         setPOs(p=>p.map(x=>x.id===po.id?{...x,linkedSO:sn}:x));
         addA("สร้าง SO อัตโนมัติ (Drop Ship)",sn+" ← "+po.poNum);
       }

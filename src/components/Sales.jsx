@@ -24,7 +24,7 @@ function SOList({sh}){
   const[form,setForm]=useState(ef);const[viewSO,setViewSO]=useState(null);const[confirmSO,setConfirmSO]=useState(null);const[delSO,setDelSO]=useState(null);const[editSO,setEditSO]=useState(null);const[viewProfile,setViewProfile]=useState(null);const[fSt,setFSt]=useState("all");const[approveSO,setApproveSO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);
 
   const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId))return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
-  const[incVat,setIncVat]=useState(true);const[payType,setPayType]=useState("cash");const[discPct,setDiscPct]=useState(1);const[creditDays,setCreditDays]=useState(45);const[extraDiscPct,setExtraDiscPct]=useState("");const[formErrors,setFormErrors]=useState([]);
+  const[incVat,setIncVat]=useState(true);const[payType,setPayType]=useState("cash");const[discPct,setDiscPct]=useState(1);const[creditDays,setCreditDays]=useState(45);const[extraDiscPct,setExtraDiscPct]=useState("");const[extraDiscAmt,setExtraDiscAmt]=useState("");const[formErrors,setFormErrors]=useState([]);
   // Promo accumulate: pendingClaims = รับเลย, pendingSaves = เก็บไว้, selectedWalletIds = ใช้รางวัลจาก wallet
   const[pendingClaims,setPendingClaims]=useState([]); // [{promoId, tierId, promoName, tier}]
   const[pendingSaves,setPendingSaves]=useState([]);   // [{promoId, tierId, promoName, tier}]
@@ -77,7 +77,7 @@ function SOList({sh}){
     const items=[...baseItems,...extraItems];
     const sub=items.reduce((s,i)=>s+i.qty*i.price,0);
     const disc=payType==="cash"?round2(sub*discPct/100):0;
-    const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;
+    const ep=+(extraDiscPct||0);const ea=+(extraDiscAmt||0);const extraDisc=(ep>0?round2(sub*ep/100):0)+ea;
     const baseSubForReward=baseItems.reduce((s,i)=>s+i.qty*i.price,0);
     const rewardDiscFromPct=rewardDiscPct>0?round2(baseSubForReward*rewardDiscPct/100):0;
     const totalRewardDisc=rewardDiscFromPct+rewardDiscAmt;
@@ -86,8 +86,8 @@ function SOList({sh}){
     const selRep=form.useVatRep&&form.vatRepId?curVatReps.find(r=>r.id===+form.vatRepId):null;
     const origPrices=items.map(i=>{const p=products.find(x=>x.id===i.productId);return p?+p.price:+i.price;});
     const priceChanged=baseItems.some((i,idx)=>{const p=products.find(x=>x.id===i.productId);return p&&+i.price!==+p.price;});
-    const needsApproval=!hasApv&&(priceChanged||ep>0);
-    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||"",legacyNum:form.legacyNum||"",eventId:form.eventId||"",eventPackPurchases:[...(form.eventPackPurchases||[])]};
+    const needsApproval=!hasApv&&(priceChanged||ep>0||ea>0);
+    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,extraDiscAmt:ea||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||"",legacyNum:form.legacyNum||"",eventId:form.eventId||"",eventPackPurchases:[...(form.eventPackPurchases||[])]};
 
     // Update customer: claimedTierIds, savedRewards, savedFromSO
     let newSoNum="";
@@ -145,7 +145,7 @@ function SOList({sh}){
     const reps=(cust&&cust.vatReps)||[];
     const matchRep=so.useVatRep&&so.vatRepName?reps.find(r=>r.name===so.vatRepName):null;
     setForm({customerId:String(so.customerId),date:so.date,items:so.items.map(i=>({productId:String(i.productId),qty:i.qty,price:i.price})),useVatRep:!!so.useVatRep,vatRepId:matchRep?String(matchRep.id):"",note:so.note||"",legacyNum:so.legacyNum||"",eventId:so.eventId||"",eventPackPurchases:[...(so.eventPackPurchases||[])]});
-    setIncVat(so.includeVat!==false);setPayType(so.payType||"cash");setDiscPct(so.discPct||1);setCreditDays(so.creditDays||45);setExtraDiscPct(so.extraDiscPct?String(so.extraDiscPct):"");resetPromoStates();setEditSO(so);oM("editSO");
+    setIncVat(so.includeVat!==false);setPayType(so.payType||"cash");setDiscPct(so.discPct||1);setCreditDays(so.creditDays||45);setExtraDiscPct(so.extraDiscPct?String(so.extraDiscPct):"");setExtraDiscAmt(so.extraDiscAmt?String(so.extraDiscAmt):"");resetPromoStates();setEditSO(so);oM("editSO");
   };
 
   const renderItems=(exId)=>form.items.map((item,idx)=>{
@@ -167,7 +167,7 @@ function SOList({sh}){
 
   const renderForm=(soId)=>{
     const exId=soId||0;const hasOver=form.items.some(it=>it.productId&&+it.qty>getAvail(it.productId,exId));
-    const sub=form.items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const extraDisc=ep>0?round2(sub*ep/100):0;
+    const sub=form.items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const ea=+(extraDiscAmt||0);const extraDisc=(ep>0?round2(sub*ep/100):0)+ea;
     // Preview reward discount (จาก pendingClaims + selectedWalletIds)
     const _curCust=contacts.find(c=>c.id===+form.customerId);
     let prevRewPct=0,prevRewAmt=0;
@@ -356,12 +356,19 @@ function SOList({sh}){
       <div style={{background:"var(--bg)",borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:13}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["cash","เงินสด"],["credit","เครดิต"]].map(v=><label key={v[0]} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(payType===v[0]?"var(--green)":"var(--line)"),cursor:"pointer",background:payType===v[0]?"rgba(52,199,89,0.12)":"var(--panel)"}}><input type="radio" name="pt" checked={payType===v[0]} onChange={()=>setPayType(v[0])}/><span style={{fontWeight:500,color:payType===v[0]?"var(--green)":"var(--text)"}}>{v[1]}</span></label>)}</div>
         {payType==="cash"&&<div style={{marginBottom:12}}><div style={{fontSize:12,fontWeight:500,marginBottom:6}}>ส่วนลด</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{DISC_OPTS.map(d=><button key={d} onClick={()=>setDiscPct(d)} style={{padding:"5px 14px",borderRadius:99,border:"1.5px solid "+(discPct===d?"var(--green)":"var(--line)"),background:discPct===d?"rgba(52,199,89,0.12)":"var(--panel)",color:discPct===d?"var(--green)":"var(--dim)",cursor:"pointer",fontSize:12}}>{d===0?"ไม่ลด":d+"%"}</button>)}</div></div>}
-        <div style={{marginBottom:12}}><div style={{fontSize:12,fontWeight:500,marginBottom:6}}>ส่วนลดพิเศษ (%)</div><div style={{display:"flex",alignItems:"center",gap:8}}><input type="number" min="0" max="100" step="0.1" value={extraDiscPct} onChange={e=>setExtraDiscPct(e.target.value)} placeholder="0" style={{...IB,width:100,padding:"5px 10px"}}/>{ep>0&&<span style={{fontSize:12,color:"var(--green)"}}>{"−฿"+fmt(extraDisc)}</span>}</div></div>
+        <div style={{marginBottom:12}}><div style={{fontSize:12,fontWeight:500,marginBottom:6}}>ส่วนลดพิเศษ</div><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+  <span style={{fontSize:12,color:"var(--dim)"}}>%</span>
+  <input type="number" min="0" max="100" step="0.1" value={extraDiscPct} onChange={e=>setExtraDiscPct(e.target.value)} placeholder="0" style={{...IB,width:90,padding:"5px 10px"}}/>
+  <span style={{fontSize:12,color:"var(--dim)",marginLeft:6}}>฿</span>
+  <input type="number" min="0" step="1" value={extraDiscAmt} onChange={e=>setExtraDiscAmt(e.target.value)} placeholder="0" style={{...IB,width:120,padding:"5px 10px"}}/>
+  {extraDisc>0&&<span style={{fontSize:12,color:"var(--green)",marginLeft:4}}>{"−฿"+fmt(extraDisc)}</span>}
+</div></div>
         {payType==="credit"&&<div style={{marginBottom:12}}><div style={{fontSize:12,fontWeight:500,marginBottom:6}}>วันเครดิต</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{CREDIT_OPTS.map(d=><button key={d} onClick={()=>setCreditDays(d)} style={{padding:"5px 14px",borderRadius:99,border:"1.5px solid "+(creditDays===d?"var(--blue)":"var(--line)"),background:creditDays===d?"var(--blue-bg)":"var(--panel)",color:creditDays===d?"var(--blue)":"var(--dim)",cursor:"pointer",fontSize:12}}>{d+" วัน"}</button>)}</div></div>}
         <div style={{borderTop:"1px solid var(--line)",paddingTop:10}}>
           <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(sub)}</span></div>
           {payType==="cash"&&disc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+discPct+"%"}</span><span>{"-฿"+fmt(disc)}</span></div>}
-          {ep>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+ep+"%"}</span><span>{"-฿"+fmt(extraDisc)}</span></div>}
+          {ep>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+ep+"%"}</span><span>{"-฿"+fmt(round2(sub*ep/100))}</span></div>}
+          {ea>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ"}</span><span>{"-฿"+fmt(ea)}</span></div>}
           {totalRewardDisc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:4}}><span>{"ส่วนลด (รางวัล)"+(prevRewPct>0?" "+prevRewPct+"%":"")}</span><span>{"-฿"+fmt(totalRewardDisc)}</span></div>}
           <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12,marginBottom:6}}><input type="checkbox" checked={incVat} onChange={e=>setIncVat(e.target.checked)}/>VAT 7%</label>
           {incVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4,fontSize:12}}><span>VAT</span><span>{"฿"+fmt(vatAmt)}</span></div>}
@@ -387,7 +394,7 @@ function SOList({sh}){
       </div>
       <Field label="หมายเหตุ"><textarea value={form.note||""} onChange={e=>setForm(f=>({...f,note:e.target.value}))} style={{...IB,height:56,resize:"vertical"}} placeholder="หมายเหตุ..."/></Field>
       {hasOver&&<div style={{background:"rgba(255,59,48,0.12)",border:"1.5px solid var(--red)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"var(--red)",fontWeight:500}}>{"สินค้าบางรายการเกินสต็อก — กรุณาแก้ไขจำนวน"}</div>}
-      {(()=>{const pc=form.items.some(i=>{if(!i.productId)return false;const p=products.find(x=>x.id===+i.productId);return p&&+i.price!==+p.price;});const na=!hasApv&&(pc||ep>0);return na?<div style={{background:"rgba(175,82,222,0.12)",border:"1.5px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"var(--purple)",fontWeight:500}}>{"ราคา/ส่วนลดพิเศษถูกแก้ไข — SO จะอยู่สถานะ \"รออนุมัติพิเศษ\""}</div>:null;})()}
+      {(()=>{const pc=form.items.some(i=>{if(!i.productId)return false;const p=products.find(x=>x.id===+i.productId);return p&&+i.price!==+p.price;});const na=!hasApv&&(pc||ep>0||ea>0);return na?<div style={{background:"rgba(175,82,222,0.12)",border:"1.5px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"var(--purple)",fontWeight:500}}>{"ราคา/ส่วนลดพิเศษถูกแก้ไข — SO จะอยู่สถานะ \"รออนุมัติพิเศษ\""}</div>:null;})()}
       {formErrors.length>0&&<div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"10px 14px",marginBottom:10}}><div style={{fontSize:12,fontWeight:600,color:"var(--red)",marginBottom:4}}>กรุณากรอกข้อมูลให้ครบ:</div>{formErrors.map((e,i)=><div key={i} style={{fontSize:12,color:"var(--red)",marginBottom:2}}>{"• "+e}</div>)}</div>}
       <MBtns onCancel={()=>{setEditSO(null);cM();}} onSave={hasOver?null:()=>trySubmit(soId)} saveLabel={soId?"บันทึก":"สร้างใบขาย"}/>
     </div>;
@@ -448,7 +455,7 @@ function SOList({sh}){
       const productWallets=selectedWalletIds.map(wid=>(cust?.savedRewards||[]).find(r=>r.id===wid)).filter(w=>w&&w.tier.rewardType==="product");
       const _sub=_items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);
       const _disc=payType==="cash"?round2(_sub*discPct/100):0;
-      const _ep=+(extraDiscPct||0);const _extraDisc=_ep>0?round2(_sub*_ep/100):0;
+      const _ep=+(extraDiscPct||0);const _ea=+(extraDiscAmt||0);const _extraDisc=(_ep>0?round2(_sub*_ep/100):0)+_ea;
       const _rewDiscPctAmt=prevRewPct2>0?round2(_sub*prevRewPct2/100):0;
       const _totalRewDisc=_rewDiscPctAmt+prevRewAmt2;
       const _totalDisc=_disc+_extraDisc+_totalRewDisc;
@@ -496,7 +503,8 @@ function SOList({sh}){
           <div style={{background:"var(--bg)",border:"1px solid var(--line)",borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:13}}>
             <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(_sub)}</span></div>
             {_disc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+discPct+"%"}</span><span>{"-฿"+fmt(_disc)}</span></div>}
-            {_ep>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+_ep+"%"}</span><span>{"-฿"+fmt(_extraDisc)}</span></div>}
+            {_ep>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+_ep+"%"}</span><span>{"-฿"+fmt(round2(_sub*_ep/100))}</span></div>}
+            {_ea>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ"}</span><span>{"-฿"+fmt(_ea)}</span></div>}
             {_totalRewDisc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:4}}><span>{"ส่วนลด (รางวัล)"+(prevRewPct2>0?" "+prevRewPct2+"%":"")}</span><span>{"-฿"+fmt(_totalRewDisc)}</span></div>}
             {incVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4,fontSize:12}}><span>VAT 7%</span><span>{"฿"+fmt(_vat)}</span></div>}
             <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:16,borderTop:"1px solid var(--line)",paddingTop:8,marginTop:6}}><span>ยอดสุทธิ</span><span style={{color:"var(--green)"}}>{"฿"+fmt(_after)}</span></div>
@@ -551,7 +559,7 @@ function SOList({sh}){
       {viewSO.status==="pending_special_approval"&&<div style={{background:"rgba(175,82,222,0.12)",border:"1.5px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12}}>
         <div style={{fontWeight:600,color:"var(--purple)",marginBottom:6}}>{"รายการที่แก้ไข:"}</div>
         {(viewSO.origPrices||[]).map((op,i)=>{const it=viewSO.items[i];if(!it)return null;const diff=+it.price!==+op;return diff?<div key={i} style={{color:"var(--purple)"}}>{(products.find(x=>x.id===it.productId)?pN(products.find(x=>x.id===it.productId)):"-")+" — ราคาตั้งต้น ฿"+fmt(op)+" → ฿"+fmt(it.price)}</div>:null;})}
-        {(viewSO.extraDiscPct||0)>0&&<div style={{color:"var(--purple)"}}>{"ส่วนลดพิเศษ: "+viewSO.extraDiscPct+"%"}</div>}
+        {(()=>{const p=+(viewSO.extraDiscPct||0);const a=+(viewSO.extraDiscAmt||0);if(p<=0&&a<=0)return null;const parts=[];if(p>0)parts.push(p+"%");if(a>0)parts.push("฿"+fmt(a));return <div style={{color:"var(--purple)"}}>{"ส่วนลดพิเศษ: "+parts.join(" + ")}</div>;})()}
       </div>}
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {viewSO.payType==="cash"?<span style={{fontSize:12,background:"rgba(52,199,89,0.12)",color:"var(--green)",borderRadius:6,padding:"4px 10px",fontWeight:500}}>{"เงินสด"+(viewSO.discPct?" ลด "+viewSO.discPct+"%":"")}</span>
@@ -569,6 +577,7 @@ function SOList({sh}){
         <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(vSub)}</span></div>
         {viewSO.discPct>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+viewSO.discPct+"%"}</span><span>{"-฿"+fmt(round2(vSub*viewSO.discPct/100))}</span></div>}
         {(viewSO.extraDiscPct||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ "+viewSO.extraDiscPct+"%"}</span><span>{"-฿"+fmt(round2(vSub*viewSO.extraDiscPct/100))}</span></div>}
+        {(viewSO.extraDiscAmt||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลดพิเศษ"}</span><span>{"-฿"+fmt(viewSO.extraDiscAmt)}</span></div>}
         {viewSO.includeVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4}}><span>VAT 7%</span><span>{"฿"+fmt(vVat)}</span></div>}
         <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15,borderTop:"1px solid var(--line)",paddingTop:8}}><span>ยอดสุทธิ</span><span style={{color:"var(--green)"}}>{"฿"+fmt(vAfter)}</span></div>
       </div>
@@ -585,7 +594,7 @@ function SOList({sh}){
       <div style={{background:"rgba(255,149,0,0.12)",border:"1px solid var(--orange)",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:14,color:"var(--orange)",fontWeight:500}}>{warnMsg}</div>
       <button onClick={()=>setWarnMsg(null)} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"var(--blue)",color:"#fff",fontWeight:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ตกลง</button>
     </Modal>}
-    {approveSO&&(()=>{const so=approveSO;const cust=contacts.find(c=>c.id===so.customerId);const aSub=so.items.reduce((s,i)=>s+i.qty*i.price,0);const aDisc=so.discPct?round2(aSub*so.discPct/100):0;const aExtra=(so.extraDiscPct||0)>0?round2(aSub*so.extraDiscPct/100):0;const aVat=so.includeVat?round2((aSub-aDisc-aExtra)*7/107):0;const aTotal=aSub-aDisc-aExtra+aVat;const hasChanges=(so.origPrices||[]).some((op,i)=>so.items[i]&&+so.items[i].price!==+op)||(so.extraDiscPct||0)>0;return<Modal title="ยืนยันอนุมัติ" onClose={()=>setApproveSO(null)}>
+    {approveSO&&(()=>{const so=approveSO;const cust=contacts.find(c=>c.id===so.customerId);const aSub=so.items.reduce((s,i)=>s+i.qty*i.price,0);const aDisc=so.discPct?round2(aSub*so.discPct/100):0;const aExtraPct=(so.extraDiscPct||0)>0?round2(aSub*so.extraDiscPct/100):0;const aExtraAmt=+(so.extraDiscAmt||0);const aExtra=aExtraPct+aExtraAmt;const aVat=so.includeVat?round2((aSub-aDisc-aExtra)*7/107):0;const aTotal=aSub-aDisc-aExtra+aVat;const hasChanges=(so.origPrices||[]).some((op,i)=>so.items[i]&&+so.items[i].price!==+op)||(so.extraDiscPct||0)>0||(so.extraDiscAmt||0)>0;return<Modal title="ยืนยันอนุมัติ" onClose={()=>setApproveSO(null)}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div><div style={{fontWeight:700,fontSize:15}}>{so.soNum}{so.legacyNum&&<span style={{fontSize:11,color:"var(--dim)",fontFamily:"monospace",marginLeft:8,fontWeight:400}}>{"("+so.legacyNum+")"}</span>}</div><div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{cust?cN(cust):"-"}{" — "+toBE(so.date)}</div></div>
         <Badge status={so.status}/>
@@ -593,13 +602,14 @@ function SOList({sh}){
       {hasChanges&&<div style={{background:"rgba(175,82,222,0.12)",border:"1.5px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12}}>
         <div style={{fontWeight:600,color:"var(--purple)",marginBottom:6}}>{"รายการที่แก้ไขราคา:"}</div>
         {(so.origPrices||[]).map((op,i)=>{const it=so.items[i];if(!it)return null;const diff=+it.price!==+op;return diff?<div key={i} style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:3}}><span>{products.find(x=>x.id===it.productId)?pN(products.find(x=>x.id===it.productId)):"-"}</span><span>{"฿"+fmt(op)+" → ฿"+fmt(it.price)+" ("+((+it.price-op>=0)?"+":"")+fmt(+it.price-op)+")"}</span></div>:null;})}
-        {(so.extraDiscPct||0)>0&&<div style={{color:"var(--purple)",marginTop:4}}>{"ส่วนลดพิเศษ: "+so.extraDiscPct+"% (-฿"+fmt(aExtra)+")"}</div>}
+        {(()=>{const p=+(so.extraDiscPct||0);const a=+(so.extraDiscAmt||0);if(p<=0&&a<=0)return null;const parts=[];if(p>0)parts.push(p+"%");if(a>0)parts.push("฿"+fmt(a));return <div style={{color:"var(--purple)",marginTop:4}}>{"ส่วนลดพิเศษ: "+parts.join(" + ")+" (-฿"+fmt(aExtra)+")"}</div>;})()}
       </div>}
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{["สินค้า","Qty","ราคา","รวม"].map(h=><th key={h} style={{padding:"5px 6px",textAlign:"left",fontWeight:500,color:"var(--dim)"}}>{h}</th>)}</tr></thead><tbody>{so.items.map((it,i)=>{const pr=products.find(x=>x.id===it.productId);const orig=(so.origPrices||[])[i];const diff=orig!=null&&+it.price!==+orig;return<tr key={i} style={{borderBottom:"0.5px solid var(--line)",background:diff?"rgba(175,82,222,0.06)":"transparent"}}><td style={{padding:"5px 6px"}}>{pr?pN(pr):"-"}</td><td style={{padding:"5px 6px"}}>{it.qty}</td><td style={{padding:"5px 6px",color:diff?"var(--purple)":""}}>{"฿"+fmt(it.price)}{diff&&<span style={{fontSize:10,color:"var(--faint)",marginLeft:4}}>{"(เดิม ฿"+fmt(orig)+")"}</span>}</td><td style={{padding:"5px 6px",fontWeight:500}}>{"฿"+fmt(it.qty*it.price)}</td></tr>;})}</tbody></table>
       <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginTop:10,fontSize:13}}>
         <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(aSub)}</span></div>
         {so.discPct>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+so.discPct+"%"}</span><span>{"-฿"+fmt(aDisc)}</span></div>}
-        {(so.extraDiscPct||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:4,fontWeight:600}}><span>{"ส่วนลดพิเศษ "+so.extraDiscPct+"%"}</span><span>{"-฿"+fmt(aExtra)}</span></div>}
+        {(so.extraDiscPct||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:4,fontWeight:600}}><span>{"ส่วนลดพิเศษ "+so.extraDiscPct+"%"}</span><span>{"-฿"+fmt(aExtraPct)}</span></div>}
+        {(so.extraDiscAmt||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--purple)",marginBottom:4,fontWeight:600}}><span>{"ส่วนลดพิเศษ"}</span><span>{"-฿"+fmt(aExtraAmt)}</span></div>}
         {so.includeVat&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",marginBottom:4}}><span>VAT 7%</span><span>{"฿"+fmt(aVat)}</span></div>}
         <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15,borderTop:"1px solid var(--line)",paddingTop:8}}><span>ยอดสุทธิ</span><span style={{color:"var(--green)"}}>{"฿"+fmt(aTotal)}</span></div>
       </div>

@@ -566,7 +566,7 @@ export default function App(){
       const sub=items.reduce((s,i)=>s+i.qty*i.price,0);
       const disc=data.payType==="cash"?round2(sub*(data.discPct||1)/100):0;
       const vatAmt=data.includeVat!==false?round2((sub-disc)*7/107):0;
-      setSales(p=>[...p,{id:Date.now(),soNum:sn,status:"pending_delivery",fromQuote:"",customerId:+data.customerId,date:todayStr(),items,origPrices:items.map(i=>+i.price),includeVat:data.includeVat!==false,vatAmount:vatAmt,payType:data.payType||"cash",discountAmt:disc,discPct:data.payType==="cash"?(data.discPct||1):0,extraDiscPct:0,creditDays:data.payType==="credit"?(data.creditDays||45):0,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างโดย AI Bot"}]);
+      setSales(p=>[...p,{id:Date.now(),soNum:sn,status:"pending_delivery",fromQuote:"",customerId:+data.customerId,date:todayStr(),items,origPrices:items.map(i=>+i.price),includeVat:data.includeVat!==false,vatAmount:vatAmt,payType:data.payType||"cash",discountAmt:disc,discPct:data.payType==="cash"?(data.discPct||1):0,extraDiscPct:0,extraDiscAmt:0,creditDays:data.payType==="credit"?(data.creditDays||45):0,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างโดย AI Bot"}]);
       addA("สร้าง SO (AI Bot)",sn);
     }} onCreatePO={(data)=>{
       const yr=new Date().getFullYear();
