@@ -31,14 +31,15 @@ export function printDoc(type, data, products, contacts, opts = {}) {
     const rawPrice = it[priceKey] || 0;
     const unitPrice = isExclusive ? round2(rawPrice * 100/107) : rawPrice;
     const lineAmt = isExclusive ? round2(it.qty * rawPrice * 100/107) : it.qty * rawPrice;
+    const pad = isExclusive ? "9px 10px" : "6px 8px";
     return `<tr>
-      <td style="border:1px solid #bbb;padding:6px 8px;text-align:center;">${i+1}</td>
-      <td style="border:1px solid #bbb;padding:6px 8px;">${pr.code||"-"}</td>
-      <td style="border:1px solid #bbb;padding:6px 8px;">${pr.nameT||pr.name||"-"}</td>
-      <td style="border:1px solid #bbb;padding:6px 8px;text-align:center;">${it.qty}</td>
-      <td style="border:1px solid #bbb;padding:6px 8px;text-align:center;">${pr.unit||"-"}</td>
-      <td style="border:1px solid #bbb;padding:6px 8px;text-align:right;">${fmtC(unitPrice)}</td>
-      <td style="border:1px solid #bbb;padding:6px 8px;text-align:right;font-weight:600;">${fmtC(lineAmt)}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${i+1}</td>
+      ${isExclusive ? "" : `<td style="border:1px solid #bbb;padding:${pad};">${pr.code||"-"}</td>`}
+      <td style="border:1px solid #bbb;padding:${pad};">${pr.nameT||pr.name||"-"}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${it.qty}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${pr.unit||"-"}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:right;">${fmtC(unitPrice)}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:right;font-weight:600;">${fmtC(lineAmt)}</td>
     </tr>`;
   }).join("");
 
@@ -125,7 +126,7 @@ body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;backgr
   <span style="font-size:12px;color:#aaa;">เลือก "Save as PDF" ใน dialog ของ browser เพื่อบันทึก PDF</span>
 </div>
 
-<!-- Company header -->
+${isExclusive ? "" : `<!-- Company header -->
 <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:2.5px solid #111;margin-bottom:18px;gap:16px;">
   <div style="flex-shrink:0;">
     <img src="${logoUrl}" style="height:80px;width:auto;object-fit:contain;" onerror="this.style.display='none'">
@@ -136,7 +137,7 @@ body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;backgr
     <div style="font-size:12px;color:#555;margin-top:6px;">${CO.address}</div>
     <div style="font-size:12px;color:#555;margin-top:2px;">เลขประจำตัวผู้เสียภาษี: ${CO.taxId} | ${CO.branch}</div>
   </div>
-</div>
+</div>`}
 
 <!-- Document title -->
 <div style="text-align:center;margin-bottom:18px;">
@@ -165,16 +166,16 @@ body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;backgr
 ${vatRepHtml}
 
 <!-- Items table -->
-<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">
+<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:${isExclusive ? "17px" : "13px"};">
   <thead>
     <tr style="background:#f5f5f0;">
-      <th style="border:1px solid #bbb;padding:7px 8px;text-align:center;font-weight:600;width:36px;">#</th>
-      <th style="border:1px solid #bbb;padding:7px 8px;font-weight:600;width:80px;">รหัส</th>
-      <th style="border:1px solid #bbb;padding:7px 8px;font-weight:600;">ชื่อสินค้า / Description</th>
-      <th style="border:1px solid #bbb;padding:7px 8px;text-align:center;font-weight:600;width:60px;">จำนวน</th>
-      <th style="border:1px solid #bbb;padding:7px 8px;text-align:center;font-weight:600;width:55px;">หน่วย</th>
-      <th style="border:1px solid #bbb;padding:7px 8px;text-align:right;font-weight:600;width:100px;">ราคา/หน่วย</th>
-      <th style="border:1px solid #bbb;padding:7px 8px;text-align:right;font-weight:600;width:110px;">จำนวนเงิน</th>
+      <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:center;font-weight:600;width:36px;">#</th>
+      ${isExclusive ? "" : `<th style="border:1px solid #bbb;padding:7px 8px;font-weight:600;width:80px;">รหัส</th>`}
+      <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};font-weight:600;">ชื่อสินค้า / Description</th>
+      <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:center;font-weight:600;width:${isExclusive ? "75px" : "60px"};">จำนวน</th>
+      <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:center;font-weight:600;width:${isExclusive ? "70px" : "55px"};">หน่วย</th>
+      <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:right;font-weight:600;width:${isExclusive ? "120px" : "100px"};">ราคา/หน่วย</th>
+      <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:right;font-weight:600;width:${isExclusive ? "130px" : "110px"};">จำนวนเงิน</th>
     </tr>
   </thead>
   <tbody>${itemsHtml}</tbody>
@@ -188,7 +189,7 @@ ${vatRepHtml}
 ${noteHtml}
 
 <!-- Signatures -->
-${type==="po" ? `
+${isExclusive ? "" : type==="po" ? `
 <div style="display:flex;gap:40px;margin-top:36px;">
   <div style="flex:1;text-align:center;">
     <div style="height:60px;display:flex;align-items:center;justify-content:center;">
