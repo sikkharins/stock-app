@@ -125,6 +125,66 @@ export default defineConfig(({ mode }) => {
           });
         });
 
+        server.middlewares.use('/api/line-send', async (req, res) => {
+          if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+          if (req.method !== 'POST') { res.writeHead(405); res.end('Method not allowed'); return; }
+
+          let body = '';
+          req.on('data', c => body += c);
+          req.on('end', async () => {
+            try {
+              const parsed = JSON.parse(body);
+              const { default: handler } = await import('./api/line-send.js');
+              const mockReq = { method: 'POST', body: parsed };
+              const mockRes = {
+                statusCode: 200,
+                headers: {},
+                setHeader(k, v) { this.headers[k] = v; },
+                status(code) { this.statusCode = code; return this; },
+                json(data) {
+                  res.writeHead(this.statusCode, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify(data));
+                },
+                end() { res.writeHead(this.statusCode); res.end(); }
+              };
+              await handler(mockReq, mockRes);
+            } catch (e) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: e.message }));
+            }
+          });
+        });
+
+        server.middlewares.use('/api/line-webhook', async (req, res) => {
+          if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+          if (req.method !== 'POST') { res.writeHead(405); res.end('Method not allowed'); return; }
+
+          let body = '';
+          req.on('data', c => body += c);
+          req.on('end', async () => {
+            try {
+              const parsed = body ? JSON.parse(body) : {};
+              const { default: handler } = await import('./api/line-webhook.js');
+              const mockReq = { method: 'POST', body: parsed };
+              const mockRes = {
+                statusCode: 200,
+                headers: {},
+                setHeader(k, v) { this.headers[k] = v; },
+                status(code) { this.statusCode = code; return this; },
+                json(data) {
+                  res.writeHead(this.statusCode, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify(data));
+                },
+                end() { res.writeHead(this.statusCode); res.end(); }
+              };
+              await handler(mockReq, mockRes);
+            } catch (e) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: e.message }));
+            }
+          });
+        });
+
         server.middlewares.use('/api/tts', async (req, res) => {
           if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
           if (req.method !== 'POST') { res.writeHead(405); res.end('Method not allowed'); return; }

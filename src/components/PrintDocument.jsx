@@ -15,6 +15,7 @@ export function printDoc(type, data, products, contacts, opts = {}) {
   const vatMode = opts.vatMode || "inclusive"; // "inclusive" | "exclusive"
   const isExclusive = vatMode === "exclusive" && type === "so" && data.includeVat === true;
   const logoUrl = window.location.origin + "/logo.jpg";
+  const apiOrigin = window.location.origin;
   const contact = contacts.find(c => c.id === (type==="po" ? data.supplierId : data.customerId)) || {};
 
   const titles = {
@@ -122,6 +123,7 @@ body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;backgr
 <div class="no-print" style="margin-bottom:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
   <button onclick="window.print()" style="padding:9px 22px;background:#111;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">พิมพ์ / Save as PDF</button>
   <button onclick="saveAsImage()" style="padding:9px 18px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">💾 บันทึกเป็นรูปภาพ</button>
+  <button onclick="sendToLine()" style="padding:9px 18px;background:#06C755;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">📤 ส่งเข้า LINE</button>
   <button onclick="window.close()" style="padding:9px 16px;background:transparent;color:#666;border:1px solid #ccc;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">ปิด</button>
   <span style="font-size:12px;color:#aaa;">เลือก "Save as PDF" ใน dialog ของ browser เพื่อบันทึก PDF</span>
 </div>
@@ -264,6 +266,54 @@ function saveAsImage() {
       console.error('Image save failed:', err);
       alert('บันทึกรูปไม่สำเร็จ: ' + (err.message || err));
     });
+}
+
+async function sendToLine() {
+  if (typeof html2canvas !== 'function') {
+    alert('ยังโหลด html2canvas ไม่เสร็จ ลองอีกครั้งใน 1-2 วินาที');
+    return;
+  }
+  if (!confirm('ส่งรูปนี้เข้ากลุ่ม LINE?')) return;
+
+  var toolbar = document.querySelector('.no-print');
+  if (toolbar) toolbar.style.display = 'none';
+  try {
+    var canvas = await html2canvas(document.body, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    if (toolbar) toolbar.style.display = '';
+
+    var finalCanvas = canvas;
+    if (${JSON.stringify(vatMode)} === 'exclusive') {
+      var cropped = document.createElement('canvas');
+      cropped.width = canvas.width;
+      cropped.height = Math.floor(canvas.height / 2);
+      var ctx = cropped.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cropped.width, cropped.height);
+      ctx.drawImage(canvas, 0, 0);
+      finalCanvas = cropped;
+    }
+
+    var dataUrl = finalCanvas.toDataURL('image/png');
+    var resp = await fetch(${JSON.stringify(apiOrigin)} + '/api/line-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageDataUrl: dataUrl,
+        docNum: ${JSON.stringify(t.num)},
+        message: ${JSON.stringify(t.th + ' ' + t.num)},
+      }),
+    });
+
+    var result = await resp.json().catch(function() { return { error: 'Invalid JSON response' }; });
+    if (resp.ok && result.success) {
+      alert('✅ ส่งเข้า LINE สำเร็จ');
+    } else {
+      alert('❌ ส่งไม่สำเร็จ: ' + (result.error || ('HTTP ' + resp.status)));
+    }
+  } catch (err) {
+    if (toolbar) toolbar.style.display = '';
+    alert('❌ เกิดข้อผิดพลาด: ' + (err.message || err));
+  }
 }
 </script>
 
