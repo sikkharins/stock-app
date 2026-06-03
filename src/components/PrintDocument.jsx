@@ -240,9 +240,21 @@ function saveAsImage() {
   html2canvas(document.body, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
     .then(function(canvas) {
       if (toolbar) toolbar.style.display = '';
+      var finalCanvas = canvas;
+      if (${JSON.stringify(vatMode)} === 'exclusive') {
+        // เช็คของขึ้นรถ: crop to half height for LINE-friendly aspect ratio
+        var cropped = document.createElement('canvas');
+        cropped.width = canvas.width;
+        cropped.height = Math.floor(canvas.height / 2);
+        var ctx = cropped.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, cropped.width, cropped.height);
+        ctx.drawImage(canvas, 0, 0);
+        finalCanvas = cropped;
+      }
       var a = document.createElement('a');
       a.download = ${JSON.stringify(t.num)} + (${JSON.stringify(vatMode)} === 'exclusive' ? '-vat-ex.png' : '.png');
-      a.href = canvas.toDataURL('image/png');
+      a.href = finalCanvas.toDataURL('image/png');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
