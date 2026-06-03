@@ -584,6 +584,7 @@ function SOList({sh}){
       {viewSO.note&&<div style={{fontSize:12,color:"var(--dim)",marginTop:10,padding:"8px 10px",background:"var(--panel)",borderRadius:6,border:"0.5px solid var(--line)"}}>{viewSO.note}</div>}
       <div style={{marginTop:14,marginBottom:4,display:"flex",gap:8}}>
         <button onClick={()=>printDoc("so",viewSO,products,contacts)} style={{padding:"8px 18px",background:"var(--text)",color:"var(--bg)",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"พิมพ์ / PDF"}</button>
+        <button onClick={()=>printDoc("so",viewSO,products,contacts,{vatMode:"exclusive"})} style={{padding:"8px 18px",background:"transparent",color:"var(--green)",border:"1px solid var(--green)",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"พิมพ์ VAT แยก"}</button>
         {hasApv&&viewSO.status==="pending_special_approval"&&<button onClick={()=>{setApproveSO(viewSO);cM();}} style={{padding:"8px 18px",background:"var(--purple)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"อนุมัติ"}</button>}
       </div>
       <MBtns onCancel={cM}/>

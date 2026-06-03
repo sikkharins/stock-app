@@ -11,7 +11,9 @@ const fmtC = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,m
 const round2 = n => Math.round((+n + Number.EPSILON) * 100) / 100;
 const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
 
-export function printDoc(type, data, products, contacts) {
+export function printDoc(type, data, products, contacts, opts = {}) {
+  const vatMode = opts.vatMode || "inclusive"; // "inclusive" | "exclusive"
+  const isExclusive = vatMode === "exclusive" && type === "so" && data.includeVat === true;
   const logoUrl = window.location.origin + "/logo.jpg";
   const contact = contacts.find(c => c.id === (type==="po" ? data.supplierId : data.customerId)) || {};
 
@@ -26,7 +28,9 @@ export function printDoc(type, data, products, contacts) {
   // Items rows
   const itemsHtml = (data.items||[]).map((it,i) => {
     const pr = products.find(x => x.id === it.productId) || {};
-    const unitPrice = it[priceKey] || 0;
+    const rawPrice = it[priceKey] || 0;
+    const unitPrice = isExclusive ? round2(rawPrice * 100/107) : rawPrice;
+    const lineAmt = isExclusive ? round2(it.qty * rawPrice * 100/107) : it.qty * rawPrice;
     return `<tr>
       <td style="border:1px solid #bbb;padding:6px 8px;text-align:center;">${i+1}</td>
       <td style="border:1px solid #bbb;padding:6px 8px;">${pr.code||"-"}</td>
@@ -34,7 +38,7 @@ export function printDoc(type, data, products, contacts) {
       <td style="border:1px solid #bbb;padding:6px 8px;text-align:center;">${it.qty}</td>
       <td style="border:1px solid #bbb;padding:6px 8px;text-align:center;">${pr.unit||"-"}</td>
       <td style="border:1px solid #bbb;padding:6px 8px;text-align:right;">${fmtC(unitPrice)}</td>
-      <td style="border:1px solid #bbb;padding:6px 8px;text-align:right;font-weight:600;">${fmtC(it.qty*unitPrice)}</td>
+      <td style="border:1px solid #bbb;padding:6px 8px;text-align:right;font-weight:600;">${fmtC(lineAmt)}</td>
     </tr>`;
   }).join("");
 
@@ -46,14 +50,27 @@ export function printDoc(type, data, products, contacts) {
   } else {
     const disc = type==="so" ? (data.discountAmt||0) : (data.payType==="cash" ? round2(sub*(data.discPct||0)/100) : 0);
     const after = sub - disc;
-    const vat = data.includeVat ? (type==="so" ? (data.vatAmount||0) : round2(after*7/107)) : 0;
     const discPctLabel = type==="so" ? (data.discPct||0) : (data.discPct||0);
-    totalsHtml = `
-      <tr><td style="padding:4px 8px;border:none;color:#555;">ยอดรวม</td><td style="padding:4px 8px;border:none;text-align:right;">฿${fmtC(sub)}</td></tr>
-      ${disc>0 ? `<tr><td style="padding:4px 8px;border:none;color:#1D9E75;">ส่วนลด ${discPctLabel}%</td><td style="padding:4px 8px;border:none;text-align:right;color:#1D9E75;">-฿${fmtC(disc)}</td></tr>` : ""}
-      ${data.includeVat ? `<tr><td style="padding:4px 8px;border:none;color:#b06000;">VAT 7% (รวมในราคา)</td><td style="padding:4px 8px;border:none;text-align:right;color:#b06000;">฿${fmtC(vat)}</td></tr>` : ""}
-      <tr style="border-top:2px solid #111;"><td style="padding:6px 8px;border:none;font-weight:700;font-size:15px;">ยอดสุทธิ</td><td style="padding:6px 8px;border:none;text-align:right;font-weight:700;font-size:15px;color:#1D9E75;">฿${fmtC(after)}</td></tr>
-    `;
+    if (isExclusive) {
+      // Recompute ex-VAT totals
+      const subEx = (data.items||[]).reduce((s,it) => s + round2(it.qty * (it[priceKey]||0) * 100/107), 0);
+      const discEx = disc > 0 ? round2(disc * 100/107) : 0;
+      const vatEx = round2(after - (subEx - discEx));
+      totalsHtml = `
+        <tr><td style="padding:4px 8px;border:none;color:#555;">ยอดสินค้า (ก่อน VAT)</td><td style="padding:4px 8px;border:none;text-align:right;">฿${fmtC(subEx)}</td></tr>
+        ${disc>0 ? `<tr><td style="padding:4px 8px;border:none;color:#1D9E75;">ส่วนลด ${discPctLabel}%</td><td style="padding:4px 8px;border:none;text-align:right;color:#1D9E75;">-฿${fmtC(discEx)}</td></tr>` : ""}
+        <tr><td style="padding:4px 8px;border:none;color:#b06000;">VAT 7%</td><td style="padding:4px 8px;border:none;text-align:right;color:#b06000;">฿${fmtC(vatEx)}</td></tr>
+        <tr style="border-top:2px solid #111;"><td style="padding:6px 8px;border:none;font-weight:700;font-size:15px;">ยอดสุทธิ</td><td style="padding:6px 8px;border:none;text-align:right;font-weight:700;font-size:15px;color:#1D9E75;">฿${fmtC(after)}</td></tr>
+      `;
+    } else {
+      const vat = data.includeVat ? (type==="so" ? (data.vatAmount||0) : round2(after*7/107)) : 0;
+      totalsHtml = `
+        <tr><td style="padding:4px 8px;border:none;color:#555;">ยอดรวม</td><td style="padding:4px 8px;border:none;text-align:right;">฿${fmtC(sub)}</td></tr>
+        ${disc>0 ? `<tr><td style="padding:4px 8px;border:none;color:#1D9E75;">ส่วนลด ${discPctLabel}%</td><td style="padding:4px 8px;border:none;text-align:right;color:#1D9E75;">-฿${fmtC(disc)}</td></tr>` : ""}
+        ${data.includeVat ? `<tr><td style="padding:4px 8px;border:none;color:#b06000;">VAT 7% (รวมในราคา)</td><td style="padding:4px 8px;border:none;text-align:right;color:#b06000;">฿${fmtC(vat)}</td></tr>` : ""}
+        <tr style="border-top:2px solid #111;"><td style="padding:6px 8px;border:none;font-weight:700;font-size:15px;">ยอดสุทธิ</td><td style="padding:6px 8px;border:none;text-align:right;font-weight:700;font-size:15px;color:#1D9E75;">฿${fmtC(after)}</td></tr>
+      `;
+    }
   }
 
   // Extra doc-info rows
@@ -87,6 +104,7 @@ export function printDoc(type, data, products, contacts) {
 <meta charset="UTF-8">
 <title>${t.th} — ${t.num}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;background:#fff;}
@@ -100,8 +118,9 @@ body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;backgr
 </head>
 <body>
 
-<div class="no-print" style="margin-bottom:20px;display:flex;gap:10px;align-items:center;">
+<div class="no-print" style="margin-bottom:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
   <button onclick="window.print()" style="padding:9px 22px;background:#111;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">พิมพ์ / Save as PDF</button>
+  <button onclick="saveAsImage()" style="padding:9px 18px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">💾 บันทึกเป็นรูปภาพ</button>
   <button onclick="window.close()" style="padding:9px 16px;background:transparent;color:#666;border:1px solid #ccc;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">ปิด</button>
   <span style="font-size:12px;color:#aaa;">เลือก "Save as PDF" ใน dialog ของ browser เพื่อบันทึก PDF</span>
 </div>
@@ -207,6 +226,33 @@ ${type==="po" ? `
   </div>
 </div>
 `}
+
+<script>
+function saveAsImage() {
+  var toolbar = document.querySelector('.no-print');
+  if (toolbar) toolbar.style.display = 'none';
+  if (typeof html2canvas !== 'function') {
+    alert('ยังโหลด html2canvas ไม่เสร็จ ลองอีกครั้งใน 1-2 วินาที');
+    if (toolbar) toolbar.style.display = '';
+    return;
+  }
+  html2canvas(document.body, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+    .then(function(canvas) {
+      if (toolbar) toolbar.style.display = '';
+      var a = document.createElement('a');
+      a.download = ${JSON.stringify(t.num)} + (${JSON.stringify(vatMode)} === 'exclusive' ? '-vat-ex.png' : '.png');
+      a.href = canvas.toDataURL('image/png');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    })
+    .catch(function(err) {
+      if (toolbar) toolbar.style.display = '';
+      console.error('Image save failed:', err);
+      alert('บันทึกรูปไม่สำเร็จ: ' + (err.message || err));
+    });
+}
+</script>
 
 </body>
 </html>`;
