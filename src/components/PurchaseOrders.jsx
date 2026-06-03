@@ -139,7 +139,7 @@ export default function POPage({sh}){
 
   const openApproval=(po,action)=>{setAppModal({po,action});setAppComment("");oM("appModal");};
 
-  const canApproveThis=po=>canApprovePO&&po.status==="pending_approval"&&(isAdmin||po.createdBy!==cu?.username);
+  const canApproveThis=po=>canApprovePO&&po.status==="pending_approval"&&(isAdmin||cu?.role==="SalesManager"||po.createdBy!==cu?.username);
 
   const AB={padding:"4px 10px",fontSize:11,borderRadius:6,cursor:"pointer",marginRight:4,fontFamily:"inherit"};
   const rowActions=po=>{
