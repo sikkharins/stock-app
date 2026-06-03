@@ -52,3 +52,5 @@ export const initCashCats = [
   ]},
   { id: 8, name: "อื่นๆ", type: "both", subs: [] },
 ];
+
+export const initTagMappings = [];   // empty — user configures via UI

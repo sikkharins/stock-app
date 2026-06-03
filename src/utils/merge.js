@@ -64,6 +64,7 @@ export const MERGE_CFG = {
   payments: {}, quotes: {}, targets: {}, cheques: {}, bankaccs: {},
   banktxns: {}, cnotes: {}, billings: {}, defectives: {}, supcnotes: {},
   promos: {}, events: {},
+  tagmappings: { keyOf: r => r.key },
   logs: { keyOf: (x) => (x.id != null ? x.id : `${x.date}|${x.type}|${x.productId}|${x.ref}|${x.qty}`) },
   audit: { cap: 500, ts: (x) => x.id || 0 },
   pricehist: { cap: 500, ts: (x) => x.id || 0 },

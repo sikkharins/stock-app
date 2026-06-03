@@ -29,7 +29,7 @@ const DEF_PERMS={receive:true,clearCheque:true,payEPP:true,transferOut:true};
 const hasPerm=(acc,key)=>{const p=acc.perms;if(!p)return true;if(key==="payEPP")return p.payEPP!==undefined?!!p.payEPP:p.payOnline!==undefined?!!p.payOnline:true;if(key==="transferOut")return p.transferOut!==undefined?!!p.transferOut:true;return p[key]!==undefined?!!p[key]:true;};
 
 export default function FinPage({sh}){
-  const{cN,pN,contacts,setContacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes,cashCats,setCashCats}=sh;
+  const{cN,pN,contacts,setContacts,pos,sales,quotes,payments,setPayments,products,setProducts,canE,canD,modal,oM,cM,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,addLog,defectives,setDefectives,cu,billings,setBillings,supCNotes,setSupCNotes,cashCats,setCashCats,tagMappings,setTagMappings}=sh;
   const ed=canE("finance");const cd=canD("finance");
   const[sub,setSub]=useState("ap");const[viewProfile,setViewProfile]=useState(null);
   const[payForm,setPayForm]=useState({refId:"",type:"",amount:"",method:"โอนเงิน",date:todayStr(),note:""});
@@ -68,15 +68,26 @@ export default function FinPage({sh}){
 
   const catsForDir=(dir)=>{if(!dir)return cashCats;return cashCats.filter(c=>c.type===dir||c.type==="both");};
   const subsForCat=(catId)=>{if(!catId)return [];const c=cashCats.find(x=>x.id===+catId);return c?.subs||[];};
-  // Resolve auto-tag IDs by category NAME (defensive — user can rename via manage-cats modal)
-  const findCat=(name)=>cashCats.find(c=>c.name===name);
-  const findSub=(cat,subName)=>cat?.subs?.find(s=>s.name===subName);
-  const tagSO=()=>{const c=findCat("ขาย");return c?{catId:c.id,subCatId:findSub(c,"ขายสด (SO)")?.id||null}:{catId:null,subCatId:null};};
-  const tagPO=()=>{const c=findCat("ซื้อ");return c?{catId:c.id,subCatId:findSub(c,"จ่ายซัพ (PO)")?.id||null}:{catId:null,subCatId:null};};
-  // Consumed by saveTransfer (Task 6) — depositToBank / withdrawFromBank / interAccount
-  const tagTransfer=(dir)=>{const c=findCat("โอน/ถอน/ฝาก");if(!c)return{catId:null,subCatId:null};const subName=dir==="depositToBank"?"ฝากเข้าธนาคาร":dir==="withdrawFromBank"?"ถอนจากธนาคาร":"โอนระหว่างบัญชี";return{catId:c.id,subCatId:findSub(c,subName)?.id||null};};
-  // Consumed by saveAdjust (Task 7) — cash adjust/reconcile flow
-  const tagAdjust=(diff)=>{const c=findCat("ปรับยอด");if(!c)return{catId:null,subCatId:null};return{catId:c.id,subCatId:findSub(c,diff>=0?"เกิน":"ขาด")?.id||null};};
+  // Hardcoded flow definitions (internal — UI consumes this for the settings modal)
+  const FLOW_DEFS=[
+    {key:"ar_cash",                label:"รับเงินสดจาก SO",            direction:"in"},
+    {key:"ar_bank",                label:"ลูกค้าโอนเงินจ่าย SO",       direction:"in"},
+    {key:"ar_cheque",              label:"รับเช็คจาก SO (เคลีย)",      direction:"in"},
+    {key:"ar_batch",               label:"รวมหลาย SO (batch)",         direction:"in"},
+    {key:"ap_cash",                label:"จ่ายซัพด้วยเงินสด",          direction:"out"},
+    {key:"ap_bank",                label:"โอนเงินจ่ายซัพ",             direction:"out"},
+    {key:"ap_epp",                 label:"จ่ายซัพ EPP",                direction:"out"},
+    {key:"ap_cheque",              label:"จ่ายเช็คซัพ (เคลีย)",        direction:"out"},
+    {key:"ap_batch",               label:"รวมหลาย PO (batch AP)",      direction:"out"},
+    {key:"transfer_depositToBank", label:"ฝากเงินสดเข้าธนาคาร",       direction:"both"},
+    {key:"transfer_withdrawFromBank", label:"ถอนเงินจากธนาคาร",       direction:"both"},
+    {key:"transfer_interAccount",  label:"โอนระหว่างบัญชี",            direction:"both"},
+    {key:"withdraw",               label:"ถอนเงินสด (modal เก่า)",     direction:"out"},
+    {key:"adjust_over",            label:"ปรับยอด (เกิน)",             direction:"in"},
+    {key:"adjust_short",           label:"ปรับยอด (ขาด)",              direction:"out"},
+  ];
+  const autoTag=(key)=>{const m=tagMappings.find(x=>x.key===key);return m?{catId:m.catId,subCatId:m.subCatId}:{catId:null,subCatId:null};};
+  const setTagMapping=(key,patch)=>{setTagMappings(prev=>{const i=prev.findIndex(x=>x.key===key);if(i===-1)return[...prev,{key,catId:null,subCatId:null,...patch}];return prev.map((x,idx)=>idx===i?{...x,...patch}:x);});};
 
   const cnTot=cn=>{if(cn.type==="promo")return +cn.amount||0;const items=cn.items||[];if(cn.type!=="defective"&&cn.soNum){const so=sales.find(s=>s.soNum===cn.soNum);if(so&&so.discountAmt>0){const sub=(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);const r=sub>0?(sub-so.discountAmt)/sub:1;const raw=items.reduce((s,it)=>{const si=(so.items||[]).find(x=>x.productId===it.productId);return s+it.qty*(si?si.price*r:it.price);},0);return round2(raw);}}return items.reduce((s,i)=>s+i.qty*i.price,0);};
 
@@ -94,12 +105,13 @@ export default function FinPage({sh}){
   const savePay=()=>{if(!payForm.amount||+payForm.amount<=0)return;const amt=+payForm.amount;if(isNaN(amt)||amt<=0)return;if(payForm.method==="เช็ค"&&payForm.type==="ar"&&!payForm.chequeNo)return;
     const target=(payForm.type==="ap"?apList:arList).find(x=>(payForm.type==="ap"?x.poNum:x.soNum)===payForm.refId);
     if(target){let allowed=Math.max(0,target.remaining);if(payForm.editId){const oldP=payments.find(x=>x.id===payForm.editId);if(oldP)allowed+=(+oldP.amount||0);}if(amt>allowed+0.01){setWarnMsg("ยอดชำระเกินยอดคงค้าง (เหลือ ฿"+fmt(allowed)+")");return;}}
-    const isApBank=payForm.type==="ap"&&(payForm.method==="โอนเงินออก"||payForm.method==="จ่ายEPP")&&payForm.accId;
+    const isApBank=payForm.type==="ap"&&payForm.method==="โอนเงินออก"&&payForm.accId;
+    const isApEpp=payForm.type==="ap"&&payForm.method==="จ่ายEPP"&&payForm.accId;
     const isArBank=payForm.type==="ar"&&payForm.method==="โอนเงิน"&&payForm.accId;
     const isApCash=payForm.type==="ap"&&payForm.method==="เงินสด"&&payForm.accId;
     const isArCash=payForm.type==="ar"&&payForm.method==="เงินสด"&&payForm.accId;
-    if(payForm.editId){const old=payments.find(x=>x.id===payForm.editId);setPayments(p=>p.map(x=>x.id===payForm.editId?{...x,amount:amt,method:payForm.method,date:payForm.date,note:payForm.note,accId:payForm.accId,chequeNo:payForm.chequeNo,chequeBank:payForm.chequeBank,chequeDue:payForm.chequeDue}:x));if(old){setBankTxns(prev=>prev.filter(t=>!(t.refId===old.refId&&Math.abs(t.amount-old.amount)<0.01&&t.date===old.date)));if(old.method==="เช็ค"&&old.chequeNo)setCheques(prev=>prev.filter(c=>!(c.chequeNo===old.chequeNo&&c.refId===old.refId)));}if(isArBank){setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,catId:null,subCatId:null,transferPair:null}]);}if(isApBank){setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:(payForm.method==="จ่ายEPP"?"จ่ายEPP ":"จ่าย ")+payForm.refId,catId:null,subCatId:null,transferPair:null}]);}if(isArCash){const tag=tagSO();setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApCash){const tag=tagPO();setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่ายเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(payForm.method==="เช็ค"&&payForm.type==="ar"){setCheques(p=>[...p,{id:Date.now()+2,chequeNo:payForm.chequeNo,bank:payForm.chequeBank,amount:amt,date:payForm.date,dueDate:payForm.chequeDue,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,status:"pending"}]);}
-    }else{setPayments(p=>[...p,{id:Date.now(),...payForm,amount:amt}]);if(isArBank){setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,catId:null,subCatId:null,transferPair:null}]);}if(isApBank){setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:(payForm.method==="จ่ายEPP"?"จ่ายEPP ":"จ่าย ")+payForm.refId,catId:null,subCatId:null,transferPair:null}]);}if(isArCash){const tag=tagSO();setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApCash){const tag=tagPO();setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่ายเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(payForm.method==="เช็ค"&&payForm.type==="ar"){setCheques(p=>[...p,{id:Date.now()+2,chequeNo:payForm.chequeNo,bank:payForm.chequeBank,amount:amt,date:payForm.date,dueDate:payForm.chequeDue,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,status:"pending"}]);}}cM();};
+    if(payForm.editId){const old=payments.find(x=>x.id===payForm.editId);setPayments(p=>p.map(x=>x.id===payForm.editId?{...x,amount:amt,method:payForm.method,date:payForm.date,note:payForm.note,accId:payForm.accId,chequeNo:payForm.chequeNo,chequeBank:payForm.chequeBank,chequeDue:payForm.chequeDue}:x));if(old){setBankTxns(prev=>prev.filter(t=>!(t.refId===old.refId&&Math.abs(t.amount-old.amount)<0.01&&t.date===old.date)));if(old.method==="เช็ค"&&old.chequeNo)setCheques(prev=>prev.filter(c=>!(c.chequeNo===old.chequeNo&&c.refId===old.refId)));}if(isArBank){const tag=autoTag("ar_bank");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApBank){const tag=autoTag("ap_bank");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่าย "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApEpp){const tag=autoTag("ap_epp");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่ายEPP "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isArCash){const tag=autoTag("ar_cash");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApCash){const tag=autoTag("ap_cash");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่ายเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(payForm.method==="เช็ค"&&payForm.type==="ar"){setCheques(p=>[...p,{id:Date.now()+2,chequeNo:payForm.chequeNo,bank:payForm.chequeBank,amount:amt,date:payForm.date,dueDate:payForm.chequeDue,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,status:"pending"}]);}
+    }else{setPayments(p=>[...p,{id:Date.now(),...payForm,amount:amt}]);if(isArBank){const tag=autoTag("ar_bank");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApBank){const tag=autoTag("ap_bank");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่าย "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApEpp){const tag=autoTag("ap_epp");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่ายEPP "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isArCash){const tag=autoTag("ar_cash");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"in",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"รับเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(isApCash){const tag=autoTag("ap_cash");setBankTxns(p=>[...p,{id:Date.now()+1,accId:payForm.accId,type:"out",amount:amt,date:payForm.date,from:payForm.name||"",refId:payForm.refId,note:"จ่ายเงินสด "+payForm.refId,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}if(payForm.method==="เช็ค"&&payForm.type==="ar"){setCheques(p=>[...p,{id:Date.now()+2,chequeNo:payForm.chequeNo,bank:payForm.chequeBank,amount:amt,date:payForm.date,dueDate:payForm.chequeDue,from:payForm.name||"",refId:payForm.refId,note:"รับชำระ "+payForm.refId,status:"pending"}]);}}cM();};
 
   const openBatch=()=>{setBatchCust("");setBatchSOs([]);setBatchLines([{method:"เช็ค",amount:"",accId:bankAccs[0]?.id||1,chequeNo:"",chequeBank:"",chequeDue:"",date:todayStr()}]);oM("batchPay");};
   const batchSOList=useMemo(()=>{if(!batchCust)return[];return arList.filter(so=>so.customerId===batchCust&&so.status2!=="paid");},[batchCust,arList]);
@@ -127,7 +139,7 @@ export default function FinPage({sh}){
     }
     for(const ln of batchLines){
       const amt=+ln.amount;
-      if(ln.method==="โอนเงิน"&&ln.accId){newTxns.push({id:ts++,accId:ln.accId,type:"in",amount:amt,date:ln.date,from:custName,refId:batchSOs.join(","),note:"รับชำระรวม",catId:null,subCatId:null,transferPair:null});}
+      if(ln.method==="โอนเงิน"&&ln.accId){const tag=autoTag("ar_batch");newTxns.push({id:ts++,accId:ln.accId,type:"in",amount:amt,date:ln.date,from:custName,refId:batchSOs.join(","),note:"รับชำระรวม",catId:tag.catId,subCatId:tag.subCatId,transferPair:null});}
       if(ln.method==="เช็ค"){newChqs.push({id:ts++,chequeNo:ln.chequeNo,bank:ln.chequeBank,amount:amt,date:ln.date,dueDate:ln.chequeDue,from:custName,refId:batchSOs.join(","),note:"รับชำระรวม",status:"pending"});}
     }
     setPayments(p=>[...p,...newPays]);
@@ -155,7 +167,7 @@ export default function FinPage({sh}){
       if(rem>0)newPays.push({id:ts++,refId:poNum,type:"ap",amount:rem,method:bapMethod,date:bapDate,note:"จ่ายรวม"+cnNote,name:supName,accId:bapAccId});
     }
     setPayments(p=>[...p,...newPays]);
-    if(bapNetTotal>0&&bapAccId){setBankTxns(p=>[...p,{id:ts++,accId:bapAccId,type:"out",amount:bapNetTotal,date:bapDate,from:supName,refId:refPOs,note:(bapMethod==="จ่ายEPP"?"จ่ายEPP ":"จ่าย ")+"จ่ายรวม "+refPOs,catId:null,subCatId:null,transferPair:null}]);}
+    if(bapNetTotal>0&&bapAccId){const tag=autoTag("ap_batch");setBankTxns(p=>[...p,{id:ts++,accId:bapAccId,type:"out",amount:bapNetTotal,date:bapDate,from:supName,refId:refPOs,note:(bapMethod==="จ่ายEPP"?"จ่ายEPP ":"จ่าย ")+"จ่ายรวม "+refPOs,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}
     if(bapCNs.length>0){setSupCNotes(p=>p.map(c=>bapCNs.includes(c.id)?{...c,used:true}:c));}
     cM();
   };
@@ -168,8 +180,10 @@ export default function FinPage({sh}){
     const old=cheques.find(c=>c.id===id);if(!old)return;
     if(st==="cleared"&&old.status==="bounced"){setWarnMsg("เช็คเด้งแล้ว ไม่สามารถเคลียร์ได้");return;}
     setCheques(p=>p.map(c=>c.id===id?{...c,status:st,...(extra||{})}:c));
-    if(st==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now(),accId:old.depositAccId,type:"in",amount:old.amount,date:todayStr(),from:"เช็ค "+old.chequeNo,refId:old.refId||"",note:"เคลียร์เช็ค",catId:null,subCatId:null,transferPair:null}]);}
-    if(st==="bounced"&&old.status==="cleared"&&old.depositAccId){setBankTxns(p=>[...p,{id:Date.now()+1,accId:old.depositAccId,type:"out",amount:old.amount,date:todayStr(),from:"เช็คเด้ง "+old.chequeNo,refId:old.refId||"",note:"เช็คเด้ง (กลับรายการเคลียร์)",catId:null,subCatId:null,transferPair:null}]);}
+    const isApChq=(old.refId||"").startsWith("PO-");
+    const chqTagKey=isApChq?"ap_cheque":"ar_cheque";
+    if(st==="cleared"&&old.depositAccId){const tag=autoTag(chqTagKey);setBankTxns(p=>[...p,{id:Date.now(),accId:old.depositAccId,type:"in",amount:old.amount,date:todayStr(),from:"เช็ค "+old.chequeNo,refId:old.refId||"",note:"เคลียร์เช็ค",catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}
+    if(st==="bounced"&&old.status==="cleared"&&old.depositAccId){const tag=autoTag(chqTagKey);setBankTxns(p=>[...p,{id:Date.now()+1,accId:old.depositAccId,type:"out",amount:old.amount,date:todayStr(),from:"เช็คเด้ง "+old.chequeNo,refId:old.refId||"",note:"เช็คเด้ง (กลับรายการเคลียร์)",catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}
   };
   const[chqConfirm,setChqConfirm]=useState(null);
   const[bounceConfirm,setBounceConfirm]=useState(null);
@@ -235,7 +249,7 @@ export default function FinPage({sh}){
     const dir=(fromAcc.isCash&&!toAcc.isCash)?"depositToBank":
               (!fromAcc.isCash&&toAcc.isCash)?"withdrawFromBank":
               "interAccount";
-    const tag=tagTransfer(dir);
+    const tag=autoTag("transfer_"+dir);
     const pairId=Date.now();
     const outTxn={id:pairId,accId:fromAcc.id,type:"transfer",amount:-amt,date:tfForm.date,
       from:toAcc.name,refId:"",note:tfForm.note||"โอนไป "+toAcc.name,
@@ -253,7 +267,7 @@ export default function FinPage({sh}){
     const actual=+adjForm.actualBalance;
     const diff=round2(actual-current);
     if(diff===0){cM();return;}
-    const tag=tagAdjust(diff);
+    const tag=autoTag(diff>=0?"adjust_over":"adjust_short");
     setBankTxns(p=>[...p,{id:Date.now(),accId:adjForm.accId,type:"adjust",
       amount:diff,date:adjForm.date,from:"",refId:"",
       note:adjForm.note||"ปรับยอด ("+(diff>0?"+":"")+fmt(diff)+")",
@@ -460,7 +474,7 @@ export default function FinPage({sh}){
           if(bounceConfirm.resolve==="new_cheque"){
             setCheques(p=>[...p,{id:newChqId,chequeNo:bounceConfirm.newChequeNo,bank:bounceConfirm.newBank,amount:bounceConfirm.amount,receiveDate:todayStr(),dueDate:bounceConfirm.newDueDate,from:bounceConfirm.from||"",refId:bounceConfirm.refId||"",note:"แทนเช็คเด้ง "+bounceConfirm.chequeNo,status:"pending"}]);
           }else if(bounceConfirm.resolve==="transfer"){
-            setBankTxns(p=>[...p,{id:newTxnId,accId:bounceConfirm.txnAccId,type:"in",amount:bounceConfirm.amount,date:bounceConfirm.txnDate,from:bounceConfirm.from||"ลูกค้า",refId:bounceConfirm.refId||"",note:"โอนแทนเช็คเด้ง "+bounceConfirm.chequeNo,catId:null,subCatId:null,transferPair:null}]);
+            {const tag=autoTag("ar_cheque");setBankTxns(p=>[...p,{id:newTxnId,accId:bounceConfirm.txnAccId,type:"in",amount:bounceConfirm.amount,date:bounceConfirm.txnDate,from:bounceConfirm.from||"ลูกค้า",refId:bounceConfirm.refId||"",note:"โอนแทนเช็คเด้ง "+bounceConfirm.chequeNo,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);}
           }
           setBounceConfirm(null);
         }} saveLabel="ยืนยัน"/>
@@ -484,6 +498,7 @@ export default function FinPage({sh}){
         {ed&&bankAccs.length>=2&&<button onClick={()=>{setTfForm({fromAccId:bankAccs[0]?.id||"",toAccId:bankAccs[1]?.id||"",amount:"",date:todayStr(),note:""});oM("transfer");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>โอนระหว่างบัญชี</button>}
         {ed&&bankAccs.length>0&&<button onClick={()=>{setWdForm({accId:String(bankAccs[0]?.id||""),amount:"",date:todayStr(),note:""});oM("withdraw");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>ถอนเงินสด</button>}
         {ed&&<button onClick={()=>{setSelCatId(null);setNewCatName("");setNewCatType("both");setNewSubName({});setEditingCatId(null);setEditingSubId(null);oM("manageCats");}} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontWeight:500,marginLeft:"auto"}}>จัดการหมวด</button>}
+        {ed&&<button onClick={()=>oM("tagSettings")} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>ตั้งค่า Auto-tag</button>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12,marginBottom:16}}>
         {bankAccs.map(acc=>{const bal=getAccBal(acc.id);const txns=bankTxns.filter(t=>t.accId===acc.id);const todayIn=txns.filter(t=>t.type==="in"&&(t.date||"").startsWith(todayStr())).reduce((s,t)=>s+t.amount,0);const todayOut=txns.filter(t=>t.type==="out"&&(t.date||"").startsWith(todayStr())).reduce((s,t)=>s+t.amount,0);const last=txns.length>0?txns[txns.length-1]:null;const bankColor=getBankColor(acc.bank);
@@ -534,7 +549,7 @@ export default function FinPage({sh}){
           <td style={{padding:"8px",fontWeight:600,color:t.type==="in"?"var(--green)":"var(--red)"}}>{(t.type==="in"?"+":"-")+"฿"+fmt(t.amount)}</td>
           <td style={{padding:"8px"}}>{t.from||"—"}</td>
           <td style={{padding:"8px",color:"var(--blue)",fontSize:12}}>{t.refId||"—"}</td>
-          <td style={{padding:"8px"}}>{t.catId?(()=>{const c=cashCats.find(x=>x.id===t.catId);if(!c)return <span style={{color:"var(--faint)",fontSize:11}}>(หาไม่เจอ)</span>;const s=t.subCatId?(c.subs||[]).find(x=>x.id===t.subCatId):null;return <span style={{fontSize:11,background:"var(--blue-bg)",color:"var(--blue)",padding:"2px 7px",borderRadius:4}}>{c.name}{s?" / "+s.name:""}</span>;})():<span style={{color:"var(--faint)",fontSize:11}}>(ไม่ระบุ)</span>}</td>
+          <td style={{padding:"8px"}}>{t.catId?(()=>{const c=cashCats.find(x=>x.id===t.catId);if(!c)return <span style={{color:"var(--faint)",fontSize:11}}>(หาไม่เจอ)</span>;const s=t.subCatId?(c.subs||[]).find(x=>x.id===t.subCatId):null;return <span style={{fontSize:11,background:"var(--blue-bg)",color:"var(--blue)",padding:"2px 7px",borderRadius:4}}>{c.name}{s?" / "+s.name:""}</span>;})():<span onClick={ed?()=>oM("tagSettings"):undefined} style={{color:ed?"var(--blue)":"var(--faint)",fontSize:11,cursor:ed?"pointer":"default",textDecoration:ed?"underline":"none"}}>{ed?"(ตั้งค่า auto-tag)":"(ไม่ระบุ)"}</span>}</td>
           <td style={{padding:"8px",color:"var(--dim)",fontSize:12}}>{t.note||"—"}</td>
           <td style={{padding:"8px",whiteSpace:"nowrap"}}>{cd&&<button onClick={()=>setConfirmDelTxn(t)} style={{padding:"3px 8px",fontSize:11,borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontFamily:"inherit"}}>ลบ</button>}</td>
         </tr>;})}
@@ -945,6 +960,32 @@ export default function FinPage({sh}){
       </Modal>;
     })()}
 
+    {modal==="tagSettings"&&ed&&<Modal title="ตั้งค่า Auto-tag" onClose={cM} wide>
+      <div style={{padding:"8px 0",fontSize:12,color:"var(--dim)",borderBottom:"1px solid var(--line)",marginBottom:12}}>
+        เลือกหมวด + หมวดย่อย ที่จะใช้ tag อัตโนมัติเมื่อบันทึก txn จาก flow แต่ละเส้น
+      </div>
+      {FLOW_DEFS.map(flow=>{
+        const m=tagMappings.find(x=>x.key===flow.key)||{catId:null,subCatId:null};
+        const catOpts=[{value:"",label:"— ไม่ tag —"},...catsForDir(flow.direction).map(c=>({value:String(c.id),label:c.name}))];
+        const selectedCat=m.catId?cashCats.find(c=>c.id===m.catId):null;
+        const subOpts=selectedCat?[{value:"",label:"— ไม่ระบุ —"},...selectedCat.subs.map(s=>({value:String(s.id),label:s.name}))]:[];
+        return <div key={flow.key} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid var(--line)"}}>
+          <span style={{flex:"0 0 220px",fontSize:13}}>{flow.label}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <CustomSelect value={String(m.catId||"")} onChange={v=>setTagMapping(flow.key,{catId:v?+v:null,subCatId:null})} options={catOpts}/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            {m.catId&&<CustomSelect value={String(m.subCatId||"")} onChange={v=>setTagMapping(flow.key,{subCatId:v?+v:null})} options={subOpts}/>}
+            {!m.catId&&<div style={{fontSize:12,color:"var(--faint)",padding:"6px 12px"}}>(ไม่ tag)</div>}
+          </div>
+        </div>;
+      })}
+      <div style={{padding:"12px 0 0",fontSize:11,color:"var(--dim)"}}>
+        หมายเหตุ: การตั้งค่าจะ apply เฉพาะ txn ที่บันทึก<strong>หลังจาก</strong>ตั้งค่านี้
+      </div>
+      <MBtns onCancel={cM} onSave={cM} saveLabel="ปิด"/>
+    </Modal>}
+
     {modal==="withdraw"&&ed&&<Modal title="ถอนเงินสด" onClose={cM}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <Field label="จากบัญชี"><CustomSelect value={wdForm.accId} onChange={v=>setWdForm(f=>({...f,accId:v}))} options={bankAccs.filter(a=>!a.isCash).map(a=>({value:String(a.id),label:a.name+" — "+a.bank+" (฿"+fmt(getAccBal(a.id))+")" }))}/></Field>
@@ -955,7 +996,7 @@ export default function FinPage({sh}){
       {wdForm.accId&&wdForm.amount&&+wdForm.amount>0&&<div style={{background:"rgba(255,149,0,0.12)",border:"1px solid var(--orange)",borderRadius:8,padding:"12px",marginTop:12,fontSize:13,color:"var(--orange)"}}>
         {"ถอนเงินสด ฿"+fmt(+wdForm.amount)+" จาก "+((bankAccs.find(a=>a.id===+wdForm.accId)||{}).name||"")}
       </div>}
-      <MBtns onCancel={cM} onSave={()=>{if(!wdForm.accId||!wdForm.amount||+wdForm.amount<=0)return;setBankTxns(p=>[...p,{id:Date.now(),accId:+wdForm.accId,type:"out",amount:+wdForm.amount,date:wdForm.date,from:"ถอนเงินสด",refId:"WD-"+Date.now(),note:wdForm.note,catId:null,subCatId:null,transferPair:null}]);cM();}} saveLabel="ยืนยันถอน"/>
+      <MBtns onCancel={cM} onSave={()=>{if(!wdForm.accId||!wdForm.amount||+wdForm.amount<=0)return;const tag=autoTag("withdraw");setBankTxns(p=>[...p,{id:Date.now(),accId:+wdForm.accId,type:"out",amount:+wdForm.amount,date:wdForm.date,from:"ถอนเงินสด",refId:"WD-"+Date.now(),note:wdForm.note,catId:tag.catId,subCatId:tag.subCatId,transferPair:null}]);cM();}} saveLabel="ยืนยันถอน"/>
     </Modal>}
 
     {modal==="batchPay"&&ed&&<Modal title="รับชำระรวม" onClose={cM} wide>

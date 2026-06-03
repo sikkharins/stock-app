@@ -138,5 +138,15 @@ test("bankaccs: isCash flag merged correctly", () => {
   assert.equal(cash.openingBalance, 5000);
 });
 
+test("tagmappings: keyOf=key correctly merges concurrent edits on different keys", () => {
+  const base = [];
+  const mine = [{key:"ar_cash", catId:1, subCatId:11}];
+  const remote = [{key:"ap_cash", catId:2, subCatId:21}];
+  const merged = mergeForKey("tagmappings", base, mine, remote);
+  assert.equal(merged.length, 2);
+  assert.ok(merged.some(m => m.key === "ar_cash" && m.catId === 1));
+  assert.ok(merged.some(m => m.key === "ap_cash" && m.catId === 2));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

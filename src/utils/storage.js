@@ -24,6 +24,7 @@ const KEY_MAP = {
   v3_sales: "sales",
   v3_cats: "cats",
   v3_cashcats: "cashcats",
+  v3_tagmappings: "tagmappings",
   v3_brands: "brands",
   v3_logs: "logs",
   v3_payments: "payments",
