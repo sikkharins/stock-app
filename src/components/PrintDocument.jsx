@@ -35,7 +35,7 @@ export function printDoc(type, data, products, contacts, opts = {}) {
     const pad = isExclusive ? "9px 10px" : "6px 8px";
     return `<tr>
       <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${i+1}</td>
-      ${isExclusive ? "" : `<td style="border:1px solid #bbb;padding:${pad};">${pr.code||"-"}</td>`}
+      <td style="border:1px solid #bbb;padding:${pad};">${pr.code||"-"}</td>
       <td style="border:1px solid #bbb;padding:${pad};">${pr.nameT||pr.name||"-"}</td>
       <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${it.qty}</td>
       <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${pr.unit||"-"}</td>
@@ -82,6 +82,8 @@ export function printDoc(type, data, products, contacts, opts = {}) {
     ? `<tr><td style="color:#888;padding:3px 0;border:none;">การชำระ:</td><td style="padding:3px 0;border:none;">${data.payType==="cash"?"เงินสด":`เครดิต ${data.creditDays||0} วัน`}</td></tr>` : "";
   const dueRow = type==="so"&&data.payType==="credit"&&data.creditDays
     ? `<tr><td style="color:#888;padding:3px 0;border:none;">ครบกำหนด:</td><td style="padding:3px 0;border:none;color:#b06000;">${toBE(addDays(data.date,data.creditDays))}</td></tr>` : "";
+  const salesRow = type==="so"&&contact.salesPerson
+    ? `<tr><td style="color:#888;padding:3px 0;border:none;">พนักงานขาย:</td><td style="padding:3px 0;border:none;">${contact.salesPerson}</td></tr>` : "";
 
   // VAT rep block (SO only)
   const vatRepHtml = type==="so"&&data.useVatRep&&data.vatRepName
@@ -160,7 +162,7 @@ ${isExclusive ? "" : `<!-- Company header -->
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <tr><td style="color:#888;padding:3px 0;border:none;width:88px;">เลขที่:</td><td style="font-weight:700;padding:3px 0;border:none;">${t.num}</td></tr>
       <tr><td style="color:#888;padding:3px 0;border:none;">วันที่:</td><td style="padding:3px 0;border:none;">${toBE(data.date)}</td></tr>
-      ${expiryRow}${payRow}${dueRow}
+      ${expiryRow}${payRow}${dueRow}${salesRow}
     </table>
   </div>
 </div>
@@ -172,7 +174,7 @@ ${vatRepHtml}
   <thead>
     <tr style="background:#f5f5f0;">
       <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:center;font-weight:600;width:36px;">#</th>
-      ${isExclusive ? "" : `<th style="border:1px solid #bbb;padding:7px 8px;font-weight:600;width:80px;">รหัส</th>`}
+      <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};font-weight:600;width:${isExclusive ? "100px" : "80px"};">รหัส</th>
       <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};font-weight:600;">ชื่อสินค้า / Description</th>
       <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:center;font-weight:600;width:${isExclusive ? "75px" : "60px"};">จำนวน</th>
       <th style="border:1px solid #bbb;padding:${isExclusive ? "10px" : "7px 8px"};text-align:center;font-weight:600;width:${isExclusive ? "70px" : "55px"};">หน่วย</th>
