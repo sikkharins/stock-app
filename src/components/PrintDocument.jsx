@@ -185,9 +185,10 @@ ${vatRepHtml}
   <tbody>${itemsHtml}</tbody>
 </table>
 
-<!-- Totals -->
-<div style="display:flex;justify-content:flex-end;margin-bottom:20px;">
-  <table style="width:300px;border-collapse:collapse;font-size:13px;">${totalsHtml}</table>
+<!-- Totals (with optional note on left for เช็คของขึ้นรถ mode) -->
+<div style="display:flex;justify-content:${isExclusive&&data.note?"space-between":"flex-end"};align-items:flex-start;margin-bottom:20px;gap:20px;">
+  ${isExclusive&&data.note?`<div style="flex:1;font-size:13px;color:#333;padding-top:4px;line-height:1.55;"><strong style="color:#555;">หมายเหตุ:</strong> ${data.note}</div>`:""}
+  <table style="width:300px;border-collapse:collapse;font-size:13px;flex-shrink:0;">${totalsHtml}</table>
 </div>
 
 ${noteHtml}
