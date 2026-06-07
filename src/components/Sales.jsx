@@ -123,7 +123,7 @@ function SOList({sh}){
     cM();
   };
   const[reviewMode,setReviewMode]=useState(null);
-  const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);setReviewMode({soId});};
+  const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;const isDropship=!!editSO?.dropShip;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(!isDropship&&+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);setReviewMode({soId});};
   const confirmAndSave=()=>{if(!reviewMode)return;const id=reviewMode.soId;setReviewMode(null);doSave(id);};
   const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO&&cu?.role!=="Admin"){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.linkedPO){setPOs(p=>p.map(x=>x.linkedSO===so.soNum?{...x,linkedSO:""}:x));}if(so.status==="completed"){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");if(soPays.length){setPayments(prev=>prev.filter(p=>!(p.refId===so.soNum&&p.type==="ar")));setBankTxns(prev=>prev.filter(t=>!soPays.some(p=>t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="in")));setCheques(prev=>prev.filter(c=>!soPays.some(p=>p.method==="เช็ค"&&p.chequeNo&&c.chequeNo===p.chequeNo&&c.refId===p.refId)));}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
   const deliveringRef=useRef(new Set());
@@ -166,7 +166,7 @@ function SOList({sh}){
   });
 
   const renderForm=(soId)=>{
-    const exId=soId||0;const hasOver=form.items.some(it=>it.productId&&+it.qty>getAvail(it.productId,exId));
+    const exId=soId||0;const isDropship=!!editSO?.dropShip;const hasOver=form.items.some(it=>it.productId&&+it.qty>getAvail(it.productId,exId));
     const sub=form.items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);const disc=payType==="cash"?round2(sub*discPct/100):0;const ep=+(extraDiscPct||0);const ea=+(extraDiscAmt||0);const extraDisc=(ep>0?round2(sub*ep/100):0)+ea;
     // Preview reward discount (จาก pendingClaims + selectedWalletIds)
     const _curCust=contacts.find(c=>c.id===+form.customerId);
@@ -393,10 +393,10 @@ function SOList({sh}){
         )}
       </div>
       <Field label="หมายเหตุ"><textarea value={form.note||""} onChange={e=>setForm(f=>({...f,note:e.target.value}))} style={{...IB,height:56,resize:"vertical"}} placeholder="หมายเหตุ..."/></Field>
-      {hasOver&&<div style={{background:"rgba(255,59,48,0.12)",border:"1.5px solid var(--red)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"var(--red)",fontWeight:500}}>{"สินค้าบางรายการเกินสต็อก — กรุณาแก้ไขจำนวน"}</div>}
+      {hasOver&&<div style={{background:isDropship?"rgba(255,149,0,0.12)":"rgba(255,59,48,0.12)",border:"1.5px solid "+(isDropship?"var(--orange)":"var(--red)"),borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:isDropship?"var(--orange)":"var(--red)",fontWeight:500}}>{isDropship?"สินค้าบางรายการเกินสต็อก (Dropship — ไม่ต้องแก้)":"สินค้าบางรายการเกินสต็อก — กรุณาแก้ไขจำนวน"}</div>}
       {(()=>{const pc=form.items.some(i=>{if(!i.productId)return false;const p=products.find(x=>x.id===+i.productId);return p&&+i.price!==+p.price;});const na=!hasApv&&(pc||ep>0||ea>0);return na?<div style={{background:"rgba(175,82,222,0.12)",border:"1.5px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"var(--purple)",fontWeight:500}}>{"ราคา/ส่วนลดพิเศษถูกแก้ไข — SO จะอยู่สถานะ \"รออนุมัติพิเศษ\""}</div>:null;})()}
       {formErrors.length>0&&<div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"10px 14px",marginBottom:10}}><div style={{fontSize:12,fontWeight:600,color:"var(--red)",marginBottom:4}}>กรุณากรอกข้อมูลให้ครบ:</div>{formErrors.map((e,i)=><div key={i} style={{fontSize:12,color:"var(--red)",marginBottom:2}}>{"• "+e}</div>)}</div>}
-      <MBtns onCancel={()=>{setEditSO(null);cM();}} onSave={hasOver?null:()=>trySubmit(soId)} saveLabel={soId?"บันทึก":"สร้างใบขาย"}/>
+      <MBtns onCancel={()=>{setEditSO(null);cM();}} onSave={(hasOver&&!isDropship)?null:()=>trySubmit(soId)} saveLabel={soId?"บันทึก":"สร้างใบขาย"}/>
     </div>;
   };
 
