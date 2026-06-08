@@ -28,3 +28,32 @@ export const CN_TYPES = [
   {key:"defective",label:"สินค้าชำรุด",color:"var(--orange)",bg:"rgba(255,149,0,0.14)"},
   {key:"promo",label:"โปรโมชั่น",color:"var(--purple)",bg:"rgba(175,82,222,0.14)"},
 ];
+
+// Bank account permissions — used by Bank tab, Cheque clear modal, and addPay (AR/AP)
+export const DEF_PERMS = {receive:true, clearCheque:true, payEPP:true, transferOut:true};
+export const hasPerm = (acc, key) => {
+  const p = acc.perms;
+  if (!p) return true;
+  if (key === "payEPP") return p.payEPP !== undefined ? !!p.payEPP : p.payOnline !== undefined ? !!p.payOnline : true;
+  if (key === "transferOut") return p.transferOut !== undefined ? !!p.transferOut : true;
+  return p[key] !== undefined ? !!p[key] : true;
+};
+
+// Auto-tag flow definitions — UI consumes this for the tagSettings modal in Bank tab
+export const FLOW_DEFS = [
+  {key:"ar_cash",                label:"รับเงินสดจาก SO",            direction:"in"},
+  {key:"ar_bank",                label:"ลูกค้าโอนเงินจ่าย SO",       direction:"in"},
+  {key:"ar_cheque",              label:"รับเช็คจาก SO (เคลีย)",      direction:"in"},
+  {key:"ar_batch",               label:"รวมหลาย SO (batch)",         direction:"in"},
+  {key:"ap_cash",                label:"จ่ายซัพด้วยเงินสด",          direction:"out"},
+  {key:"ap_bank",                label:"โอนเงินจ่ายซัพ",             direction:"out"},
+  {key:"ap_epp",                 label:"จ่ายซัพ EPP",                direction:"out"},
+  {key:"ap_cheque",              label:"จ่ายเช็คซัพ (เคลีย)",        direction:"out"},
+  {key:"ap_batch",               label:"รวมหลาย PO (batch AP)",      direction:"out"},
+  {key:"transfer_depositToBank", label:"ฝากเงินสดเข้าธนาคาร",       direction:"both"},
+  {key:"transfer_withdrawFromBank", label:"ถอนเงินจากธนาคาร",       direction:"both"},
+  {key:"transfer_interAccount",  label:"โอนระหว่างบัญชี",            direction:"both"},
+  {key:"withdraw",               label:"ถอนเงินสด (modal เก่า)",     direction:"out"},
+  {key:"adjust_over",            label:"ปรับยอด (เกิน)",             direction:"in"},
+  {key:"adjust_short",           label:"ปรับยอด (ขาด)",              direction:"out"},
+];
