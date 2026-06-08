@@ -1,4 +1,13 @@
-export function Modal({title,children,onClose,wide}){
+import type { ReactNode } from "react";
+
+interface ModalProps {
+  title: ReactNode;
+  children: ReactNode;
+  onClose: () => void;
+  wide?: boolean;
+}
+
+export function Modal({ title, children, onClose, wide }: ModalProps) {
   return <div className="modal-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:100,paddingTop:40,overflowY:"auto"}}>
     <div className="modal-box" style={{background:"var(--panel)",borderRadius:14,border:"1px solid var(--line)",padding:"1.5rem",width:wide?"min(760px,96%)":"min(580px,94%)",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -10,9 +19,18 @@ export function Modal({title,children,onClose,wide}){
   </div>;
 }
 
-export function MBtns({onCancel,onSave,saveLabel,disabled}){
+interface MBtnsProps {
+  onCancel: () => void;
+  onSave?: () => void;
+  saveLabel?: string;
+  disabled?: boolean;
+  saveColor?: string;
+}
+
+export function MBtns({ onCancel, onSave, saveLabel, disabled, saveColor }: MBtnsProps) {
+  const saveBg = disabled ? "var(--hover2)" : (saveColor || "var(--blue)");
   return <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,gap:10}}>
     <button onClick={onCancel} style={{padding:"6px 13px",borderRadius:7,border:"1px solid var(--line)",cursor:"pointer",background:"var(--bg2)",color:"var(--text)",fontFamily:"inherit",fontSize:13,fontWeight:500}}>ยกเลิก</button>
-    {onSave&&<button onClick={onSave} disabled={disabled} style={{padding:"6px 13px",borderRadius:7,border:"none",cursor:disabled?"not-allowed":"pointer",background:disabled?"var(--hover2)":"var(--blue)",color:disabled?"var(--dim)":"#fff",fontFamily:"inherit",fontSize:13,fontWeight:500,opacity:disabled?0.6:1}}>{saveLabel||"บันทึก"}</button>}
+    {onSave&&<button onClick={onSave} disabled={disabled} style={{padding:"6px 13px",borderRadius:7,border:"none",cursor:disabled?"not-allowed":"pointer",background:saveBg,color:disabled?"var(--dim)":"#fff",fontFamily:"inherit",fontSize:13,fontWeight:500,opacity:disabled?0.6:1}}>{saveLabel||"บันทึก"}</button>}
   </div>;
 }
