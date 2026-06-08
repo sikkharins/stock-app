@@ -37,7 +37,7 @@ export default function FinPage({sh}){
   const openPay=item=>{setPayForm({refId:item.poNum||item.soNum,type:item.poNum?"ap":"ar",amount:Math.max(0,item.remaining).toFixed(2),method:item.poNum?"โอนเงินออก":"โอนเงิน",date:todayStr(),note:"",name:item.supName||item.custName,accId:bankAccs[0]?.id||1,chequeNo:"",chequeBank:"",chequeDue:""});oM("addPay");};
   const openEditPay=(p,nameStr)=>{setPayForm({editId:p.id,refId:p.refId,type:p.type,amount:String(p.amount),method:p.method,date:p.date,note:p.note||"",name:nameStr||"",accId:p.accId||bankAccs[0]?.id||1,chequeNo:p.chequeNo||"",chequeBank:p.chequeBank||"",chequeDue:p.chequeDue||""});oM("addPay");};
   const delPay=(p)=>{const wantType=p.type==="ar"?"in":"out";setPayments(prev=>prev.filter(x=>x.id!==p.id));setBankTxns(prev=>prev.filter(t=>!(t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type===wantType)));if(p.method==="เช็ค"&&p.chequeNo)setCheques(prev=>prev.filter(c=>!(c.chequeNo===p.chequeNo&&c.refId===p.refId)));};
-  const savePay=()=>{if(!payForm.amount||+payForm.amount<=0)return;const amt=+payForm.amount;if(isNaN(amt)||amt<=0)return;if(payForm.method==="เช็ค"&&payForm.type==="ar"&&!payForm.chequeNo)return;
+  const savePay=()=>{if(!payForm.amount||+payForm.amount<=0){setWarnMsg("กรุณากรอกจำนวนเงินมากกว่า 0");return;}const amt=+payForm.amount;if(isNaN(amt)||amt<=0){setWarnMsg("จำนวนเงินไม่ถูกต้อง");return;}if(payForm.method==="เช็ค"&&payForm.type==="ar"&&!payForm.chequeNo){setWarnMsg("กรุณากรอกเลขที่เช็ค");return;}
     // Validation: ยอดชำระไม่เกินยอดคงค้าง — compute inline from arList (AR) หรือ payments+items (AP)
     let allowed=null;
     if(payForm.type==="ar"){const target=arList.find(x=>x.soNum===payForm.refId);if(target)allowed=Math.max(0,target.remaining);}
