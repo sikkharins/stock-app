@@ -22,3 +22,9 @@ export const THAI_BANKS = [
 ];
 
 export const BANK_OPTS = [{value:"",label:"เลือกธนาคาร"},...THAI_BANKS];
+
+export const CN_TYPES = [
+  {key:"return",label:"คืนสินค้า",color:"var(--blue)",bg:"var(--blue-bg)"},
+  {key:"defective",label:"สินค้าชำรุด",color:"var(--orange)",bg:"rgba(255,149,0,0.14)"},
+  {key:"promo",label:"โปรโมชั่น",color:"var(--purple)",bg:"rgba(175,82,222,0.14)"},
+];
