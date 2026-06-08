@@ -1,16 +1,19 @@
-// Standalone test for the 3-way merge layer. Run: node src/utils/merge.test.mjs
+// Standalone test for the 3-way merge layer. Run: npm test
+// (uses tsx now; Vitest will pick this up automatically in the next round)
 import assert from "node:assert/strict";
 import { mergeByKey, mergeForKey, MERGE_CFG } from "./merge.js";
 
+type Record = { [k: string]: unknown };
+
 let pass = 0, fail = 0;
-function test(name, fn) {
+function test(name: string, fn: () => void): void {
   try { fn(); pass++; console.log("  ok  -", name); }
-  catch (e) { fail++; console.error("FAIL -", name, "\n      ", e.message); }
+  catch (e) { fail++; console.error("FAIL -", name, "\n      ", (e as Error).message); }
 }
 // order-insensitive compare for record arrays
-const norm = (arr) => [...arr].sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1));
-const sameSet = (got, want) => assert.deepEqual(norm(got), norm(want));
-const byId = (r) => r.id;
+const norm = (arr: Record[]): Record[] => [...arr].sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1));
+const sameSet = (got: Record[], want: Record[]): void => assert.deepEqual(norm(got), norm(want));
+const byId = (r: Record): string | number => r.id as string | number;
 
 test("insert/insert different ids → both survive", () => {
   const base = [{ id: 1, v: "a" }];
@@ -76,7 +79,7 @@ test("null/undefined inputs treated as empty arrays", () => {
 });
 
 test("mergeForKey('activity') uses composite userId|loginTime key", () => {
-  const base = [];
+  const base: Record[] = [];
   const mine = [{ userId: "u1", loginTime: 100, a: 1 }];
   const remote = [{ userId: "u2", loginTime: 200, a: 2 }];
   sameSet(mergeForKey("activity", base, mine, remote), [
@@ -86,7 +89,7 @@ test("mergeForKey('activity') uses composite userId|loginTime key", () => {
 });
 
 test("mergeForKey('logs') falls back to composite key when id missing", () => {
-  const base = [];
+  const base: Record[] = [];
   const mine = [{ date: "01/01/2569 10:00", type: "out", productId: 5, ref: "SO-1", qty: 2 }];
   const remote = [{ date: "01/01/2569 11:00", type: "in", productId: 5, ref: "PO-1", qty: 3 }];
   const out = mergeForKey("logs", base, mine, remote);
@@ -135,11 +138,11 @@ test("bankaccs: isCash flag merged correctly", () => {
   assert.equal(merged.length, 2);
   const cash = merged.find(a => a.isCash);
   assert.ok(cash, "cash account should be in merged result");
-  assert.equal(cash.openingBalance, 5000);
+  assert.equal(cash!.openingBalance, 5000);
 });
 
 test("tagmappings: keyOf=key correctly merges concurrent edits on different keys", () => {
-  const base = [];
+  const base: Record[] = [];
   const mine = [{key:"ar_cash", catId:1, subCatId:11}];
   const remote = [{key:"ap_cash", catId:2, subCatId:21}];
   const merged = mergeForKey("tagmappings", base, mine, remote);

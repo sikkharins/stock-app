@@ -1,19 +1,21 @@
 import { supabase } from "./supabase.js";
 
 // localStorage (sync cache)
-export const loadData = (key, fallback) => {
+export const loadData = <T>(key: string, fallback: T): T => {
   try {
     const r = localStorage.getItem(key);
-    return r !== null ? JSON.parse(r) : fallback;
+    return r !== null ? (JSON.parse(r) as T) : fallback;
   } catch {
     return fallback;
   }
 };
 
-export const saveData = (key, value) => {
+export const saveData = (key: string, value: unknown): void => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
+  } catch {
+    // ignore quota/serialization failures — caller can choose to surface them via a different path
+  }
 };
 
 // Map localStorage key → Supabase app_data key
@@ -43,14 +45,31 @@ const KEY_MAP = {
   v3_promos: "promos",
   v3_events: "events",
   v3_bot_config: "bot_config",
-};
+} as const;
+
+type LsKey = keyof typeof KEY_MAP;
+type SbKey = typeof KEY_MAP[LsKey];
 
 // Reverse map: Supabase key → localStorage key
-const SB_TO_LS = Object.fromEntries(Object.entries(KEY_MAP).map(([ls, sb]) => [sb, ls]));
+const SB_TO_LS: Record<string, string> = Object.fromEntries(
+  Object.entries(KEY_MAP).map(([ls, sb]) => [sb, ls])
+);
+
+interface AppDataRow {
+  key: string;
+  data: unknown;
+  version: number | null;
+  updated_by?: string;
+}
+
+interface LoadAllResult {
+  values: Record<string, unknown>;
+  versions: Record<string, number>;
+}
 
 // Load all data + per-key version in one query (with 5s timeout).
 // Returns { values: {sbKey: data}, versions: {sbKey: version} }.
-export const loadAllFromSupabase = async () => {
+export const loadAllFromSupabase = async (): Promise<LoadAllResult> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
@@ -60,9 +79,9 @@ export const loadAllFromSupabase = async () => {
       .abortSignal(controller.signal);
     clearTimeout(timer);
     if (error) throw error;
-    const values = {};
-    const versions = {};
-    (data || []).forEach((row) => {
+    const values: Record<string, unknown> = {};
+    const versions: Record<string, number> = {};
+    ((data as AppDataRow[]) || []).forEach((row) => {
       values[row.key] = row.data;
       versions[row.key] = row.version ?? 0;
     });
@@ -73,23 +92,43 @@ export const loadAllFromSupabase = async () => {
   }
 };
 
+interface RowResult {
+  data: unknown;
+  version: number;
+}
+
 // Fetch a single row's data + version (for conflict refetch).
-export const getRow = async (sbKey) => {
+export const getRow = async (sbKey: string): Promise<RowResult | null> => {
   const { data, error } = await supabase
     .from("app_data")
     .select("data, version")
     .eq("key", sbKey)
     .maybeSingle();
   if (error || !data) return null;
-  return { data: data.data, version: data.version ?? 0 };
+  const row = data as { data: unknown; version: number | null };
+  return { data: row.data, version: row.version ?? 0 };
 };
+
+export type SaveResult =
+  | { ok: true; version: number }
+  | { conflict: true; remoteData: unknown; remoteVersion: number }
+  | { error: string };
 
 // Optimistic per-key save. Conditional UPDATE on version = atomic compare-and-set at the DB.
 // Returns { ok, version } on success, { conflict, remoteData, remoteVersion } if another
 // writer won, or { error } on transport failure.
-export const saveKeyOptimistic = async (sbKey, value, expectedVersion, userId) => {
+export const saveKeyOptimistic = async (
+  sbKey: string,
+  value: unknown,
+  expectedVersion: number,
+  userId?: string
+): Promise<SaveResult> => {
   const expected = expectedVersion || 0;
-  const patch = { data: value, updated_at: new Date().toISOString(), version: expected + 1 };
+  const patch: Record<string, unknown> = {
+    data: value,
+    updated_at: new Date().toISOString(),
+    version: expected + 1,
+  };
   if (userId) patch.updated_by = userId;
 
   const { data, error } = await supabase
@@ -104,7 +143,12 @@ export const saveKeyOptimistic = async (sbKey, value, expectedVersion, userId) =
   // No row matched: either the row doesn't exist yet, or our version is stale.
   const cur = await getRow(sbKey);
   if (!cur) {
-    const row = { key: sbKey, data: value, updated_at: new Date().toISOString(), version: 1 };
+    const row: Record<string, unknown> = {
+      key: sbKey,
+      data: value,
+      updated_at: new Date().toISOString(),
+      version: 1,
+    };
     if (userId) row.updated_by = userId;
     const { error: insErr } = await supabase.from("app_data").insert(row);
     if (!insErr) return { ok: true, version: 1 };
@@ -116,16 +160,21 @@ export const saveKeyOptimistic = async (sbKey, value, expectedVersion, userId) =
 };
 
 // Realtime subscription
-let realtimeChannel = null;
+type RealtimeChannel = ReturnType<typeof supabase.channel>;
+type RealtimeCallback = (sbKey: string, data: unknown, version: number) => void;
 
-export const subscribeRealtime = (userId, onUpdate) => {
+let realtimeChannel: RealtimeChannel | null = null;
+
+export const subscribeRealtime = (userId: string, onUpdate: RealtimeCallback): void => {
   unsubscribeRealtime();
   realtimeChannel = supabase
     .channel("app_data_changes")
     .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "app_data" },
-      (payload) => {
+      // The supabase-js type signature for `.on("postgres_changes", ...)` is awkward to satisfy
+      // strictly. Cast through unknown — runtime payload shape is validated below.
+      "postgres_changes" as never,
+      { event: "*", schema: "public", table: "app_data" } as never,
+      (payload: { new?: AppDataRow }) => {
         const row = payload.new;
         if (!row || !row.key) return;
         if (row.updated_by === userId) return;
@@ -142,9 +191,13 @@ export const subscribeRealtime = (userId, onUpdate) => {
     });
 };
 
-export const unsubscribeRealtime = () => {
+export const unsubscribeRealtime = (): void => {
   if (realtimeChannel) {
     supabase.removeChannel(realtimeChannel);
     realtimeChannel = null;
   }
 };
+
+// Re-export key maps for callers (some debugging tools peek at them).
+export { KEY_MAP, SB_TO_LS };
+export type { LsKey, SbKey };
