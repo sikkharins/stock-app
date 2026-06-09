@@ -136,7 +136,8 @@ describe("DeliveryPlanning", () => {
     // Modal opened — assert via Print button which only exists inside Pick List modal
     expect(screen.getByRole("button", { name: /พิมพ์/ })).toBeInTheDocument();
     expect(screen.getByText("ตู้เย็น")).toBeInTheDocument();
-    expect(screen.getByText(/SO-A.*SO-B|SO-B.*SO-A/)).toBeInTheDocument();
+    // Customer column now shows customer names instead of SO numbers
+    expect(screen.getByText(/A.*B|B.*A/)).toBeInTheDocument();
   });
 
   test("manage trucks: add a truck via modal", async () => {

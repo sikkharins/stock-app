@@ -241,14 +241,46 @@ export default function DeliveryPlanningPage({ sh }) {
   };
   const clearAll = () => setPicked(new Set());
 
-  const pickList = useMemo(
-    () =>
-      consolidatePickList(
-        pickedRows.map((r) => r.so),
-        products
-      ),
-    [pickedRows, products]
-  );
+  const pickList = useMemo(() => {
+    const raw = consolidatePickList(
+      pickedRows.map((r) => r.so),
+      products
+    );
+    const productMap = new Map((products || []).map((p) => [p.id, p]));
+    const catMap = new Map((cats || []).map((c) => [c.id, c]));
+    const subByPair = new Map();
+    for (const c of cats || [])
+      for (const s of c.subs || [])
+        subByPair.set(`${c.id}|${s.id}`, s.name);
+    const soByNum = new Map((sales || []).map((s) => [s.soNum, s]));
+    const custMap = new Map((contacts || []).map((c) => [c.id, c]));
+
+    return raw.map((e) => {
+      const p = productMap.get(e.productId);
+      const cat = p?.categoryId != null ? catMap.get(p.categoryId) : null;
+      const subName =
+        p?.categoryId != null
+          ? subByPair.get(`${p.categoryId}|${p.subcategoryId}`) || ""
+          : "";
+
+      const custSet = new Set();
+      for (const soNum of e.sources || []) {
+        const so = soByNum.get(soNum);
+        if (so?.customerId != null) {
+          const cust = custMap.get(so.customerId);
+          if (cust) custSet.add(cN(cust));
+        }
+      }
+
+      return {
+        ...e,
+        brand: p?.brand || "",
+        catName: cat?.name || "",
+        subName,
+        customers: [...custSet],
+      };
+    });
+  }, [pickedRows, products, cats, sales, contacts, cN]);
 
   // Aggregate category breakdown across all picked SOs (volume-sorted DESC)
   const pickedByCategory = useMemo(() => {
@@ -313,12 +345,15 @@ export default function DeliveryPlanningPage({ sh }) {
 
   const csvExport = () => {
     const rows = [
-      ["รหัส", "สินค้า", "จำนวน", "SO ต้นทาง"],
+      ["รหัส", "ยี่ห้อ", "หมวด", "หมวดย่อย", "สินค้า", "จำนวน", "ลูกค้า"],
       ...pickList.map((e) => [
         String(e.productId),
+        e.brand,
+        e.catName,
+        e.subName,
         e.name,
         String(e.totalQty),
-        e.sources.join(", "),
+        (e.customers || []).join(" / "),
       ]),
     ];
     const csv = rows
@@ -331,6 +366,39 @@ export default function DeliveryPlanningPage({ sh }) {
     a.download = `pick-list-${date}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const pdfExport = async () => {
+    const el = document.getElementById("pick-list-printable");
+    if (!el) return;
+    // html2pdf renders DOM as image-based PDF — handles Thai text natively without
+    // a font embed step. Bundle is loaded on demand so it doesn't bloat the page.
+    const { default: html2pdf } = await import("html2pdf.js");
+    const wrap = document.createElement("div");
+    wrap.style.padding = "16px 20px";
+    wrap.style.background = "#fff";
+    wrap.style.color = "#000";
+    wrap.innerHTML = `
+      <div style="font-size:18px;font-weight:600;margin-bottom:4px">Pick List — ${toBE(date)}</div>
+      <div style="font-size:12px;color:#666;margin-bottom:12px">
+        ${truck?.name || ""}
+        ${truck?.driverName ? ` · คนขับ: ${truck.driverName}` : ""}
+        · รวม ${pickList.reduce((s, e) => s + e.totalQty, 0)} ชิ้น
+        · ${pickList.length} รายการ
+        · ${pickedRows.length} SO
+      </div>
+      ${el.outerHTML}
+    `;
+    html2pdf()
+      .set({
+        margin: 8,
+        filename: `pick-list-${date}.pdf`,
+        image: { type: "jpeg", quality: 0.95 },
+        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+      })
+      .from(wrap)
+      .save();
   };
 
   // --- Render ---
@@ -1131,6 +1199,7 @@ export default function DeliveryPlanningPage({ sh }) {
             <span>{pickedRows.length} SO</span>
           </div>
           <div
+            id="pick-list-printable"
             style={{
               border: "1px solid var(--line)",
               borderRadius: 8,
@@ -1146,12 +1215,12 @@ export default function DeliveryPlanningPage({ sh }) {
                     borderBottom: "1px solid var(--line)",
                   }}
                 >
-                  {["#", "สินค้า", "จำนวน", "SO ต้นทาง"].map((h, i) => (
+                  {["#", "ยี่ห้อ", "หมวด", "สินค้า", "จำนวน", "ลูกค้า"].map((h, i) => (
                     <th
                       key={i}
                       style={{
                         padding: "8px 12px",
-                        textAlign: i === 2 ? "right" : "left",
+                        textAlign: i === 4 ? "right" : "left",
                         fontWeight: 500,
                         color: "var(--dim)",
                         fontSize: 12,
@@ -1168,7 +1237,28 @@ export default function DeliveryPlanningPage({ sh }) {
                     <td style={{ padding: "8px 12px", color: "var(--dim)" }}>
                       {i + 1}
                     </td>
-                    <td style={{ padding: "8px 12px", fontWeight: 500 }}>{e.name}</td>
+                    <td
+                      style={{
+                        padding: "8px 12px",
+                        fontSize: 12,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {e.brand || "—"}
+                    </td>
+                    <td
+                      style={{
+                        padding: "8px 12px",
+                        fontSize: 12,
+                        color: "var(--dim)",
+                      }}
+                    >
+                      {e.catName}
+                      {e.subName ? ` · ${e.subName}` : ""}
+                    </td>
+                    <td style={{ padding: "8px 12px", fontWeight: 500 }}>
+                      {e.name}
+                    </td>
                     <td
                       style={{
                         padding: "8px 12px",
@@ -1184,10 +1274,10 @@ export default function DeliveryPlanningPage({ sh }) {
                         padding: "8px 12px",
                         fontSize: 11,
                         color: "var(--dim)",
-                        fontFamily: "monospace",
                       }}
+                      title={(e.customers || []).join(", ")}
                     >
-                      {e.sources.join(", ")}
+                      {(e.customers || []).join(", ") || "—"}
                     </td>
                   </tr>
                 ))}
@@ -1208,6 +1298,20 @@ export default function DeliveryPlanningPage({ sh }) {
               }}
             >
               พิมพ์
+            </button>
+            <button
+              onClick={pdfExport}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 7,
+                border: "1px solid var(--line)",
+                background: "var(--bg2)",
+                color: "var(--text)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              PDF
             </button>
             <button
               onClick={csvExport}
