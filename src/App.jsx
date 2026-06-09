@@ -4,7 +4,7 @@ import { getNotifs, mkAudit, nowStr, todayStr, round2 } from "./utils/helpers.js
 import { loadData, saveData, loadAllFromSupabase, saveKeyOptimistic, subscribeRealtime, unsubscribeRealtime } from "./utils/storage.js";
 import { mergeForKey } from "./utils/merge.js";
 import { signIn, signOut, getSession, getProfile, getAllProfiles, migrateUsers } from "./utils/auth.js";
-import { initProducts, initContacts, initPOs, initSales, initCats, initCashCats, initBrands, initUsers, initQuotes, initTargets, initTagMappings } from "./data/initData.js";
+import { initProducts, initContacts, initPOs, initSales, initCats, initCashCats, initBrands, initUsers, initQuotes, initTargets, initTagMappings, initTrucks } from "./data/initData.js";
 import { THEME_CSS } from "./styles/theme.js";
 import Field from "./components/ui/Field.jsx";
 import GlobalSearch from "./components/ui/GlobalSearch.jsx";
@@ -27,12 +27,13 @@ const AISOBot = lazy(() => import("./components/AISOBot.jsx"));
 const FabCustomizer = lazy(() => import("./components/FabCustomizer.jsx"));
 const SalesOverviewPage = lazy(() => import("./components/SalesOverview.jsx"));
 const FinancialCalendarPage = lazy(() => import("./components/FinancialCalendar.jsx"));
+const DeliveryPlanningPage = lazy(() => import("./components/DeliveryPlanning.jsx"));
 
-const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",events:"◈",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙"};
+const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",events:"◈",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙",delivery_planning:"▦"};
 const NAV_SECTIONS=[
   {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","purchase","sales","promos","events"]},
   {label:{th:"การจัดการ",en:"Manage"},tabs:["finance","reports","sales_overview","defective","suppliers","customers"]},
-  {label:{th:"วางแผน",en:"Planning"},tabs:["financial_calendar"]},
+  {label:{th:"วางแผน",en:"Planning"},tabs:["financial_calendar","delivery_planning"]},
   {label:{th:"ระบบ",en:"System"},tabs:["users"]},
 ];
 const INIT_BANKACCS=[{id:1,name:"บัญชี 1",bank:"กสิกรไทย",accNo:""},{id:2,name:"บัญชี 2",bank:"ไทยพาณิชย์",accNo:""},{id:3,name:"บัญชี 3",bank:"TTB",accNo:""}];
@@ -77,6 +78,7 @@ export default function App(){
   const[defectives,setDefectives]=useState([]);
   const[supCNotes,setSupCNotes]=useState([]);
   const[promos,setPromos]=useState([]);const[events,setEvents]=useState([]);
+  const[trucks,setTrucks]=useState(initTrucks);
   const[cats,setCats]=useState(initCats);const[cashCats,setCashCats]=useState(initCashCats);const[tagMappings,setTagMappings]=useState(initTagMappings);const[brands,setBrands]=useState(initBrands);
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
@@ -153,7 +155,7 @@ export default function App(){
 
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
-    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents};
+    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents,trucks:setTrucks};
     return RT_SETTERS.current;
   },[]);
 
@@ -212,6 +214,7 @@ export default function App(){
     out.supcnotes=g("supcnotes","v3_supcnotes",[]);setSupCNotes(out.supcnotes);
     out.promos=g("promos","v3_promos",[]);setPromos(out.promos);
     out.events=g("events","v3_events",[]);setEvents(out.events);
+    out.trucks=g("trucks","v3_trucks",initTrucks);setTrucks(out.trucks);
     out.defectives=g("defectives","v3_defectives",[]).map(d=>{
       if(d.status==="cn_created"||d.status==="cn_used")return{...d,custStatus:d.status,status:d.custStatus||"pending_inspection"};
       return d;
@@ -310,7 +313,7 @@ export default function App(){
   // Autosave: write only the arrays that actually changed (diff vs last-synced),
   // each as an independent optimistic-locked row save with merge-on-conflict.
   useEffect(()=>{if(!loaded)return;
-    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events};
+    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events,trucks};
     setSaving(true);
     const tm=setTimeout(async()=>{
       const dirty=[];
@@ -329,7 +332,7 @@ export default function App(){
     // the 800ms timer every render → autosave would never fire. The deps below
     // are exactly what should trigger a new save (any tracked array changed).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,loaded]);
+  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,trucks,loaded]);
 
   const[staleWarn,setStaleWarn]=useState(false);
   // Same as doRefresh: reloadFromServer reads only refs, stable identity unneeded.
@@ -400,7 +403,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
@@ -502,6 +505,7 @@ export default function App(){
           {tab==="reports"&&<RepPage sh={sh}/>}
           {tab==="sales_overview"&&<SalesOverviewPage sh={sh}/>}
           {tab==="financial_calendar"&&<FinancialCalendarPage sh={sh}/>}
+          {tab==="delivery_planning"&&<DeliveryPlanningPage sh={sh}/>}
           {tab==="suppliers"&&<ContactPage key="s" sh={sh} ft="supplier"/>}
           {tab==="customers"&&<ContactPage key="c" sh={sh} ft="customer"/>}
           {tab==="defective"&&<DefectivePage sh={sh}/>}
