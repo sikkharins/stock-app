@@ -77,6 +77,8 @@ export default function DeliveryPlanningPage({ sh }) {
   const [driverNote, setDriverNote] = useState("");
   const [warnMsg, setWarnMsg] = useState(null);
   const [runHelperIds, setRunHelperIds] = useState([]);
+  const [pdfPreview, setPdfPreview] = useState(null); // { url, blob } | null
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   // Helper-pool CRUD form
   const emptyHelper = { id: null, name: "", phone: "", isActive: true };
@@ -368,12 +370,10 @@ export default function DeliveryPlanningPage({ sh }) {
     URL.revokeObjectURL(url);
   };
 
-  const pdfExport = async () => {
+  // Build the offscreen wrapper that html2pdf renders into. Reused by preview + save.
+  const buildPdfWrap = () => {
     const el = document.getElementById("pick-list-printable");
-    if (!el) return;
-    // html2pdf renders DOM as image-based PDF — handles Thai text natively without
-    // a font embed step. Bundle is loaded on demand so it doesn't bloat the page.
-    const { default: html2pdf } = await import("html2pdf.js");
+    if (!el) return null;
     const wrap = document.createElement("div");
     wrap.style.padding = "16px 20px";
     wrap.style.background = "#fff";
@@ -389,16 +389,53 @@ export default function DeliveryPlanningPage({ sh }) {
       </div>
       ${el.outerHTML}
     `;
-    html2pdf()
-      .set({
-        margin: 8,
-        filename: `pick-list-${date}.pdf`,
-        image: { type: "jpeg", quality: 0.95 },
-        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
-        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
-      })
-      .from(wrap)
-      .save();
+    return wrap;
+  };
+
+  const pdfOptions = {
+    margin: 8,
+    filename: `pick-list-${date}.pdf`,
+    image: { type: "jpeg", quality: 0.95 },
+    html2canvas: { scale: 2, backgroundColor: "#ffffff" },
+    jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+  };
+
+  // Generate the PDF as a Blob URL and show it inside an iframe preview modal.
+  // User then chooses Save or Print explicitly — instead of an immediate download.
+  const pdfExport = async () => {
+    const wrap = buildPdfWrap();
+    if (!wrap) return;
+    setPdfLoading(true);
+    try {
+      const { default: html2pdf } = await import("html2pdf.js");
+      const blob = await html2pdf()
+        .set(pdfOptions)
+        .from(wrap)
+        .output("blob");
+      // Revoke any previous preview URL before replacing
+      if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
+      const url = URL.createObjectURL(blob);
+      setPdfPreview({ url, blob });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const closePdfPreview = () => {
+    if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
+    setPdfPreview(null);
+  };
+
+  const printPdfPreview = () => {
+    const ifr = document.getElementById("pdf-preview-iframe");
+    if (!ifr || !ifr.contentWindow) return;
+    try {
+      ifr.contentWindow.focus();
+      ifr.contentWindow.print();
+    } catch {
+      // Fallback: open in new tab; browser's built-in viewer has print.
+      if (pdfPreview?.url) window.open(pdfPreview.url, "_blank");
+    }
   };
 
   // --- Render ---
@@ -1301,17 +1338,19 @@ export default function DeliveryPlanningPage({ sh }) {
             </button>
             <button
               onClick={pdfExport}
+              disabled={pdfLoading}
               style={{
                 padding: "8px 16px",
                 borderRadius: 7,
                 border: "1px solid var(--line)",
                 background: "var(--bg2)",
-                color: "var(--text)",
-                cursor: "pointer",
+                color: pdfLoading ? "var(--dim)" : "var(--text)",
+                cursor: pdfLoading ? "wait" : "pointer",
                 fontFamily: "inherit",
+                opacity: pdfLoading ? 0.7 : 1,
               }}
             >
-              PDF
+              {pdfLoading ? "กำลังสร้าง PDF..." : "PDF"}
             </button>
             <button
               onClick={csvExport}
@@ -1981,6 +2020,109 @@ export default function DeliveryPlanningPage({ sh }) {
           </div>
           <MBtns onCancel={cM} onSave={saveHelper} />
         </Modal>
+      )}
+
+      {pdfPreview && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            zIndex: 200,
+            display: "flex",
+            alignItems: "stretch",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--panel)",
+              borderRadius: 12,
+              border: "1px solid var(--line)",
+              width: "min(1100px, 100%)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "12px 16px",
+                borderBottom: "1px solid var(--line)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>
+                ดูตัวอย่าง PDF — Pick List
+              </div>
+              <button
+                onClick={() => {
+                  const a = document.createElement("a");
+                  a.href = pdfPreview.url;
+                  a.download = `pick-list-${date}.pdf`;
+                  a.click();
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 7,
+                  border: "1px solid var(--line)",
+                  background: "var(--bg2)",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                }}
+              >
+                บันทึก
+              </button>
+              <button
+                onClick={printPdfPreview}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 7,
+                  border: "1px solid var(--line)",
+                  background: "var(--bg2)",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                }}
+              >
+                พิมพ์
+              </button>
+              <button
+                onClick={closePdfPreview}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 7,
+                  border: "none",
+                  background: "var(--blue)",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                ปิด
+              </button>
+            </div>
+            <iframe
+              id="pdf-preview-iframe"
+              src={pdfPreview.url}
+              title="PDF preview"
+              style={{
+                flex: 1,
+                width: "100%",
+                border: "none",
+                background: "#fff",
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {warnMsg && (
