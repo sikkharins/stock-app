@@ -75,6 +75,10 @@ export interface Truck {
   capacityM3: number;
   isActive?: boolean;
   note?: string;
+  // Physical cargo dimensions in centimeters — for AI bin-packing optimizer
+  widthCm?: number;
+  lengthCm?: number;
+  heightCm?: number;
 }
 
 // Default cubic m³ per size class — used when product has no explicit cubicM

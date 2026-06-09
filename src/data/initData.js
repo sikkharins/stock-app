@@ -56,8 +56,10 @@ export const initCashCats = [
 export const initTagMappings = [];   // empty — user configures via UI
 
 // Delivery trucks — 3 default with similar capacity (cubic m³)
+// Default cargo box dimensions ≈ 6-wheel truck (200×400×200 cm = 16 m³ gross,
+// usable capacityM3 ~8 m³ after walls/aisles/fragile spacing).
 export const initTrucks = [
-  { id: 1, name: "รถ 1", capacityM3: 8, isActive: true, note: "" },
-  { id: 2, name: "รถ 2", capacityM3: 8, isActive: true, note: "" },
-  { id: 3, name: "รถ 3", capacityM3: 8, isActive: true, note: "" },
+  { id: 1, name: "รถ 1", capacityM3: 8, isActive: true, note: "", widthCm: 200, lengthCm: 400, heightCm: 200 },
+  { id: 2, name: "รถ 2", capacityM3: 8, isActive: true, note: "", widthCm: 200, lengthCm: 400, heightCm: 200 },
+  { id: 3, name: "รถ 3", capacityM3: 8, isActive: true, note: "", widthCm: 200, lengthCm: 400, heightCm: 200 },
 ];

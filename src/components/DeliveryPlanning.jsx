@@ -50,7 +50,16 @@ export default function DeliveryPlanningPage({ sh }) {
   const [zoneFilter, setZoneFilter] = useState("");
 
   // Truck CRUD form (lives in manage trucks modal)
-  const emptyTruck = { id: null, name: "", capacityM3: 8, isActive: true, note: "" };
+  const emptyTruck = {
+    id: null,
+    name: "",
+    capacityM3: 8,
+    isActive: true,
+    note: "",
+    widthCm: 200,
+    lengthCm: 400,
+    heightCm: 200,
+  };
   const [truckForm, setTruckForm] = useState(emptyTruck);
 
   const pendingSOs = useMemo(
@@ -111,6 +120,14 @@ export default function DeliveryPlanningPage({ sh }) {
     [pickedRows, products]
   );
 
+  // Aggregate category breakdown across all picked SOs (volume-sorted DESC)
+  const pickedByCategory = useMemo(() => {
+    if (pickedRows.length === 0) return [];
+    const allItems = pickedRows.flatMap((r) => r.so.items || []);
+    const synthSO = { soNum: "agg", items: allItems };
+    return soItemsByCategory(synthSO, products, cats);
+  }, [pickedRows, products, cats]);
+
   // Truck CRUD
   const startNewTruck = () => {
     setTruckForm(emptyTruck);
@@ -123,6 +140,11 @@ export default function DeliveryPlanningPage({ sh }) {
   const saveTruck = () => {
     if (!truckForm.name.trim() || !(truckForm.capacityM3 > 0)) return;
     const cap = +truckForm.capacityM3;
+    const dims = {
+      widthCm: +truckForm.widthCm || undefined,
+      lengthCm: +truckForm.lengthCm || undefined,
+      heightCm: +truckForm.heightCm || undefined,
+    };
     setTrucks((prev) => {
       if (truckForm.id != null) {
         return prev.map((t) =>
@@ -133,6 +155,7 @@ export default function DeliveryPlanningPage({ sh }) {
                 capacityM3: cap,
                 isActive: !!truckForm.isActive,
                 note: truckForm.note || "",
+                ...dims,
               }
             : t
         );
@@ -146,6 +169,7 @@ export default function DeliveryPlanningPage({ sh }) {
           capacityM3: cap,
           isActive: true,
           note: truckForm.note || "",
+          ...dims,
         },
       ];
     });
@@ -236,6 +260,86 @@ export default function DeliveryPlanningPage({ sh }) {
               style={IB}
             />
           </Field>
+          <div
+            style={{
+              gridColumn: "1/-1",
+              background: "var(--hover)",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              padding: "10px 12px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--dim)",
+                marginBottom: 8,
+              }}
+            >
+              📦 ขนาดพื้นที่บรรทุก (cm) — สำหรับ AI จัดของลงรถ
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 8,
+              }}
+            >
+              <Field label="กว้าง W">
+                <input
+                  type="number"
+                  step="1"
+                  value={truckForm.widthCm ?? ""}
+                  onChange={(e) =>
+                    setTruckForm((f) => ({
+                      ...f,
+                      widthCm:
+                        e.target.value === "" ? undefined : parseFloat(e.target.value),
+                    }))
+                  }
+                  style={IB}
+                  placeholder="200"
+                />
+              </Field>
+              <Field label="ยาว L">
+                <input
+                  type="number"
+                  step="1"
+                  value={truckForm.lengthCm ?? ""}
+                  onChange={(e) =>
+                    setTruckForm((f) => ({
+                      ...f,
+                      lengthCm:
+                        e.target.value === "" ? undefined : parseFloat(e.target.value),
+                    }))
+                  }
+                  style={IB}
+                  placeholder="400"
+                />
+              </Field>
+              <Field label="สูง H">
+                <input
+                  type="number"
+                  step="1"
+                  value={truckForm.heightCm ?? ""}
+                  onChange={(e) =>
+                    setTruckForm((f) => ({
+                      ...f,
+                      heightCm:
+                        e.target.value === "" ? undefined : parseFloat(e.target.value),
+                    }))
+                  }
+                  style={IB}
+                  placeholder="200"
+                />
+              </Field>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 6 }}>
+              ปริมาตร gross ที่คำนวณจาก W×L×H ≠ "ความจุใช้งาน" — ความจุใช้งานน้อยกว่า (เผื่อ
+              ผนัง/ช่องระหว่าง/ของแตกง่าย)
+            </div>
+          </div>
           <div style={{ gridColumn: "1/-1" }}>
             <Field label="หมายเหตุ (ไม่บังคับ)">
               <input
@@ -680,7 +784,7 @@ export default function DeliveryPlanningPage({ sh }) {
                 border: "1px solid var(--line)",
                 borderRadius: 6,
                 padding: "8px 10px",
-                marginBottom: 12,
+                marginBottom: 10,
                 maxHeight: 120,
                 overflowY: "auto",
               }}
@@ -700,6 +804,66 @@ export default function DeliveryPlanningPage({ sh }) {
                   {i + 1}. {n}
                 </div>
               ))}
+            </div>
+          )}
+
+          {pickedByCategory.length > 0 && (
+            <div
+              style={{
+                background: "var(--bg)",
+                border: "1px solid var(--line)",
+                borderRadius: 6,
+                padding: "8px 10px",
+                marginBottom: 12,
+                maxHeight: 160,
+                overflowY: "auto",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--dim)",
+                  marginBottom: 6,
+                  fontWeight: 500,
+                }}
+              >
+                หมวดสินค้าที่ต้องบรรทุก (รวมทุก SO)
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 4,
+                }}
+              >
+                {pickedByCategory.map((g, gi) => (
+                  <span
+                    key={gi}
+                    style={{
+                      fontSize: 12,
+                      padding: "3px 9px",
+                      borderRadius: 5,
+                      background: "var(--bg2)",
+                      border: "1px solid var(--line)",
+                      color: "var(--text)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    {g.hasNoLayDown && (
+                      <span style={{ color: "var(--orange)" }}>⬆</span>
+                    )}
+                    <span style={{ color: "var(--dim)" }}>
+                      {g.catName}
+                      {g.subName ? ` · ${g.subName}` : ""}
+                    </span>
+                    <strong style={{ color: "var(--blue)" }}>
+                      ×{g.qty}
+                    </strong>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -889,7 +1053,11 @@ export default function DeliveryPlanningPage({ sh }) {
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--dim)" }}>
-                    ความจุ {t.capacityM3} m³{t.note ? ` · ${t.note}` : ""}
+                    ความจุ {t.capacityM3} m³
+                    {t.widthCm && t.lengthCm && t.heightCm
+                      ? ` · ${t.widthCm}×${t.lengthCm}×${t.heightCm} cm`
+                      : ""}
+                    {t.note ? ` · ${t.note}` : ""}
                   </div>
                 </div>
                 {ed && (
