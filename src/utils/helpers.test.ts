@@ -17,6 +17,9 @@ import {
   scoreSO,
   parseGmapsUrl,
   soItemsByCategory,
+  snapshotItemParts,
+  expandItemParts,
+  DEFAULT_SPLIT_PARTS,
   CLASS_M3,
   type Promo,
   type Sale,
@@ -662,5 +665,184 @@ describe("soItemsByCategory", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].catName).toBe("?");
     expect(groups[0].subName).toBe("");
+  });
+});
+
+describe("snapshotItemParts", () => {
+  const acProduct: Product = {
+    id: 1,
+    name: "AC LG 12000 BTU",
+    splitEnabled: true,
+    splitParts: DEFAULT_SPLIT_PARTS,
+  };
+
+  test("returns undefined when product has no split", () => {
+    expect(snapshotItemParts({ id: 2, name: "Fridge" }, 10000)).toBeUndefined();
+  });
+
+  test("returns undefined when splitEnabled is true but splitParts missing", () => {
+    expect(
+      snapshotItemParts({ id: 3, name: "X", splitEnabled: true }, 10000)
+    ).toBeUndefined();
+  });
+
+  test("returns undefined when ratios don't sum to 1 (misconfigured)", () => {
+    expect(
+      snapshotItemParts(
+        {
+          id: 4,
+          name: "X",
+          splitEnabled: true,
+          splitParts: [
+            { key: "a", name: "A", priceRatio: 0.5 },
+            { key: "b", name: "B", priceRatio: 0.3 },
+          ],
+        },
+        10000
+      )
+    ).toBeUndefined();
+  });
+
+  test("splits AC ฿10,000 into 60/40 parts with rounded prices", () => {
+    const parts = snapshotItemParts(acProduct, 10000)!;
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toEqual({ key: "hot", name: "คอยล์ร้อน", price: 6000 });
+    expect(parts[1]).toEqual({ key: "cold", name: "คอยล์เย็น", price: 4000 });
+  });
+
+  test("honors a non-default 65/35 ratio override", () => {
+    const customAc: Product = {
+      id: 5,
+      name: "Y",
+      splitEnabled: true,
+      splitParts: [
+        { key: "hot", name: "ร้อน", priceRatio: 0.65 },
+        { key: "cold", name: "เย็น", priceRatio: 0.35 },
+      ],
+    };
+    const parts = snapshotItemParts(customAc, 10000)!;
+    expect(parts[0].price).toBeCloseTo(6500);
+    expect(parts[1].price).toBeCloseTo(3500);
+  });
+
+  test("null / undefined product → undefined", () => {
+    expect(snapshotItemParts(null, 10000)).toBeUndefined();
+    expect(snapshotItemParts(undefined, 10000)).toBeUndefined();
+  });
+});
+
+describe("expandItemParts", () => {
+  const acProduct: Product = {
+    id: 1,
+    name: "AC LG 12000",
+    splitEnabled: true,
+    splitParts: DEFAULT_SPLIT_PARTS,
+  };
+  const fridge: Product = { id: 2, name: "Fridge" };
+
+  test("non-split item → one entry, partKey empty", () => {
+    const item: SaleItem = { productId: 2, qty: 3, price: 12900 };
+    const out = expandItemParts(item, fridge);
+    expect(out).toHaveLength(1);
+    expect(out[0].partKey).toBe("");
+    expect(out[0].displayName).toBe("Fridge");
+    expect(out[0].qty).toBe(3);
+    expect(out[0].unitPrice).toBe(12900);
+  });
+
+  test("split item → N rows with composite display names + per-part prices", () => {
+    const item: SaleItem = {
+      productId: 1,
+      qty: 2,
+      price: 10000,
+      parts: [
+        { key: "hot", name: "คอยล์ร้อน", price: 6000 },
+        { key: "cold", name: "คอยล์เย็น", price: 4000 },
+      ],
+    };
+    const out = expandItemParts(item, acProduct);
+    expect(out).toHaveLength(2);
+    expect(out[0].displayName).toBe("AC LG 12000 — คอยล์ร้อน");
+    expect(out[0].partKey).toBe("hot");
+    expect(out[0].qty).toBe(2);
+    expect(out[0].unitPrice).toBe(6000);
+    expect(out[1].displayName).toBe("AC LG 12000 — คอยล์เย็น");
+    expect(out[1].unitPrice).toBe(4000);
+  });
+
+  test("uses Thai name (nameT) when present", () => {
+    const item: SaleItem = { productId: 2, qty: 1, price: 100 };
+    expect(
+      expandItemParts(item, { id: 2, name: "EN", nameT: "ไทย" })[0].displayName
+    ).toBe("ไทย");
+  });
+});
+
+describe("consolidatePickList — split items", () => {
+  const ac: Product = {
+    id: 1,
+    name: "AC 12000",
+    splitEnabled: true,
+    splitParts: DEFAULT_SPLIT_PARTS,
+  };
+  const fridge: Product = { id: 2, name: "Fridge" };
+
+  const acItem = (qty: number): SaleItem => ({
+    productId: 1,
+    qty,
+    price: 10000,
+    parts: [
+      { key: "hot", name: "คอยล์ร้อน", price: 6000 },
+      { key: "cold", name: "คอยล์เย็น", price: 4000 },
+    ],
+  });
+
+  test("AC qty=2 + fridge qty=1 → 3 pick rows", () => {
+    const sos: Sale[] = [
+      {
+        soNum: "S1",
+        items: [acItem(2), { productId: 2, qty: 1, price: 12900 }],
+      },
+    ];
+    const list = consolidatePickList(sos, [ac, fridge]);
+    expect(list).toHaveLength(3);
+    const hotRow = list.find((e) => e.partKey === "hot")!;
+    const coldRow = list.find((e) => e.partKey === "cold")!;
+    const fridgeRow = list.find((e) => e.partKey === "")!;
+    expect(hotRow.totalQty).toBe(2);
+    expect(hotRow.partName).toBe("คอยล์ร้อน");
+    expect(coldRow.totalQty).toBe(2);
+    expect(fridgeRow.totalQty).toBe(1);
+  });
+
+  test("ACs from two SOs aggregate per-part with merged sources", () => {
+    const sos: Sale[] = [
+      { soNum: "S1", items: [acItem(2)] },
+      { soNum: "S2", items: [acItem(3)] },
+    ];
+    const list = consolidatePickList(sos, [ac]);
+    expect(list).toHaveLength(2);
+    expect(list.find((e) => e.partKey === "hot")!.totalQty).toBe(5);
+    expect(list.find((e) => e.partKey === "cold")!.sources).toEqual([
+      "S1",
+      "S2",
+    ]);
+  });
+
+  test("non-split AC in older SO (no parts) → single pick row alongside split ACs", () => {
+    const sos: Sale[] = [
+      // newer SO with parts
+      { soNum: "S1", items: [acItem(1)] },
+      // older SO from before split was enabled — no parts on item
+      {
+        soNum: "S2",
+        items: [{ productId: 1, qty: 2, price: 10000 }],
+      },
+    ];
+    const list = consolidatePickList(sos, [ac]);
+    // Expect: hot×1, cold×1, AC (unsplit)×2 → 3 rows
+    expect(list).toHaveLength(3);
+    expect(list.find((e) => e.partKey === "")?.totalQty).toBe(2);
+    expect(list.find((e) => e.partKey === "hot")?.totalQty).toBe(1);
   });
 });

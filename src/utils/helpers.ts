@@ -11,10 +11,17 @@ interface StockStatusEntry {
   maxDays: number;
 }
 
+export interface SaleItemPart {
+  key: string;            // matches Product.splitParts[i].key at snapshot time
+  name: string;           // denormalized — survives product rename after sale
+  price: number;          // per-unit price for this part (= item.price * ratio)
+}
+
 export interface SaleItem {
   productId: number | string;
   qty: number;
-  price: number;
+  price: number;          // per-unit price total. parts price sums to this.
+  parts?: SaleItemPart[]; // present only when the product had splitEnabled at sale time
 }
 
 export interface Sale {
@@ -27,6 +34,12 @@ export interface Sale {
 }
 
 export type SizeClass = "S" | "M" | "L" | "XL";
+
+export interface SplitPart {
+  key: string;            // "hot" | "cold" | future
+  name: string;           // display name, e.g. "คอยล์ร้อน"
+  priceRatio: number;     // 0..1, all ratios on a product must sum to ~1
+}
 
 export interface Product {
   id: number | string;
@@ -45,6 +58,11 @@ export interface Product {
   heightCm?: number;
   // If true, item cannot be laid on its side (e.g., fridges, water dispensers)
   noLayDown?: boolean;
+  // Sold-as-set parts (e.g., AC = hot coil + cold coil). When splitEnabled,
+  // SO items snapshot splitParts into `item.parts` at sale time so the SO
+  // remains valid even if the product config later changes.
+  splitEnabled?: boolean;
+  splitParts?: SplitPart[];
 }
 
 export interface CategorySub {
@@ -547,13 +565,83 @@ export const soRevenue = (so: Sale | undefined | null): number => {
 
 export interface PickListEntry {
   productId: number | string;
-  name: string;
+  partKey: string;        // "" when the item is not split
+  partName?: string;      // present only for split rows; e.g. "คอยล์ร้อน"
+  name: string;           // full display name (incl. " — partName" for split rows)
   totalQty: number;
-  sources: string[]; // SO numbers contributing
+  sources: string[];      // SO numbers contributing
 }
 
-// Group items across multiple SOs by productId, sum qty, track contributing SO numbers.
-// Sort by product display name for stable warehouse picking order.
+// Default split (AC): hot 60%, cold 40%. Cloneable when the user first enables
+// the toggle on a Product so they can edit ratios per-SKU without mutating
+// this constant.
+export const DEFAULT_SPLIT_PARTS: SplitPart[] = [
+  { key: "hot", name: "คอยล์ร้อน", priceRatio: 0.6 },
+  { key: "cold", name: "คอยล์เย็น", priceRatio: 0.4 },
+];
+
+// Build a SaleItem.parts snapshot from a product config + the chosen unit price.
+// Returns undefined when the product doesn't have a valid split config, so
+// caller (Sales.doSave) can leave .parts off the item entirely.
+export const snapshotItemParts = (
+  product: Product | undefined | null,
+  unitPrice: number
+): SaleItemPart[] | undefined => {
+  if (!product || !product.splitEnabled) return undefined;
+  const parts = product.splitParts;
+  if (!parts || parts.length === 0) return undefined;
+  const ratioSum = parts.reduce((s, p) => s + (+p.priceRatio || 0), 0);
+  if (Math.abs(ratioSum - 1) > 0.001) return undefined; // misconfigured
+  const safePrice = +unitPrice || 0;
+  return parts.map((p) => ({
+    key: p.key,
+    name: p.name,
+    price: round2(safePrice * (+p.priceRatio || 0)),
+  }));
+};
+
+export interface ExpandedPart {
+  productId: number | string;
+  partKey: string;            // "" for non-split
+  partName?: string;
+  displayName: string;        // "AC LG 12000 — คอยล์ร้อน" or just product name
+  qty: number;
+  unitPrice: number;
+}
+
+// Flatten one SO line item into one or many warehouse pick units. Non-split
+// items return a single entry with partKey "". Split items return N entries
+// (one per part), each carrying the same qty (since parts ship together).
+export const expandItemParts = (
+  item: SaleItem,
+  product: Product | undefined | null
+): ExpandedPart[] => {
+  const baseName = product?.nameT || product?.name || String(item.productId);
+  if (!item.parts || item.parts.length === 0) {
+    return [
+      {
+        productId: item.productId,
+        partKey: "",
+        displayName: baseName,
+        qty: +item.qty || 0,
+        unitPrice: +item.price || 0,
+      },
+    ];
+  }
+  return item.parts.map((p) => ({
+    productId: item.productId,
+    partKey: p.key,
+    partName: p.name,
+    displayName: `${baseName} — ${p.name}`,
+    qty: +item.qty || 0,
+    unitPrice: +p.price || 0,
+  }));
+};
+
+// Group items across multiple SOs by (productId, partKey), sum qty, track
+// contributing SO numbers. Sort by product display name for stable warehouse
+// picking order. Split items show as 2+ rows so the warehouse picks each part
+// as its own box.
 export const consolidatePickList = (
   sos: Sale[] | undefined | null,
   products: Product[] | undefined | null
@@ -561,23 +649,28 @@ export const consolidatePickList = (
   const prodMap = new Map<string | number, Product>(
     (products || []).map((p) => [p.id, p])
   );
-  const acc = new Map<string | number, PickListEntry>();
+  const acc = new Map<string, PickListEntry>();
   for (const so of sos || []) {
     for (const it of so.items || []) {
-      const existing = acc.get(it.productId);
       const p = prodMap.get(it.productId);
-      const name = p?.nameT || p?.name || String(it.productId);
-      if (existing) {
-        existing.totalQty += +it.qty || 0;
-        if (so.soNum && !existing.sources.includes(so.soNum))
-          existing.sources.push(so.soNum);
-      } else {
-        acc.set(it.productId, {
-          productId: it.productId,
-          name,
-          totalQty: +it.qty || 0,
-          sources: so.soNum ? [so.soNum] : [],
-        });
+      const expanded = expandItemParts(it, p);
+      for (const e of expanded) {
+        const key = `${e.productId}|${e.partKey}`;
+        const existing = acc.get(key);
+        if (existing) {
+          existing.totalQty += e.qty;
+          if (so.soNum && !existing.sources.includes(so.soNum))
+            existing.sources.push(so.soNum);
+        } else {
+          acc.set(key, {
+            productId: e.productId,
+            partKey: e.partKey,
+            partName: e.partName,
+            name: e.displayName,
+            totalQty: e.qty,
+            sources: so.soNum ? [so.soNum] : [],
+          });
+        }
       }
     }
   }

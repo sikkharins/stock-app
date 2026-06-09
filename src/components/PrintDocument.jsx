@@ -26,22 +26,40 @@ export function printDoc(type, data, products, contacts, opts = {}) {
   const t = titles[type];
   const priceKey = type === "po" ? "cost" : "price";
 
-  // Items rows
-  const itemsHtml = (data.items||[]).map((it,i) => {
-    const pr = products.find(x => x.id === it.productId) || {};
-    const rawPrice = it[priceKey] || 0;
+  // Items rows. Items with `parts` (e.g. AC = hot + cold) render as N separate
+  // invoice lines so the customer's receipt itemizes the split prices that sum
+  // back to the original item total. Line numbers increment per row, not per
+  // item, so a 2-line AC + 1-line fridge = lines 1, 2, 3.
+  const pad = isExclusive ? "9px 10px" : "6px 8px";
+  let lineNumber = 0;
+  const renderRow = (codeCell, nameCell, qty, unit, rawPrice) => {
     const unitPrice = isExclusive ? round2(rawPrice * 100/107) : rawPrice;
-    const lineAmt = isExclusive ? round2(it.qty * rawPrice * 100/107) : it.qty * rawPrice;
-    const pad = isExclusive ? "9px 10px" : "6px 8px";
+    const lineAmt = isExclusive ? round2(qty * rawPrice * 100/107) : qty * rawPrice;
+    lineNumber++;
     return `<tr>
-      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${i+1}</td>
-      <td style="border:1px solid #bbb;padding:${pad};">${pr.code||"-"}</td>
-      <td style="border:1px solid #bbb;padding:${pad};">${pr.nameT||pr.name||"-"}</td>
-      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${it.qty}</td>
-      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${pr.unit||"-"}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${lineNumber}</td>
+      <td style="border:1px solid #bbb;padding:${pad};">${codeCell}</td>
+      <td style="border:1px solid #bbb;padding:${pad};">${nameCell}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${qty}</td>
+      <td style="border:1px solid #bbb;padding:${pad};text-align:center;">${unit}</td>
       <td style="border:1px solid #bbb;padding:${pad};text-align:right;">${fmtC(unitPrice)}</td>
       <td style="border:1px solid #bbb;padding:${pad};text-align:right;font-weight:600;">${fmtC(lineAmt)}</td>
     </tr>`;
+  };
+  const itemsHtml = (data.items||[]).flatMap((it) => {
+    const pr = products.find(x => x.id === it.productId) || {};
+    const baseName = pr.nameT||pr.name||"-";
+    const isSplit = priceKey === "price" && it.parts && it.parts.length > 0;
+    if (!isSplit) {
+      return [renderRow(pr.code||"-", baseName, it.qty, pr.unit||"-", it[priceKey] || 0)];
+    }
+    return it.parts.map(pt => renderRow(
+      pr.code||"-",
+      baseName + " — " + (pt.name||pt.key),
+      it.qty,
+      pr.unit||"-",
+      pt.price || 0
+    ));
   }).join("");
 
   // Totals

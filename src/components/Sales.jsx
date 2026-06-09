@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -46,7 +46,7 @@ function SOList({sh}){
   const getAvail=(pid,exId)=>{const pr=products.find(x=>x.id===+pid);if(!pr)return 0;const pq=sales.filter(so=>(so.status==="pending_delivery"||so.status==="pending_special_approval")&&so.id!==(exId||0)&&!so.dropShip).reduce((s,so)=>{const it=so.items.find(i=>i.productId===+pid);return s+(it?it.qty:0);},0);return Math.max(0,pr.stock-pq);};
   const hasApv=canApv("sales");
   const doSave=(soId)=>{
-    const baseItems=form.items.map(i=>({productId:+i.productId,qty:+i.qty,price:+i.price}));
+    const baseItems=form.items.map(i=>{const p=products.find(x=>x.id===+i.productId);const parts=snapshotItemParts(p,+i.price);return parts?{productId:+i.productId,qty:+i.qty,price:+i.price,parts}:{productId:+i.productId,qty:+i.qty,price:+i.price};});
 
     // Collect rewards (pendingClaims + selectedWalletIds)
     const customer=contacts.find(c=>c.id===+form.customerId);
@@ -573,7 +573,7 @@ function SOList({sh}){
         {viewSO.vatRepAddress&&<div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{viewSO.vatRepAddress}</div>}
         {viewSO.vatRepIdCard&&<div style={{fontSize:12,color:"var(--faint)",marginTop:2}}>{"บัตร ปชช: "+viewSO.vatRepIdCard}</div>}
       </div>:null}
-      <table style={{width:"100%",borderCollapse:"collapse",marginTop:10}}><thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{["สินค้า","Qty","ราคา","รวม"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"var(--dim)"}}>{h}</th>)}</tr></thead><tbody>{viewSO.items.map((it,i)=>{const pr=products.find(x=>x.id===it.productId);return <tr key={i} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"6px 8px"}}>{pr?pN(pr):"-"}</td><td style={{padding:"6px 8px"}}>{it.qty}</td><td style={{padding:"6px 8px"}}>{"฿"+fmt(it.price)}</td><td style={{padding:"6px 8px",fontWeight:500}}>{"฿"+fmt(it.qty*it.price)}</td></tr>;})}</tbody></table>
+      <table style={{width:"100%",borderCollapse:"collapse",marginTop:10}}><thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{["สินค้า","Qty","ราคา","รวม"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"var(--dim)"}}>{h}</th>)}</tr></thead><tbody>{viewSO.items.flatMap((it,i)=>{const pr=products.find(x=>x.id===it.productId);const hasParts=it.parts&&it.parts.length>0;const mainRow=<tr key={i} style={{borderBottom:hasParts?"none":"0.5px solid var(--line)"}}><td style={{padding:"6px 8px",fontWeight:hasParts?600:400}}>{(pr?pN(pr):"-")+(hasParts?" (ชุด)":"")}</td><td style={{padding:"6px 8px"}}>{it.qty}</td><td style={{padding:"6px 8px",color:hasParts?"var(--dim)":""}}>{"฿"+fmt(it.price)}</td><td style={{padding:"6px 8px",fontWeight:500}}>{"฿"+fmt(it.qty*it.price)}</td></tr>;if(!hasParts)return [mainRow];const subRows=it.parts.map((pt,pi)=><tr key={i+"-p"+pi} style={{borderBottom:pi===it.parts.length-1?"0.5px solid var(--line)":"none",background:"var(--bg)"}}><td style={{padding:"4px 8px 4px 24px",fontSize:12,color:"var(--dim)"}}>{"— "+pt.name}</td><td style={{padding:"4px 8px",fontSize:12,color:"var(--dim)"}}>{it.qty}</td><td style={{padding:"4px 8px",fontSize:12}}>{"฿"+fmt(pt.price)}</td><td style={{padding:"4px 8px",fontSize:12}}>{"฿"+fmt(pt.price*it.qty)}</td></tr>);return [mainRow,...subRows];})}</tbody></table>
       <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginTop:10,fontSize:13}}>
         <div style={{display:"flex",justifyContent:"space-between",color:"var(--dim)",marginBottom:4}}><span>ยอดรวม</span><span>{"฿"+fmt(vSub)}</span></div>
         {viewSO.discPct>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--green)",marginBottom:4}}><span>{"ส่วนลด "+viewSO.discPct+"%"}</span><span>{"-฿"+fmt(round2(vSub*viewSO.discPct/100))}</span></div>}

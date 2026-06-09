@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB, STOCK_STATUS, BRAND_COLORS } from "../utils/constants.js";
-import { fmt, mkLog, getSS, toBE, fmtD } from "../utils/helpers.js";
+import { fmt, mkLog, getSS, toBE, fmtD, DEFAULT_SPLIT_PARTS } from "../utils/helpers.js";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Field from "./ui/Field.jsx";
 import SB from "./ui/SearchBar.jsx";
@@ -36,7 +36,9 @@ export default function ProdPage({sh}){
   const selProds=useMemo(()=>products.filter(p=>sel.has(p.id)),[products,sel]);
   const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
   const stats=useMemo(()=>{const total=baseP.length;const stockVal=baseP.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);const low=baseP.filter(p=>p.minStock>0&&p.stock<=p.minStock).length;const totalRes=Object.values(reservedMap).reduce((s,v)=>s+v,0);return{total,stockVal,low,totalRes};},[baseP,reservedMap]);
-  const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");if(errs.length){setFormErrors(errs);return;}setFormErrors([]);const item={...form,id:form.id||Date.now(),categoryId:+form.categoryId,subcategoryId:+form.subcategoryId,price:+form.price,cost:+form.cost,stock:+form.stock,minStock:+form.minStock};if(form.id){const b=products.find(x=>x.id===form.id);if(b){if(b.price!==item.price)addPH(item.id,"price",b.price,item.price);if(b.cost!==item.cost)addPH(item.id,"cost",b.cost,item.cost);if(b.stock!==item.stock){const d=item.stock-b.stock;addLog(mkLog(item.id,d>0?"adjust_in":"adjust_out",Math.abs(d),b.stock,item.stock,"Edit","แก้ไข",cu.username));}addA("แก้ไขสินค้า",item.code);}}else addA("เพิ่มสินค้า",item.code);setProducts(p=>form.id?p.map(x=>x.id===form.id?item:x):[...p,item]);cM();};
+  const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");
+    if(form.splitEnabled){const parts=form.splitParts||[];if(parts.length<2)errs.push("ขายแยกส่วน: ต้องมีอย่างน้อย 2 ส่วน");const sum=parts.reduce((s,p)=>s+(+p.priceRatio||0),0);if(Math.abs(sum-1)>0.001)errs.push("ขายแยกส่วน: ผลรวมสัดส่วนต้องเท่ากับ 1 (ปัจจุบัน "+sum.toFixed(3)+")");if(parts.some(p=>!p.key||!p.name))errs.push("ขายแยกส่วน: ทุกส่วนต้องมี key และชื่อ");}
+    if(errs.length){setFormErrors(errs);return;}setFormErrors([]);const item={...form,id:form.id||Date.now(),categoryId:+form.categoryId,subcategoryId:+form.subcategoryId,price:+form.price,cost:+form.cost,stock:+form.stock,minStock:+form.minStock};if(form.id){const b=products.find(x=>x.id===form.id);if(b){if(b.price!==item.price)addPH(item.id,"price",b.price,item.price);if(b.cost!==item.cost)addPH(item.id,"cost",b.cost,item.cost);if(b.stock!==item.stock){const d=item.stock-b.stock;addLog(mkLog(item.id,d>0?"adjust_in":"adjust_out",Math.abs(d),b.stock,item.stock,"Edit","แก้ไข",cu.username));}addA("แก้ไขสินค้า",item.code);}}else addA("เพิ่มสินค้า",item.code);setProducts(p=>form.id?p.map(x=>x.id===form.id?item:x):[...p,item]);cM();};
   const saveAdj=()=>{if(!adjPr||!adjForm.qty||+adjForm.qty<=0)return;const q=+adjForm.qty,b=adjPr.stock,a=adjForm.type==="adjust_in"?b+q:Math.max(0,b-q);setProducts(p=>p.map(x=>x.id===adjPr.id?{...x,stock:a}:x));addLog(mkLog(adjPr.id,adjForm.type,q,b,a,"Manual",adjForm.note,cu.username));addA("ปรับสต็อก",adjPr.code);cM();setAdjPr(null);};
   const del=id=>{const pr=products.find(p=>p.id===id);if(pr)addA("ลบสินค้า",pr.code);setProducts(p=>p.filter(x=>x.id!==id));};
   const doBulkPrice=()=>{if(selProds.length===0)return;const calc=p=>{if(bkPriceF.mode==="set")return+bkPriceF.value;if(bkPriceF.mode==="pct_up")return Math.round(p.price*(1+(+bkPriceF.pct)/100));return Math.max(0,Math.round(p.price*(1-(+bkPriceF.pct)/100)));};selProds.forEach(p=>{const nv=calc(p);if(nv!==p.price)addPH(p.id,"price",p.price,nv);});setProducts(prev=>prev.map(p=>{if(!sel.has(p.id))return p;return{...p,price:calc(p)};}));addA("ปรับราคา (กลุ่ม)",sel.size+" รายการ"+(bkPriceF.mode==="set"?" → ฿"+bkPriceF.value:bkPriceF.mode==="pct_up"?" +"+bkPriceF.pct+"%":" -"+bkPriceF.pct+"%"));setBulkAct(null);selNone();setBulkMode(false);};
@@ -181,6 +183,29 @@ export default function ProdPage({sh}){
             ห้ามนอน (ต้องวางตั้งเท่านั้น เช่น ตู้เย็น ตู้กดน้ำ)
           </label>
           <div style={{fontSize:11,color:"var(--faint)",marginTop:6}}>กรอกครบทั้ง 3 ค่า → ใช้คำนวณปริมาตรอัตโนมัติ (W×L×H/1,000,000)</div>
+        </div>
+        {/* Split-parts (sold as set, e.g., AC = hot+cold coils) */}
+        <div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginTop:4}}>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"var(--dim)",cursor:"pointer",marginBottom:form.splitEnabled?8:0}}>
+            <input type="checkbox" checked={!!form.splitEnabled} onChange={e=>{const enabled=e.target.checked;setF("splitEnabled",enabled);if(enabled&&!(form.splitParts||[]).length)setF("splitParts",DEFAULT_SPLIT_PARTS.map(p=>({...p})));}}/>
+            ขายแยกส่วน (เช่น แอร์ คอยล์ร้อน + คอยล์เย็น)
+          </label>
+          {form.splitEnabled&&<>
+            <div style={{fontSize:11,color:"var(--faint)",marginBottom:8}}>สินค้าจะนับสต็อก/ส่งเป็น 1 ชุด แต่ใน SO/ใบเสร็จและรายการจัดของแสดงแยกแต่ละส่วน</div>
+            <div style={{display:"grid",gridTemplateColumns:"100px 1fr 100px 40px",gap:8,fontSize:11,color:"var(--dim)",marginBottom:4,paddingLeft:4}}>
+              <span>key</span><span>ชื่อส่วน</span><span style={{textAlign:"right"}}>ratio</span><span></span>
+            </div>
+            {(form.splitParts||[]).map((p,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"100px 1fr 100px 40px",gap:8,marginBottom:4}}>
+                <input value={p.key||""} onChange={e=>setF("splitParts",(form.splitParts||[]).map((x,xi)=>xi===i?{...x,key:e.target.value}:x))} style={IB} placeholder="hot"/>
+                <input value={p.name||""} onChange={e=>setF("splitParts",(form.splitParts||[]).map((x,xi)=>xi===i?{...x,name:e.target.value}:x))} style={IB} placeholder="คอยล์ร้อน"/>
+                <input type="number" step="0.01" min="0" max="1" value={p.priceRatio??""} onChange={e=>setF("splitParts",(form.splitParts||[]).map((x,xi)=>xi===i?{...x,priceRatio:e.target.value===""?0:parseFloat(e.target.value)}:x))} style={{...IB,textAlign:"right"}} placeholder="0.6"/>
+                <button type="button" onClick={()=>setF("splitParts",(form.splitParts||[]).filter((_,xi)=>xi!==i))} style={{padding:"6px 0",borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>×</button>
+              </div>
+            ))}
+            <button type="button" onClick={()=>setF("splitParts",[...(form.splitParts||[]),{key:"",name:"",priceRatio:0}])} style={{marginTop:4,padding:"5px 10px",borderRadius:5,border:"1px dashed var(--blue)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>+ เพิ่มส่วน</button>
+            {(() => {const sum=(form.splitParts||[]).reduce((s,p)=>s+(+p.priceRatio||0),0);const ok=Math.abs(sum-1)<=0.001;return <div style={{fontSize:11,color:ok?"var(--green)":"var(--orange)",marginTop:6,fontWeight:500}}>ผลรวมสัดส่วน: {sum.toFixed(3)} {ok?"✓":"(ต้อง = 1)"}</div>;})()}
+          </>}
         </div>
       </div>
       <label style={{display:"flex",alignItems:"center",gap:8,marginTop:12,padding:"10px 14px",borderRadius:8,border:"1px solid "+(form.discontinued?"var(--orange)":"var(--line)"),background:form.discontinued?"rgba(255,149,0,0.08)":"var(--bg)",cursor:"pointer"}}>
