@@ -194,8 +194,14 @@ export default function DeliveryPlanningPage({ sh }) {
   };
   const [truckForm, setTruckForm] = useState(emptyTruck);
 
+  // dropShip SOs are auto-created from drop-ship POs where the supplier delivers
+  // directly to the customer — TS does not transport these, so they don't belong
+  // in the delivery-planning pool.
   const pendingSOs = useMemo(
-    () => (sales || []).filter((s) => s.status === "pending_delivery"),
+    () =>
+      (sales || []).filter(
+        (s) => s.status === "pending_delivery" && !s.dropShip
+      ),
     [sales]
   );
 
