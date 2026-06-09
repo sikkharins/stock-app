@@ -181,7 +181,7 @@ export default function ContactPage({sh,ft}){
         <div style={{gridColumn:"1/-1"}}><Field label="Tax ID"><input value={form.taxId||""} onChange={e=>setF("taxId",e.target.value)} style={IB}/></Field></div>
         <div style={{gridColumn:"1/-1"}}><Field label="ที่อยู่"><textarea value={form.address||""} onChange={e=>setF("address",e.target.value)} style={{...IB,height:56,resize:"vertical"}}/></Field></div>
         {isC&&<div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px"}}>
-          <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:8}}>📍 พิกัดสำหรับวางแผนจัดส่ง (ไม่บังคับ)</div>
+          <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:8}}>พิกัดสำหรับวางแผนจัดส่ง (ไม่บังคับ)</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
             <Field label="Latitude"><input type="number" step="0.000001" value={form.lat??""} onChange={e=>setF("lat",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="13.7563"/></Field>
             <Field label="Longitude"><input type="number" step="0.000001" value={form.lng??""} onChange={e=>setF("lng",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="100.5018"/></Field>

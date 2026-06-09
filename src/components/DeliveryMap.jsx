@@ -199,8 +199,8 @@ export default function DeliveryMap({ rows, picked, onToggle }) {
                       marginBottom: 6,
                     }}
                   >
-                    <span>📦 {r.volM3.toFixed(2)} m³</span>
-                    <span>💰 ฿{fmt(Math.round(r.revenue))}</span>
+                    <span>{r.volM3.toFixed(2)} m³</span>
+                    <span>฿{fmt(Math.round(r.revenue))}</span>
                   </div>
                   <div
                     style={{

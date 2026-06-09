@@ -420,7 +420,7 @@ export default function DeliveryPlanningPage({ sh }) {
                 marginBottom: 8,
               }}
             >
-              📦 ขนาดพื้นที่บรรทุก (cm) — สำหรับ AI จัดของลงรถ
+              ขนาดพื้นที่บรรทุก (cm) — สำหรับ AI จัดของลงรถ
             </div>
             <div
               style={{
@@ -594,24 +594,21 @@ export default function DeliveryPlanningPage({ sh }) {
           marginBottom: 14,
         }}
       >
-        <StatCard label="SO รอจัดส่ง" value={String(pendingSOs.length)} icon="📦" />
+        <StatCard label="SO รอจัดส่ง" value={String(pendingSOs.length)} />
         <StatCard
           label="เลือกแล้ว"
           value={`${pickedRows.length} / ${ranked.length}`}
-          icon="✓"
           color="var(--blue)"
         />
         <StatCard
           label="ปริมาตรใช้"
           value={`${pickedVolM3.toFixed(2)} / ${truckCapM3} m³`}
-          icon="📊"
           color={overCapacity ? "var(--red)" : "var(--green)"}
           sub={`${utilPct.toFixed(0)}% ของรถ`}
         />
         <StatCard
           label="ยอดขายรวม"
           value={`฿${fmt(Math.round(pickedRevenue))}`}
-          icon="💰"
           color="var(--green)"
         />
       </div>
@@ -654,8 +651,8 @@ export default function DeliveryPlanningPage({ sh }) {
               }}
             >
               {[
-                ["list", "📋 รายการ"],
-                ["map", "🗺 แผนที่"],
+                ["list", "รายการ"],
+                ["map", "แผนที่"],
               ].map(([k, label]) => (
                 <button
                   key={k}
@@ -766,7 +763,7 @@ export default function DeliveryPlanningPage({ sh }) {
                             borderRadius: 99,
                           }}
                         >
-                          {r.hasGeo ? "📍 มีพิกัด" : "ไม่มีพิกัด"}
+                          {r.hasGeo ? "มีพิกัด" : "ไม่มีพิกัด"}
                         </span>
                         <span style={{ fontSize: 13, color: "var(--text)" }}>
                           {r.custName}
@@ -796,13 +793,13 @@ export default function DeliveryPlanningPage({ sh }) {
                         }}
                       >
                         <span>
-                          📦{" "}
+                          <span style={{ color: "var(--dim)" }}>ปริมาตร </span>
                           <span style={{ color: "var(--text)" }}>
                             {r.volM3.toFixed(2)} m³
                           </span>
                         </span>
                         <span>
-                          💰{" "}
+                          <span style={{ color: "var(--dim)" }}>ยอด </span>
                           <span style={{ color: "var(--text)" }}>
                             ฿{fmt(Math.round(r.revenue))}
                           </span>
@@ -819,7 +816,7 @@ export default function DeliveryPlanningPage({ sh }) {
                             }}
                             title="มีสินค้าห้ามนอน (ต้องวางตั้ง)"
                           >
-                            ⬆ ห้ามนอน
+                            ห้ามนอน
                           </span>
                         )}
                       </div>
@@ -848,7 +845,7 @@ export default function DeliveryPlanningPage({ sh }) {
                               }}
                             >
                               {g.hasNoLayDown && (
-                                <span style={{ color: "var(--orange)" }}>⬆</span>
+                                <span style={{ color: "var(--orange)", fontSize: 10, fontWeight: 700 }}>!</span>
                               )}
                               <span style={{ color: "var(--dim)" }}>
                                 {g.catName}
@@ -942,7 +939,7 @@ export default function DeliveryPlanningPage({ sh }) {
             </div>
             {overCapacity && (
               <div style={{ fontSize: 11, color: "var(--red)", marginTop: 4 }}>
-                ⚠️ เกินกำลังบรรทุก {(pickedVolM3 - truckCapM3).toFixed(2)} m³
+                เกินกำลังบรรทุก {(pickedVolM3 - truckCapM3).toFixed(2)} m³
               </div>
             )}
           </div>
@@ -1046,7 +1043,7 @@ export default function DeliveryPlanningPage({ sh }) {
                     }}
                   >
                     {g.hasNoLayDown && (
-                      <span style={{ color: "var(--orange)" }}>⬆</span>
+                      <span style={{ color: "var(--orange)", fontSize: 10, fontWeight: 700 }}>!</span>
                     )}
                     <span style={{ color: "var(--dim)" }}>
                       {g.catName}
@@ -1125,17 +1122,13 @@ export default function DeliveryPlanningPage({ sh }) {
             }}
           >
             <span>
-              📦 รวม{" "}
+              รวม{" "}
               <strong style={{ color: "var(--text)" }}>
                 {pickList.reduce((s, e) => s + e.totalQty, 0)} ชิ้น
               </strong>
             </span>
-            <span>
-              🏷 {pickList.length} รายการ
-            </span>
-            <span>
-              📋 {pickedRows.length} SO
-            </span>
+            <span>{pickList.length} รายการ</span>
+            <span>{pickedRows.length} SO</span>
           </div>
           <div
             style={{
@@ -1214,7 +1207,7 @@ export default function DeliveryPlanningPage({ sh }) {
                 fontFamily: "inherit",
               }}
             >
-              🖨 พิมพ์
+              พิมพ์
             </button>
             <button
               onClick={csvExport}
@@ -1228,7 +1221,7 @@ export default function DeliveryPlanningPage({ sh }) {
                 fontFamily: "inherit",
               }}
             >
-              ⬇ CSV
+              CSV
             </button>
             <button
               onClick={cM}
@@ -1280,7 +1273,7 @@ export default function DeliveryPlanningPage({ sh }) {
                     {t.widthCm && t.lengthCm && t.heightCm
                       ? ` · ${t.widthCm}×${t.lengthCm}×${t.heightCm} cm`
                       : ""}
-                    {t.driverName ? ` · 🚚 ${t.driverName}` : ""}
+                    {t.driverName ? ` · คนขับ ${t.driverName}` : ""}
                     {t.note ? ` · ${t.note}` : ""}
                   </div>
                 </div>
@@ -1367,7 +1360,7 @@ export default function DeliveryPlanningPage({ sh }) {
                 </>
               ) : (
                 <span style={{ fontSize: 11, color: "var(--orange)", marginLeft: 6 }}>
-                  ⚠️ ยังไม่ตั้งคนขับ (แก้ใน "จัดการรถ")
+                  ยังไม่ตั้งคนขับ (แก้ใน "จัดการรถ")
                 </span>
               )}
             </div>
@@ -1496,7 +1489,7 @@ export default function DeliveryPlanningPage({ sh }) {
               marginTop: 12,
             }}
           >
-            ⚠️ เมื่อบันทึก SO ทั้ง {pickedRows.length} ใบจะเปลี่ยนสถานะเป็น
+            เมื่อบันทึก SO ทั้ง {pickedRows.length} ใบจะเปลี่ยนสถานะเป็น
             "ส่งเสร็จ" และหายจากรายการรอจัดส่ง
           </div>
           <div
@@ -1623,7 +1616,9 @@ export default function DeliveryPlanningPage({ sh }) {
                         >
                           {r.driverName ? (
                             <>
-                              <span style={{ color: "var(--dim)" }}>🚚</span>{" "}
+                              <span style={{ color: "var(--dim)", fontSize: 11 }}>
+                                คนขับ:{" "}
+                              </span>
                               {r.driverName}
                             </>
                           ) : (
@@ -1637,7 +1632,8 @@ export default function DeliveryPlanningPage({ sh }) {
                                 marginTop: 2,
                               }}
                             >
-                              👥 {r.helperNames.join(", ")}
+                              <span style={{ color: "var(--faint)" }}>พนง:</span>{" "}
+                              {r.helperNames.join(", ")}
                             </div>
                           )}
                         </td>

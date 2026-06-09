@@ -134,7 +134,7 @@ describe("DeliveryPlanning", () => {
     await user.click(screen.getByRole("button", { name: /สร้าง Pick List/ }));
 
     // Modal opened — assert via Print button which only exists inside Pick List modal
-    expect(screen.getByRole("button", { name: /🖨 พิมพ์/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /พิมพ์/ })).toBeInTheDocument();
     expect(screen.getByText("ตู้เย็น")).toBeInTheDocument();
     expect(screen.getByText(/SO-A.*SO-B|SO-B.*SO-A/)).toBeInTheDocument();
   });

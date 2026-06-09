@@ -170,7 +170,7 @@ export default function ProdPage({sh}){
         <Field label="กลุ่มขนาด (จัดส่ง)"><CustomSelect value={form.sizeClass||"M"} onChange={v=>setF("sizeClass",v)} options={[{value:"S",label:"S — เล็ก (~0.05 m³)"},{value:"M",label:"M — กลาง (~0.30 m³)"},{value:"L",label:"L — ใหญ่ (~1.00 m³)"},{value:"XL",label:"XL — ใหญ่มาก (~2.50 m³)"}]}/></Field>
         <Field label="ปริมาตร m³ (override)"><input type="number" step="0.01" value={form.cubicM??""} onChange={e=>setF("cubicM",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="เว้นไว้ = ใช้ตามกลุ่ม"/></Field>
         <div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginTop:4}}>
-          <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:8}}>📦 ขนาดกล่อง (cm) — สำหรับจัดวางบนรถ</div>
+          <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:8}}>ขนาดกล่อง (cm) — สำหรับจัดวางบนรถ</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
             <Field label="กว้าง W"><input type="number" step="0.1" value={form.widthCm??""} onChange={e=>setF("widthCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="60"/></Field>
             <Field label="ยาว L"><input type="number" step="0.1" value={form.lengthCm??""} onChange={e=>setF("lengthCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="80"/></Field>
@@ -178,7 +178,7 @@ export default function ProdPage({sh}){
           </div>
           <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer"}}>
             <input type="checkbox" checked={!!form.noLayDown} onChange={e=>setF("noLayDown",e.target.checked)}/>
-            ⬆ ห้ามนอน (ต้องวางตั้งเท่านั้น เช่น ตู้เย็น ตู้กดน้ำ)
+            ห้ามนอน (ต้องวางตั้งเท่านั้น เช่น ตู้เย็น ตู้กดน้ำ)
           </label>
           <div style={{fontSize:11,color:"var(--faint)",marginTop:6}}>กรอกครบทั้ง 3 ค่า → ใช้คำนวณปริมาตรอัตโนมัติ (W×L×H/1,000,000)</div>
         </div>
