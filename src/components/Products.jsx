@@ -182,7 +182,7 @@ export default function ProdPage({sh}){
             <input type="checkbox" checked={!!form.noLayDown} onChange={e=>setF("noLayDown",e.target.checked)}/>
             ห้ามนอน (ต้องวางตั้งเท่านั้น เช่น ตู้เย็น ตู้กดน้ำ)
           </label>
-          <div style={{fontSize:11,color:"var(--faint)",marginTop:6}}>กรอกครบทั้ง 3 ค่า → ใช้คำนวณปริมาตรอัตโนมัติ (W×L×H/1,000,000)</div>
+          {(()=>{const w=+form.widthCm||0,l=+form.lengthCm||0,h=+form.heightCm||0,v=w>0&&l>0&&h>0?(w*l*h)/1e6:null;return <div style={{fontSize:11,color:v!=null?"var(--green)":"var(--faint)",marginTop:6,fontWeight:v!=null?500:400}}>{v!=null?`คำนวณได้: ${v.toFixed(3)} m³ (${w}×${l}×${h}/1,000,000) — ใช้แทนกลุ่มขนาดอัตโนมัติ`:`กรอกครบทั้ง 3 ค่า → ใช้คำนวณปริมาตรอัตโนมัติ (W×L×H/1,000,000)`}</div>;})()}
         </div>
         {/* Split-parts (sold as set, e.g., AC = hot+cold coils) */}
         <div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginTop:4}}>
