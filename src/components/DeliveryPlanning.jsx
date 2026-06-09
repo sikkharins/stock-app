@@ -15,6 +15,7 @@ import Field from "./ui/Field.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
 import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 import StatCard from "./ui/StatCard.jsx";
+import DeliveryMap from "./DeliveryMap.jsx";
 
 // Delivery Planning — pick SOs from `pending_delivery` pool that balance
 // proximity (cluster of nearby customers), capacity (close to truck full),
@@ -31,7 +32,25 @@ const SCORE_BG = (s) =>
     : "rgba(255,59,48,0.12)";
 
 export default function DeliveryPlanningPage({ sh }) {
-  const { cN, pN, contacts, sales, products, cats, trucks, setTrucks, canE, canD, modal, oM, cM } = sh;
+  const {
+    cN,
+    pN,
+    contacts,
+    sales,
+    setSales,
+    products,
+    cats,
+    trucks,
+    setTrucks,
+    deliveryRuns,
+    setDeliveryRuns,
+    canE,
+    canD,
+    cu,
+    modal,
+    oM,
+    cM,
+  } = sh;
   const ed = canE("delivery_planning");
   const cd = canD("delivery_planning");
 
@@ -48,8 +67,47 @@ export default function DeliveryPlanningPage({ sh }) {
   const [date, setDate] = useState(todayStr());
   const [picked, setPicked] = useState(new Set());
   const [zoneFilter, setZoneFilter] = useState("");
+  const [viewMode, setViewMode] = useState("list"); // "list" | "map"
 
   // Truck CRUD form (lives in manage trucks modal)
+  const [driverNote, setDriverNote] = useState("");
+  const [warnMsg, setWarnMsg] = useState(null);
+
+  const commitRun = () => {
+    if (pickedRows.length === 0) {
+      setWarnMsg("ยังไม่ได้เลือก SO");
+      return;
+    }
+    if (!truck) {
+      setWarnMsg("ยังไม่ได้เลือกรถ");
+      return;
+    }
+    const pickedSoNums = pickedRows.map((r) => r.so.soNum);
+    const run = {
+      id: Date.now(),
+      date,
+      truckId: truck.id,
+      truckName: truck.name,
+      soNums: pickedSoNums,
+      customerNames: pickedCustomers,
+      revenue: pickedRevenue,
+      volumeM3: pickedVolM3,
+      driverNote: driverNote.trim(),
+      createdAt: Date.now(),
+      createdBy: cu?.username || "",
+    };
+    setDeliveryRuns((prev) => [run, ...(prev || [])]);
+    // Move picked SOs from pending_delivery → completed
+    setSales((prev) =>
+      (prev || []).map((s) =>
+        pickedSoNums.includes(s.soNum) ? { ...s, status: "completed" } : s
+      )
+    );
+    setPicked(new Set());
+    setDriverNote("");
+    cM();
+  };
+
   const emptyTruck = {
     id: null,
     name: "",
@@ -424,6 +482,21 @@ export default function DeliveryPlanningPage({ sh }) {
               จัดการรถ
             </button>
           )}
+          <button
+            onClick={() => oM("runHistory")}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 7,
+              border: "1px solid var(--line)",
+              background: "var(--bg2)",
+              color: "var(--text)",
+              cursor: "pointer",
+              fontSize: 13,
+              fontFamily: "inherit",
+            }}
+          >
+            ประวัติรอบ ({(deliveryRuns || []).length})
+          </button>
         </div>
       </div>
 
@@ -482,15 +555,49 @@ export default function DeliveryPlanningPage({ sh }) {
               alignItems: "center",
               gap: 10,
               marginBottom: 10,
+              flexWrap: "wrap",
             }}
           >
             <div style={{ fontWeight: 600, fontSize: 14 }}>SO รอจัดส่ง</div>
-            <input
-              value={zoneFilter}
-              onChange={(e) => setZoneFilter(e.target.value)}
-              placeholder="ค้นหาเขต/พื้นที่/จุดส่ง..."
-              style={{ ...IB, flex: 1, padding: "5px 10px", fontSize: 12 }}
-            />
+            <div
+              style={{
+                display: "inline-flex",
+                background: "var(--bg)",
+                border: "1px solid var(--line)",
+                borderRadius: 6,
+                overflow: "hidden",
+              }}
+            >
+              {[
+                ["list", "📋 รายการ"],
+                ["map", "🗺 แผนที่"],
+              ].map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setViewMode(k)}
+                  style={{
+                    padding: "4px 10px",
+                    border: "none",
+                    background: viewMode === k ? "var(--blue)" : "transparent",
+                    color: viewMode === k ? "#fff" : "var(--dim)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                    fontWeight: viewMode === k ? 600 : 400,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {viewMode === "list" && (
+              <input
+                value={zoneFilter}
+                onChange={(e) => setZoneFilter(e.target.value)}
+                placeholder="ค้นหาเขต/พื้นที่/จุดส่ง..."
+                style={{ ...IB, flex: 1, padding: "5px 10px", fontSize: 12 }}
+              />
+            )}
             {picked.size > 0 && (
               <button
                 onClick={clearAll}
@@ -510,7 +617,9 @@ export default function DeliveryPlanningPage({ sh }) {
             )}
           </div>
 
-          {ranked.length === 0 ? (
+          {viewMode === "map" ? (
+            <DeliveryMap rows={ranked} picked={picked} onToggle={toggle} />
+          ) : ranked.length === 0 ? (
             <div
               style={{
                 padding: "30px 0",
@@ -882,10 +991,39 @@ export default function DeliveryPlanningPage({ sh }) {
               fontWeight: 600,
               fontSize: 14,
               fontFamily: "inherit",
+              marginBottom: 8,
             }}
           >
             สร้าง Pick List
           </button>
+          {ed && (
+            <button
+              onClick={() => {
+                setDriverNote("");
+                oM("confirmRun");
+              }}
+              disabled={pickedRows.length === 0}
+              style={{
+                width: "100%",
+                padding: "10px 16px",
+                borderRadius: 8,
+                border: "1px solid",
+                borderColor:
+                  pickedRows.length === 0 ? "var(--line)" : "var(--green)",
+                background:
+                  pickedRows.length === 0
+                    ? "var(--hover2)"
+                    : "rgba(52,199,89,0.12)",
+                color: pickedRows.length === 0 ? "var(--dim)" : "var(--green)",
+                cursor: pickedRows.length === 0 ? "not-allowed" : "pointer",
+                fontWeight: 600,
+                fontSize: 14,
+                fontFamily: "inherit",
+              }}
+            >
+              ✓ บันทึกรอบจัดส่ง
+            </button>
+          )}
         </div>
       </div>
 
@@ -1119,6 +1257,277 @@ export default function DeliveryPlanningPage({ sh }) {
       )}
 
       {modal === "editTruck" && renderTruckModal()}
+
+      {modal === "confirmRun" && (
+        <Modal title="บันทึกรอบจัดส่ง" onClose={cM}>
+          <div
+            style={{
+              background: "var(--bg)",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 12,
+              fontSize: 13,
+            }}
+          >
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: "var(--dim)" }}>รถ:</span>{" "}
+              <strong>{truck?.name}</strong>
+            </div>
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: "var(--dim)" }}>วันที่:</span>{" "}
+              <strong>{toBE(date)}</strong>
+            </div>
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: "var(--dim)" }}>SO:</span>{" "}
+              <strong>{pickedRows.length} ใบ</strong>{" "}
+              <span style={{ color: "var(--dim)" }}>
+                · {pickedCustomers.length} ปลายทาง
+              </span>
+            </div>
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: "var(--dim)" }}>ยอดรวม:</span>{" "}
+              <strong style={{ color: "var(--green)" }}>
+                ฿{fmt(Math.round(pickedRevenue))}
+              </strong>{" "}
+              <span style={{ color: "var(--dim)" }}>
+                · {pickedVolM3.toFixed(2)} m³ ({utilPct.toFixed(0)}%)
+              </span>
+            </div>
+          </div>
+          <Field label="หมายเหตุคนขับ (ไม่บังคับ)">
+            <input
+              value={driverNote}
+              onChange={(e) => setDriverNote(e.target.value)}
+              style={IB}
+              placeholder="เช่น คนขับ: สมชาย / ออก 8:00"
+            />
+          </Field>
+          <div
+            style={{
+              background: "rgba(255,149,0,0.12)",
+              border: "1px solid var(--orange)",
+              borderRadius: 6,
+              padding: "8px 12px",
+              fontSize: 12,
+              color: "var(--orange)",
+              marginTop: 12,
+            }}
+          >
+            ⚠️ เมื่อบันทึก SO ทั้ง {pickedRows.length} ใบจะเปลี่ยนสถานะเป็น
+            "ส่งเสร็จ" และหายจากรายการรอจัดส่ง
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              marginTop: 16,
+            }}
+          >
+            <button
+              onClick={cM}
+              style={{
+                padding: "6px 13px",
+                borderRadius: 7,
+                border: "1px solid var(--line)",
+                background: "var(--bg2)",
+                color: "var(--text)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 13,
+              }}
+            >
+              ยกเลิก
+            </button>
+            <button
+              onClick={commitRun}
+              style={{
+                padding: "6px 13px",
+                borderRadius: 7,
+                border: "none",
+                background: "var(--green)",
+                color: "#fff",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              ✓ ยืนยันบันทึก
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {modal === "runHistory" && (
+        <Modal title="ประวัติรอบจัดส่ง" onClose={cM} wide>
+          {(deliveryRuns || []).length === 0 ? (
+            <div
+              style={{
+                padding: "40px 0",
+                textAlign: "center",
+                color: "var(--faint)",
+                fontSize: 13,
+              }}
+            >
+              ยังไม่มีประวัติรอบจัดส่ง
+            </div>
+          ) : (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                borderRadius: 8,
+                overflow: "hidden",
+                maxHeight: 500,
+                overflowY: "auto",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  fontSize: 13,
+                  borderCollapse: "collapse",
+                }}
+              >
+                <thead style={{ position: "sticky", top: 0 }}>
+                  <tr
+                    style={{
+                      background: "var(--bg)",
+                      borderBottom: "1px solid var(--line)",
+                    }}
+                  >
+                    {["วันที่", "รถ", "SO", "ปลายทาง", "ปริมาตร", "ยอดรวม", "หมายเหตุ"].map(
+                      (h, i) => (
+                        <th
+                          key={i}
+                          style={{
+                            padding: "8px 12px",
+                            textAlign: i >= 2 && i <= 5 ? "right" : "left",
+                            fontWeight: 500,
+                            color: "var(--dim)",
+                            fontSize: 12,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      )
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(deliveryRuns || [])
+                    .slice()
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .map((r) => (
+                      <tr
+                        key={r.id}
+                        style={{ borderBottom: "1px solid var(--line)" }}
+                      >
+                        <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                          {toBE(r.date)}
+                        </td>
+                        <td style={{ padding: "8px 12px", fontWeight: 500 }}>
+                          {r.truckName}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 12px",
+                            textAlign: "right",
+                            fontWeight: 600,
+                          }}
+                          title={(r.soNums || []).join(", ")}
+                        >
+                          {(r.soNums || []).length}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 12px",
+                            textAlign: "right",
+                            color: "var(--dim)",
+                          }}
+                          title={(r.customerNames || []).join(", ")}
+                        >
+                          {(r.customerNames || []).length}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 12px",
+                            textAlign: "right",
+                            color: "var(--dim)",
+                          }}
+                        >
+                          {(r.volumeM3 || 0).toFixed(2)} m³
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 12px",
+                            textAlign: "right",
+                            fontWeight: 600,
+                            color: "var(--green)",
+                          }}
+                        >
+                          ฿{fmt(Math.round(r.revenue || 0))}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 12px",
+                            fontSize: 11,
+                            color: "var(--dim)",
+                            maxWidth: 180,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={r.driverNote || ""}
+                        >
+                          {r.driverNote || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {warnMsg && (
+        <Modal title="แจ้งเตือน" onClose={() => setWarnMsg(null)}>
+          <div
+            style={{
+              background: "rgba(255,149,0,0.12)",
+              border: "1px solid var(--orange)",
+              borderRadius: 8,
+              padding: "12px 16px",
+              marginBottom: 16,
+              fontSize: 14,
+              color: "var(--orange)",
+              fontWeight: 500,
+            }}
+          >
+            {warnMsg}
+          </div>
+          <button
+            onClick={() => setWarnMsg(null)}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 8,
+              border: "none",
+              background: "var(--blue)",
+              color: "#fff",
+              fontWeight: 500,
+              fontSize: 14,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            ตกลง
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }

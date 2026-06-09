@@ -81,6 +81,22 @@ export interface Truck {
   heightCm?: number;
 }
 
+// A finalized delivery run — created when dispatcher commits a pick to a truck/date.
+// Customer/truck names are denormalized so history stays readable even after rename.
+export interface DeliveryRun {
+  id: number;
+  date: string;          // YYYY-MM-DD — the planned delivery date
+  truckId: number;
+  truckName: string;
+  soNums: string[];
+  customerNames: string[];
+  revenue: number;
+  volumeM3: number;
+  driverNote?: string;
+  createdAt: number;     // Date.now() — when the run was committed
+  createdBy?: string;    // username
+}
+
 // Default cubic m³ per size class — used when product has no explicit cubicM
 export const CLASS_M3: Record<SizeClass, number> = {
   S: 0.05,

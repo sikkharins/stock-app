@@ -78,7 +78,7 @@ export default function App(){
   const[defectives,setDefectives]=useState([]);
   const[supCNotes,setSupCNotes]=useState([]);
   const[promos,setPromos]=useState([]);const[events,setEvents]=useState([]);
-  const[trucks,setTrucks]=useState(initTrucks);
+  const[trucks,setTrucks]=useState(initTrucks);const[deliveryRuns,setDeliveryRuns]=useState([]);
   const[cats,setCats]=useState(initCats);const[cashCats,setCashCats]=useState(initCashCats);const[tagMappings,setTagMappings]=useState(initTagMappings);const[brands,setBrands]=useState(initBrands);
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
@@ -155,7 +155,7 @@ export default function App(){
 
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
-    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents,trucks:setTrucks};
+    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents,trucks:setTrucks,delivery_runs:setDeliveryRuns};
     return RT_SETTERS.current;
   },[]);
 
@@ -215,6 +215,7 @@ export default function App(){
     out.promos=g("promos","v3_promos",[]);setPromos(out.promos);
     out.events=g("events","v3_events",[]);setEvents(out.events);
     out.trucks=g("trucks","v3_trucks",initTrucks);setTrucks(out.trucks);
+    out.delivery_runs=g("delivery_runs","v3_delivery_runs",[]);setDeliveryRuns(out.delivery_runs);
     out.defectives=g("defectives","v3_defectives",[]).map(d=>{
       if(d.status==="cn_created"||d.status==="cn_used")return{...d,custStatus:d.status,status:d.custStatus||"pending_inspection"};
       return d;
@@ -313,7 +314,7 @@ export default function App(){
   // Autosave: write only the arrays that actually changed (diff vs last-synced),
   // each as an independent optimistic-locked row save with merge-on-conflict.
   useEffect(()=>{if(!loaded)return;
-    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events,trucks};
+    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events,trucks,delivery_runs:deliveryRuns};
     setSaving(true);
     const tm=setTimeout(async()=>{
       const dirty=[];
@@ -332,7 +333,7 @@ export default function App(){
     // the 800ms timer every render → autosave would never fire. The deps below
     // are exactly what should trigger a new save (any tracked array changed).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,trucks,loaded]);
+  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,trucks,deliveryRuns,loaded]);
 
   const[staleWarn,setStaleWarn]=useState(false);
   // Same as doRefresh: reloadFromServer reads only refs, stable identity unneeded.
@@ -403,7 +404,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
