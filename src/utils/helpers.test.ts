@@ -16,12 +16,14 @@ import {
   consolidatePickList,
   scoreSO,
   parseGmapsUrl,
+  soItemsByCategory,
   CLASS_M3,
   type Promo,
   type Sale,
   type Product,
   type SaleItem,
   type Contact,
+  type Category,
 } from "./helpers.js";
 
 describe("round2", () => {
@@ -320,6 +322,34 @@ describe("productCubicM", () => {
   test("zero or negative cubicM falls through to class", () => {
     expect(productCubicM({ id: 1, cubicM: 0, sizeClass: "L" })).toBe(CLASS_M3.L);
   });
+
+  test("derives from W×L×H (cm) when cubicM missing", () => {
+    // 60 × 80 × 175 cm = 840,000 cm³ = 0.84 m³
+    expect(
+      productCubicM({ id: 1, widthCm: 60, lengthCm: 80, heightCm: 175 })
+    ).toBeCloseTo(0.84);
+  });
+
+  test("explicit cubicM overrides dimensions", () => {
+    expect(
+      productCubicM({
+        id: 1,
+        cubicM: 0.5,
+        widthCm: 60,
+        lengthCm: 80,
+        heightCm: 175,
+      })
+    ).toBe(0.5);
+  });
+
+  test("dimensions only used if ALL three are positive", () => {
+    expect(
+      productCubicM({ id: 1, widthCm: 60, lengthCm: 80, sizeClass: "S" })
+    ).toBe(CLASS_M3.S); // missing height → fall through
+    expect(
+      productCubicM({ id: 1, widthCm: 0, lengthCm: 80, heightCm: 175, sizeClass: "S" })
+    ).toBe(CLASS_M3.S); // zero width → fall through
+  });
 });
 
 describe("soVolumeM3", () => {
@@ -543,5 +573,94 @@ describe("parseGmapsUrl", () => {
     expect(parseGmapsUrl("https://maps.app.goo.gl/abc123")).toBeNull(); // short link
     expect(parseGmapsUrl("")).toBeNull();
     expect(parseGmapsUrl(null)).toBeNull();
+  });
+});
+
+describe("soItemsByCategory", () => {
+  const categories: Category[] = [
+    {
+      id: 1,
+      name: "ตู้เย็น",
+      subs: [
+        { id: 11, name: "ประตูเดียว" },
+        { id: 12, name: "2 ประตู" },
+      ],
+    },
+    {
+      id: 2,
+      name: "เครื่องซักผ้า",
+      subs: [
+        { id: 21, name: "ฝาบน" },
+        { id: 22, name: "ฝาหน้า" },
+      ],
+    },
+  ];
+
+  const products: Product[] = [
+    { id: 1, categoryId: 1, subcategoryId: 12, sizeClass: "XL", noLayDown: true },
+    { id: 2, categoryId: 1, subcategoryId: 11, sizeClass: "L" },
+    { id: 3, categoryId: 2, subcategoryId: 21, sizeClass: "L" },
+    { id: 4, categoryId: 2, subcategoryId: 22, sizeClass: "M" },
+  ];
+
+  test("groups items by (catId, subId), sums qty and volume", () => {
+    const so: Sale = {
+      items: [
+        { productId: 1, qty: 3, price: 0 }, // ตู้เย็น 2 ประตู: XL=2.5 * 3 = 7.5
+        { productId: 3, qty: 2, price: 0 }, // ซักผ้า ฝาบน: L=1.0 * 2 = 2.0
+        { productId: 4, qty: 1, price: 0 }, // ซักผ้า ฝาหน้า: M=0.3 * 1 = 0.3
+      ],
+    };
+    const groups = soItemsByCategory(so, products, categories);
+    expect(groups).toHaveLength(3);
+    // Sorted by totalVolM3 descending
+    expect(groups[0].catName).toBe("ตู้เย็น");
+    expect(groups[0].subName).toBe("2 ประตู");
+    expect(groups[0].qty).toBe(3);
+    expect(groups[0].hasNoLayDown).toBe(true);
+    expect(groups[1].catName).toBe("เครื่องซักผ้า");
+    expect(groups[1].subName).toBe("ฝาบน");
+    expect(groups[1].qty).toBe(2);
+    expect(groups[2].subName).toBe("ฝาหน้า");
+    expect(groups[2].qty).toBe(1);
+  });
+
+  test("combines items with same (cat,sub) across multiple item rows", () => {
+    const so: Sale = {
+      items: [
+        { productId: 3, qty: 2, price: 0 }, // ซักผ้า ฝาบน
+        { productId: 3, qty: 5, price: 0 }, // same again
+      ],
+    };
+    const groups = soItemsByCategory(so, products, categories);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].qty).toBe(7);
+  });
+
+  test("hasNoLayDown true if ANY product in the group is noLayDown", () => {
+    const mixed: Product[] = [
+      { id: 1, categoryId: 1, subcategoryId: 12, noLayDown: false },
+      { id: 2, categoryId: 1, subcategoryId: 12, noLayDown: true },
+    ];
+    const so: Sale = {
+      items: [
+        { productId: 1, qty: 1, price: 0 },
+        { productId: 2, qty: 1, price: 0 },
+      ],
+    };
+    expect(soItemsByCategory(so, mixed, categories)[0].hasNoLayDown).toBe(true);
+  });
+
+  test("unknown product → skipped silently", () => {
+    const so: Sale = { items: [{ productId: 999, qty: 1, price: 0 }] };
+    expect(soItemsByCategory(so, products, categories)).toEqual([]);
+  });
+
+  test("missing categories arg → group with '?' catName", () => {
+    const so: Sale = { items: [{ productId: 1, qty: 1, price: 0 }] };
+    const groups = soItemsByCategory(so, products, null);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].catName).toBe("?");
+    expect(groups[0].subName).toBe("");
   });
 });

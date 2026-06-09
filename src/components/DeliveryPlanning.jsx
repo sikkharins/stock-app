@@ -8,6 +8,7 @@ import {
   soVolumeM3,
   soRevenue,
   consolidatePickList,
+  soItemsByCategory,
 } from "../utils/helpers.js";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Field from "./ui/Field.jsx";
@@ -30,7 +31,7 @@ const SCORE_BG = (s) =>
     : "rgba(255,59,48,0.12)";
 
 export default function DeliveryPlanningPage({ sh }) {
-  const { cN, pN, contacts, sales, products, trucks, setTrucks, canE, canD, modal, oM, cM } = sh;
+  const { cN, pN, contacts, sales, products, cats, trucks, setTrucks, canE, canD, modal, oM, cM } = sh;
   const ed = canE("delivery_planning");
   const cd = canD("delivery_planning");
 
@@ -60,6 +61,7 @@ export default function DeliveryPlanningPage({ sh }) {
   const ranked = useMemo(() => {
     const rows = pendingSOs.map((so) => {
       const cust = (contacts || []).find((c) => c.id === so.customerId) || null;
+      const byCategory = soItemsByCategory(so, products, cats);
       return {
         so,
         cust,
@@ -68,6 +70,8 @@ export default function DeliveryPlanningPage({ sh }) {
         volM3: soVolumeM3(so, products),
         revenue: soRevenue(so),
         hasGeo: cust && typeof cust.lat === "number" && typeof cust.lng === "number",
+        byCategory,
+        hasNoLayDown: byCategory.some((g) => g.hasNoLayDown),
       };
     });
     const filtered = zoneFilter
@@ -490,6 +494,7 @@ export default function DeliveryPlanningPage({ sh }) {
                           marginTop: 4,
                           display: "flex",
                           gap: 14,
+                          flexWrap: "wrap",
                         }}
                       >
                         <span>
@@ -504,7 +509,60 @@ export default function DeliveryPlanningPage({ sh }) {
                             ฿{fmt(Math.round(r.revenue))}
                           </span>
                         </span>
+                        {r.hasNoLayDown && (
+                          <span
+                            style={{
+                              color: "var(--orange)",
+                              fontSize: 11,
+                              padding: "1px 7px",
+                              borderRadius: 99,
+                              background: "rgba(255,149,0,0.14)",
+                              border: "1px solid var(--orange)",
+                            }}
+                            title="มีสินค้าห้ามนอน (ต้องวางตั้ง)"
+                          >
+                            ⬆ ห้ามนอน
+                          </span>
+                        )}
                       </div>
+                      {r.byCategory.length > 0 && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 4,
+                          }}
+                        >
+                          {r.byCategory.map((g, gi) => (
+                            <span
+                              key={gi}
+                              style={{
+                                fontSize: 11,
+                                padding: "2px 8px",
+                                borderRadius: 5,
+                                background: "var(--bg)",
+                                border: "1px solid var(--line)",
+                                color: "var(--text)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              {g.hasNoLayDown && (
+                                <span style={{ color: "var(--orange)" }}>⬆</span>
+                              )}
+                              <span style={{ color: "var(--dim)" }}>
+                                {g.catName}
+                                {g.subName ? ` · ${g.subName}` : ""}
+                              </span>
+                              <strong style={{ color: "var(--blue)" }}>
+                                ×{g.qty}
+                              </strong>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div
                       style={{

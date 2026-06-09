@@ -34,10 +34,28 @@ export interface Product {
   name?: string;
   nameT?: string;
   categoryId?: number | string;
+  subcategoryId?: number | string;
   stock?: number;
   minStock?: number;
   sizeClass?: SizeClass;
   cubicM?: number;
+  // Physical dimensions in centimeters — for AI bin-packing optimizer
+  widthCm?: number;
+  lengthCm?: number;
+  heightCm?: number;
+  // If true, item cannot be laid on its side (e.g., fridges, water dispensers)
+  noLayDown?: boolean;
+}
+
+export interface CategorySub {
+  id: number | string;
+  name: string;
+}
+
+export interface Category {
+  id: number | string;
+  name: string;
+  subs?: CategorySub[];
 }
 
 export interface Contact {
@@ -446,11 +464,21 @@ export const haversineKm = (
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 };
 
-// Resolve effective cubic m³ for a product. Override (cubicM) wins; otherwise
-// fall back to per-class default; default class = M.
+// Resolve effective cubic m³ for a product. Priority: explicit cubicM override →
+// computed from W×L×H (cm) → per-class default. Default class = M.
 export const productCubicM = (p: Product | undefined | null): number => {
   if (!p) return CLASS_M3.M;
   if (typeof p.cubicM === "number" && p.cubicM > 0) return p.cubicM;
+  if (
+    typeof p.widthCm === "number" &&
+    typeof p.lengthCm === "number" &&
+    typeof p.heightCm === "number" &&
+    p.widthCm > 0 &&
+    p.lengthCm > 0 &&
+    p.heightCm > 0
+  ) {
+    return (p.widthCm * p.lengthCm * p.heightCm) / 1_000_000;
+  }
   return CLASS_M3[p.sizeClass ?? "M"];
 };
 
@@ -573,6 +601,69 @@ export const scoreSO = (
     100 *
     (w.proximity * proximity + w.capacityFit * capacityFit + w.revenue * revenue);
   return Math.round(score);
+};
+
+export interface CategoryGroup {
+  catId: number | string | undefined;
+  subId: number | string | undefined;
+  catName: string;
+  subName: string;
+  qty: number;
+  totalVolM3: number;
+  hasNoLayDown: boolean;
+}
+
+// Group SO items by (category, subcategory) — returns sorted by total volume DESC
+// so the largest types lead. Used to render a quick "what's in this SO" breakdown.
+export const soItemsByCategory = (
+  so: Sale | undefined | null,
+  products: Product[] | undefined | null,
+  categories: Category[] | undefined | null
+): CategoryGroup[] => {
+  if (!so) return [];
+  const productMap = new Map<string | number, Product>(
+    (products || []).map((p) => [p.id, p])
+  );
+  const categoryMap = new Map<string | number, Category>(
+    (categories || []).map((c) => [c.id, c])
+  );
+  const subcategoryNameByPair = new Map<string, string>();
+  for (const c of categories || []) {
+    for (const s of c.subs || []) {
+      subcategoryNameByPair.set(`${c.id}|${s.id}`, s.name);
+    }
+  }
+
+  const groups = new Map<string, CategoryGroup>();
+  for (const it of so.items || []) {
+    const p = productMap.get(it.productId);
+    if (!p) continue;
+    const catId = p.categoryId;
+    const subId = p.subcategoryId;
+    const cat = catId != null ? categoryMap.get(catId) : undefined;
+    const key = `${catId ?? ""}|${subId ?? ""}`;
+    const qty = +it.qty || 0;
+    const vol = productCubicM(p) * qty;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.qty += qty;
+      existing.totalVolM3 += vol;
+      if (p.noLayDown) existing.hasNoLayDown = true;
+    } else {
+      groups.set(key, {
+        catId,
+        subId,
+        catName: cat?.name || "?",
+        subName: subcategoryNameByPair.get(key) || "",
+        qty,
+        totalVolM3: vol,
+        hasNoLayDown: !!p.noLayDown,
+      });
+    }
+  }
+  return Array.from(groups.values()).sort(
+    (a, b) => b.totalVolM3 - a.totalVolM3
+  );
 };
 
 // Parse Google Maps URL (or plain "lat,lng") → {lat, lng} | null
