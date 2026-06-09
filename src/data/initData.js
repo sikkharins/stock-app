@@ -54,3 +54,10 @@ export const initCashCats = [
 ];
 
 export const initTagMappings = [];   // empty — user configures via UI
+
+// Delivery trucks — 3 default with similar capacity (cubic m³)
+export const initTrucks = [
+  { id: 1, name: "รถ 1", capacityM3: 8, isActive: true, note: "" },
+  { id: 2, name: "รถ 2", capacityM3: 8, isActive: true, note: "" },
+  { id: 3, name: "รถ 3", capacityM3: 8, isActive: true, note: "" },
+];

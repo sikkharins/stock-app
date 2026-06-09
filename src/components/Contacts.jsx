@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { IB, TAB_LABELS } from "../utils/constants.js";
-import { fmt } from "../utils/helpers.js";
+import { fmt, parseGmapsUrl } from "../utils/helpers.js";
 import { createUser, deleteUser } from "../utils/auth.js";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Badge from "./ui/Badge.jsx";
@@ -180,6 +180,20 @@ export default function ContactPage({sh,ft}){
         </Field></div>}
         <div style={{gridColumn:"1/-1"}}><Field label="Tax ID"><input value={form.taxId||""} onChange={e=>setF("taxId",e.target.value)} style={IB}/></Field></div>
         <div style={{gridColumn:"1/-1"}}><Field label="ที่อยู่"><textarea value={form.address||""} onChange={e=>setF("address",e.target.value)} style={{...IB,height:56,resize:"vertical"}}/></Field></div>
+        {isC&&<div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px"}}>
+          <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:8}}>📍 พิกัดสำหรับวางแผนจัดส่ง (ไม่บังคับ)</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <Field label="Latitude"><input type="number" step="0.000001" value={form.lat??""} onChange={e=>setF("lat",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="13.7563"/></Field>
+            <Field label="Longitude"><input type="number" step="0.000001" value={form.lng??""} onChange={e=>setF("lng",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="100.5018"/></Field>
+          </div>
+          <Field label="วาง URL จาก Google Maps">
+            <input type="text" placeholder="เปิด Google Maps → คัดลอก URL → วางที่นี่" style={IB} onChange={e=>{const r=parseGmapsUrl(e.target.value);if(r){setF("lat",r.lat);setF("lng",r.lng);e.target.value="";}}}/>
+          </Field>
+          <div style={{fontSize:11,color:"var(--faint)",marginTop:4}}>หมายเหตุ: ถ้าเป็นลิงก์สั้น (maps.app.goo.gl) เปิดก่อนแล้ว copy URL ที่ขึ้นใหม่</div>
+          <div style={{marginTop:8}}>
+            <Field label="โน้ตจุดส่ง (สำหรับคนขับ)"><input value={form.geoNote||""} onChange={e=>setF("geoNote",e.target.value)} style={IB} placeholder="เช่น อยู่หน้าตลาดสด, ตรงข้ามปั๊ม"/></Field>
+          </div>
+        </div>}
         {isC&&<div style={{gridColumn:"1/-1"}}>
           <div style={{fontSize:12,fontWeight:600,color:"var(--blue)",background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:8,padding:"8px 12px",marginBottom:8}}>{"ตัวแทนรับ VAT ("+(form.vatReps||[]).length+" คน)"}</div>
           {(form.vatReps||[]).map(r=><div key={r.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"var(--panel)",border:"1px solid var(--line)",borderRadius:6,marginBottom:6}}>

@@ -26,6 +26,8 @@ export interface Sale {
   discountAmt?: number;
 }
 
+export type SizeClass = "S" | "M" | "L" | "XL";
+
 export interface Product {
   id: number | string;
   brand?: string;
@@ -34,7 +36,45 @@ export interface Product {
   categoryId?: number | string;
   stock?: number;
   minStock?: number;
+  sizeClass?: SizeClass;
+  cubicM?: number;
 }
+
+export interface Contact {
+  id: number | string;
+  type?: string;
+  name?: string;
+  nameT?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  geoNote?: string;
+}
+
+export interface Truck {
+  id: number;
+  name: string;
+  capacityM3: number;
+  isActive?: boolean;
+  note?: string;
+}
+
+// Default cubic m³ per size class — used when product has no explicit cubicM
+export const CLASS_M3: Record<SizeClass, number> = {
+  S: 0.05,
+  M: 0.3,
+  L: 1.0,
+  XL: 2.5,
+};
+
+// Default scoring weights (tunable). Phase 2 may move these into user config.
+export const SCORE_WEIGHTS = {
+  proximity: 0.4,
+  capacityFit: 0.2,
+  revenue: 0.4,
+};
+export const REVENUE_THRESHOLD = 30000; // ฿ — "worth a trip"
+export const PROXIMITY_RADIUS_KM = 50;
 
 interface PO {
   poNum?: string;
@@ -385,4 +425,173 @@ export const findClaimableTiers = (
     .filter((t) => totalAccumulated >= t.threshold && !claimed.includes(t.id))
     .slice()
     .sort((a, b) => a.threshold - b.threshold);
+};
+
+// --- Delivery planning helpers ---------------------------------------------
+
+// Great-circle distance in kilometers between two geo points (haversine formula).
+export const haversineKm = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number => {
+  const R = 6371; // Earth radius in km
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+
+// Resolve effective cubic m³ for a product. Override (cubicM) wins; otherwise
+// fall back to per-class default; default class = M.
+export const productCubicM = (p: Product | undefined | null): number => {
+  if (!p) return CLASS_M3.M;
+  if (typeof p.cubicM === "number" && p.cubicM > 0) return p.cubicM;
+  return CLASS_M3[p.sizeClass ?? "M"];
+};
+
+// Sum cubic m³ of all items in an SO.
+export const soVolumeM3 = (
+  so: Sale | undefined | null,
+  products: Product[] | undefined | null
+): number => {
+  if (!so) return 0;
+  const prodMap = new Map<string | number, Product>(
+    (products || []).map((p) => [p.id, p])
+  );
+  return (so.items || []).reduce((sum, it) => {
+    const p = prodMap.get(it.productId);
+    return sum + productCubicM(p) * (+it.qty || 0);
+  }, 0);
+};
+
+// SO revenue = sum(items.qty * items.price) - discountAmt (matches existing arList math)
+export const soRevenue = (so: Sale | undefined | null): number => {
+  if (!so) return 0;
+  const itemsTotal = (so.items || []).reduce(
+    (s, it) => s + (+it.qty || 0) * (+it.price || 0),
+    0
+  );
+  return itemsTotal - (so.discountAmt || 0);
+};
+
+export interface PickListEntry {
+  productId: number | string;
+  name: string;
+  totalQty: number;
+  sources: string[]; // SO numbers contributing
+}
+
+// Group items across multiple SOs by productId, sum qty, track contributing SO numbers.
+// Sort by product display name for stable warehouse picking order.
+export const consolidatePickList = (
+  sos: Sale[] | undefined | null,
+  products: Product[] | undefined | null
+): PickListEntry[] => {
+  const prodMap = new Map<string | number, Product>(
+    (products || []).map((p) => [p.id, p])
+  );
+  const acc = new Map<string | number, PickListEntry>();
+  for (const so of sos || []) {
+    for (const it of so.items || []) {
+      const existing = acc.get(it.productId);
+      const p = prodMap.get(it.productId);
+      const name = p?.nameT || p?.name || String(it.productId);
+      if (existing) {
+        existing.totalQty += +it.qty || 0;
+        if (so.soNum && !existing.sources.includes(so.soNum))
+          existing.sources.push(so.soNum);
+      } else {
+        acc.set(it.productId, {
+          productId: it.productId,
+          name,
+          totalQty: +it.qty || 0,
+          sources: so.soNum ? [so.soNum] : [],
+        });
+      }
+    }
+  }
+  return Array.from(acc.values()).sort((a, b) => a.name.localeCompare(b.name));
+};
+
+// Bell-curve-ish score: peak at 0.15–0.25, drops outside 0.05..0.6
+const capacityFitScore = (ratio: number): number => {
+  if (ratio <= 0 || ratio > 1) return 0;
+  if (ratio < 0.05) return ratio / 0.05 * 0.4; // too small
+  if (ratio <= 0.25) return 1; // ideal — fits well alongside others
+  if (ratio <= 0.6) return 1 - (ratio - 0.25) / 0.35 * 0.6; // shrinks
+  return 0.1; // too big to combine
+};
+
+// Heuristic score 0-100 for a candidate SO given the pool + truck. See plan doc.
+export const scoreSO = (
+  so: Sale,
+  candidates: Sale[],
+  contacts: Contact[] | undefined | null,
+  products: Product[] | undefined | null,
+  truckCapacityM3: number
+): number => {
+  const contactMap = new Map<number | string, Contact>(
+    (contacts || []).map((c) => [c.id, c])
+  );
+
+  // 1. Proximity: density of OTHER candidates within RADIUS km of this SO's customer
+  const mine = so.customerId != null ? contactMap.get(so.customerId) : null;
+  let proximity = 0.3; // neutral fallback when no lat/lng
+  if (mine && typeof mine.lat === "number" && typeof mine.lng === "number") {
+    const others = candidates.filter((s) => s.soNum !== so.soNum);
+    if (others.length === 0) {
+      proximity = 0.3;
+    } else {
+      let withRadius = 0;
+      let othersWithGeo = 0;
+      for (const o of others) {
+        const oc = o.customerId != null ? contactMap.get(o.customerId) : null;
+        if (!oc || typeof oc.lat !== "number" || typeof oc.lng !== "number") continue;
+        othersWithGeo++;
+        const d = haversineKm(mine.lat, mine.lng, oc.lat, oc.lng);
+        if (d <= PROXIMITY_RADIUS_KM) withRadius++;
+      }
+      proximity = othersWithGeo > 0 ? withRadius / othersWithGeo : 0.3;
+    }
+  }
+
+  // 2. Capacity fit
+  const vol = soVolumeM3(so, products);
+  const capacityFit = truckCapacityM3 > 0 ? capacityFitScore(vol / truckCapacityM3) : 0;
+
+  // 3. Revenue normalized
+  const rev = soRevenue(so);
+  const revenue = Math.min(1, rev / REVENUE_THRESHOLD);
+
+  const w = SCORE_WEIGHTS;
+  const score =
+    100 *
+    (w.proximity * proximity + w.capacityFit * capacityFit + w.revenue * revenue);
+  return Math.round(score);
+};
+
+// Parse Google Maps URL (or plain "lat,lng") → {lat, lng} | null
+export const parseGmapsUrl = (
+  input: string | undefined | null
+): { lat: number; lng: number } | null => {
+  if (!input) return null;
+  const s = input.trim();
+  // /maps/@LAT,LNG,ZOOM
+  let m = s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  // ?q=LAT,LNG  or  &q=LAT,LNG
+  m = s.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  // embed format: !3dLAT!4dLNG
+  m = s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  // plain "LAT, LNG"
+  m = s.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  return null;
 };

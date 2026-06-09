@@ -81,7 +81,7 @@ export const MERGE_CFG: Record<string, MergeConfig> = {
   products: {}, contacts: {}, pos: {}, sales: {}, cats: {}, cashcats: {}, brands: {},
   payments: {}, quotes: {}, targets: {}, cheques: {}, bankaccs: {},
   banktxns: {}, cnotes: {}, billings: {}, defectives: {}, supcnotes: {},
-  promos: {}, events: {},
+  promos: {}, events: {}, trucks: {},
   tagmappings: { keyOf: (r) => r.key as MergeKey },
   logs: { keyOf: (x) => (x.id != null ? (x.id as MergeKey) : `${x.date}|${x.type}|${x.productId}|${x.ref}|${x.qty}`) },
   audit: { cap: 500, ts: (x) => (x.id as number) || 0 },

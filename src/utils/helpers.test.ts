@@ -9,10 +9,19 @@ import {
   splitLegacyNum,
   fmtDur,
   round2,
+  haversineKm,
+  productCubicM,
+  soVolumeM3,
+  soRevenue,
+  consolidatePickList,
+  scoreSO,
+  parseGmapsUrl,
+  CLASS_M3,
   type Promo,
   type Sale,
   type Product,
   type SaleItem,
+  type Contact,
 } from "./helpers.js";
 
 describe("round2", () => {
@@ -268,5 +277,271 @@ describe("findClaimableTiers", () => {
     };
     const result = findClaimableTiers(customer, promo, 50000);
     expect(result.map((t) => t.id)).toEqual(["t3"]);
+  });
+});
+
+describe("haversineKm", () => {
+  test("identical points = 0", () => {
+    expect(haversineKm(13.75, 100.5, 13.75, 100.5)).toBe(0);
+  });
+
+  test("Bangkok ↔ Chiang Mai ≈ 580 km", () => {
+    const d = haversineKm(13.7563, 100.5018, 18.7883, 98.9853);
+    expect(d).toBeGreaterThan(560);
+    expect(d).toBeLessThan(600);
+  });
+
+  test("antipodal points ≈ 20015 km (half Earth's circumference)", () => {
+    const d = haversineKm(0, 0, 0, 180);
+    expect(d).toBeGreaterThan(20000);
+    expect(d).toBeLessThan(20020);
+  });
+});
+
+describe("productCubicM", () => {
+  test("explicit cubicM wins", () => {
+    expect(productCubicM({ id: 1, cubicM: 1.5 })).toBe(1.5);
+  });
+
+  test("falls back to size class when cubicM missing", () => {
+    expect(productCubicM({ id: 1, sizeClass: "S" })).toBe(CLASS_M3.S);
+    expect(productCubicM({ id: 1, sizeClass: "XL" })).toBe(CLASS_M3.XL);
+  });
+
+  test("defaults to M when both missing", () => {
+    expect(productCubicM({ id: 1 })).toBe(CLASS_M3.M);
+  });
+
+  test("null/undefined product → M default", () => {
+    expect(productCubicM(null)).toBe(CLASS_M3.M);
+    expect(productCubicM(undefined)).toBe(CLASS_M3.M);
+  });
+
+  test("zero or negative cubicM falls through to class", () => {
+    expect(productCubicM({ id: 1, cubicM: 0, sizeClass: "L" })).toBe(CLASS_M3.L);
+  });
+});
+
+describe("soVolumeM3", () => {
+  const products: Product[] = [
+    { id: 1, cubicM: 1.0 },
+    { id: 2, sizeClass: "S" }, // 0.05
+  ];
+
+  test("sums qty * cubicM across items", () => {
+    const so: Sale = { items: [{ productId: 1, qty: 3, price: 0 }] };
+    expect(soVolumeM3(so, products)).toBeCloseTo(3.0);
+  });
+
+  test("mixes explicit cubicM + class fallback", () => {
+    const so: Sale = {
+      items: [
+        { productId: 1, qty: 2, price: 0 }, // 2 * 1.0 = 2.0
+        { productId: 2, qty: 4, price: 0 }, // 4 * 0.05 = 0.2
+      ],
+    };
+    expect(soVolumeM3(so, products)).toBeCloseTo(2.2);
+  });
+
+  test("unknown productId uses M default", () => {
+    const so: Sale = { items: [{ productId: 99, qty: 1, price: 0 }] };
+    expect(soVolumeM3(so, products)).toBeCloseTo(CLASS_M3.M);
+  });
+
+  test("null SO → 0", () => {
+    expect(soVolumeM3(null, products)).toBe(0);
+  });
+});
+
+describe("soRevenue", () => {
+  test("sums qty * price minus discount", () => {
+    const so: Sale = {
+      items: [
+        { productId: 1, qty: 2, price: 1000 },
+        { productId: 2, qty: 1, price: 500 },
+      ],
+      discountAmt: 100,
+    };
+    expect(soRevenue(so)).toBe(2400); // 2500 - 100
+  });
+
+  test("no discount → just items total", () => {
+    const so: Sale = {
+      items: [{ productId: 1, qty: 3, price: 999 }],
+    };
+    expect(soRevenue(so)).toBe(2997);
+  });
+
+  test("null SO → 0", () => {
+    expect(soRevenue(null)).toBe(0);
+  });
+});
+
+describe("consolidatePickList", () => {
+  const products: Product[] = [
+    { id: 1, name: "Fridge", nameT: "ตู้เย็น 14 คิว" },
+    { id: 2, name: "TV", nameT: "ทีวี 55 นิ้ว" },
+  ];
+
+  test("groups same product across SOs, sums qty, tracks sources", () => {
+    const sos: Sale[] = [
+      {
+        soNum: "S1",
+        items: [
+          { productId: 1, qty: 2, price: 0 },
+          { productId: 2, qty: 1, price: 0 },
+        ],
+      },
+      { soNum: "S2", items: [{ productId: 1, qty: 3, price: 0 }] },
+      { soNum: "S3", items: [{ productId: 2, qty: 4, price: 0 }] },
+    ];
+    const list = consolidatePickList(sos, products);
+    expect(list).toHaveLength(2);
+    const fridge = list.find((e) => e.productId === 1)!;
+    const tv = list.find((e) => e.productId === 2)!;
+    expect(fridge.totalQty).toBe(5);
+    expect(fridge.sources).toEqual(["S1", "S2"]);
+    expect(tv.totalQty).toBe(5);
+    expect(tv.sources).toEqual(["S1", "S3"]);
+  });
+
+  test("uses Thai name (nameT) when available", () => {
+    const sos: Sale[] = [{ soNum: "S1", items: [{ productId: 1, qty: 1, price: 0 }] }];
+    expect(consolidatePickList(sos, products)[0].name).toBe("ตู้เย็น 14 คิว");
+  });
+
+  test("handles same SO listing same product twice (dedupes sources)", () => {
+    const sos: Sale[] = [
+      {
+        soNum: "S1",
+        items: [
+          { productId: 1, qty: 2, price: 0 },
+          { productId: 1, qty: 3, price: 0 },
+        ],
+      },
+    ];
+    const list = consolidatePickList(sos, products);
+    expect(list[0].totalQty).toBe(5);
+    expect(list[0].sources).toEqual(["S1"]);
+  });
+
+  test("empty input → empty list", () => {
+    expect(consolidatePickList([], products)).toEqual([]);
+    expect(consolidatePickList(null, products)).toEqual([]);
+  });
+});
+
+describe("scoreSO", () => {
+  const products: Product[] = [{ id: 1, sizeClass: "M" }]; // 0.3 m³
+  const truckCapM3 = 8;
+
+  // Build customer geo: 3 clustered around Bangkok + 1 in Chiang Mai
+  const contacts: Contact[] = [
+    { id: 1, name: "C1-BKK", lat: 13.75, lng: 100.5 },
+    { id: 2, name: "C2-BKK", lat: 13.78, lng: 100.55 }, // ~5 km from C1
+    { id: 3, name: "C3-BKK", lat: 13.72, lng: 100.48 }, // ~5 km from C1
+    { id: 4, name: "C4-CM", lat: 18.78, lng: 98.99 },   // ~580 km away
+  ];
+
+  const mkSo = (
+    soNum: string,
+    customerId: number,
+    revenue: number,
+    qty: number = 5
+  ): Sale => ({
+    soNum,
+    customerId,
+    status: "pending_delivery",
+    items: [{ productId: 1, qty, price: revenue / qty }],
+  });
+
+  test("clustered + high revenue → high score (>70)", () => {
+    const pool: Sale[] = [
+      mkSo("A1", 1, 50000), // anchor: BKK, high revenue
+      mkSo("A2", 2, 40000),
+      mkSo("A3", 3, 30000),
+      mkSo("A4", 4, 40000), // far Chiang Mai
+    ];
+    const s = scoreSO(pool[0], pool, contacts, products, truckCapM3);
+    // All 3 OTHER BKK SOs are within 50km of A1; A4 is far.
+    // 2/3 = 0.67 proximity, revenue=50000 → capped 1, capacity ~0.19 → ideal
+    // Score = 100 * (0.4*0.67 + 0.2*1 + 0.4*1) ≈ 87
+    expect(s).toBeGreaterThan(70);
+  });
+
+  test("isolated + low revenue → low score (<40)", () => {
+    const pool: Sale[] = [
+      mkSo("A1", 1, 5000), // BKK alone, cheap
+      mkSo("A4", 4, 50000), // far away
+    ];
+    const s = scoreSO(pool[0], pool, contacts, products, truckCapM3);
+    // 0/1 within 50km of A1 (A4 is far), revenue 5000/30000=0.17, capacity ok
+    expect(s).toBeLessThan(40);
+  });
+
+  test("missing lat/lng on customer → neutral proximity 0.3", () => {
+    const noGeoContacts: Contact[] = [{ id: 1, name: "X" }];
+    const pool: Sale[] = [mkSo("A1", 1, 30000)];
+    const s = scoreSO(pool[0], pool, noGeoContacts, products, truckCapM3);
+    // proximity=0.3, revenue=1, capacity ok ≈ 100*(0.12+0.2+0.4) = 72
+    expect(s).toBeGreaterThan(50);
+    expect(s).toBeLessThan(85);
+  });
+
+  test("over-capacity SO (volume > truck) → low capacity score", () => {
+    // 1 truck = 8 m³, sizeClass M = 0.3 → need qty 30+ to exceed
+    const pool: Sale[] = [mkSo("A1", 1, 50000, 100)]; // 100*0.3 = 30 m³ > 8
+    const s = scoreSO(pool[0], pool, contacts, products, truckCapM3);
+    // Revenue = 1, capacity ≈ 0 (over), proximity neutral fallback = 0.3
+    // Score = 100*(0.4*0.3 + 0.2*0 + 0.4*1) ≈ 52 — still moderate from revenue
+    expect(s).toBeLessThan(60);
+  });
+});
+
+describe("parseGmapsUrl", () => {
+  test("/maps/@LAT,LNG,ZOOM format", () => {
+    expect(
+      parseGmapsUrl("https://www.google.com/maps/@13.7563,100.5018,17z")
+    ).toEqual({ lat: 13.7563, lng: 100.5018 });
+  });
+
+  test("?q=LAT,LNG format", () => {
+    expect(parseGmapsUrl("https://maps.google.com/?q=13.7563,100.5018")).toEqual({
+      lat: 13.7563,
+      lng: 100.5018,
+    });
+  });
+
+  test("embed !3d/!4d format", () => {
+    expect(
+      parseGmapsUrl(
+        "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3870!3d13.7563!4d100.5018"
+      )
+    ).toEqual({ lat: 13.7563, lng: 100.5018 });
+  });
+
+  test("plain 'lat,lng' paste", () => {
+    expect(parseGmapsUrl("13.7563, 100.5018")).toEqual({
+      lat: 13.7563,
+      lng: 100.5018,
+    });
+    expect(parseGmapsUrl("13.7563,100.5018")).toEqual({
+      lat: 13.7563,
+      lng: 100.5018,
+    });
+  });
+
+  test("handles negative coordinates", () => {
+    expect(parseGmapsUrl("https://www.google.com/maps/@-33.86,151.20,17z")).toEqual({
+      lat: -33.86,
+      lng: 151.2,
+    });
+  });
+
+  test("returns null for unparseable input", () => {
+    expect(parseGmapsUrl("not a url")).toBeNull();
+    expect(parseGmapsUrl("https://maps.app.goo.gl/abc123")).toBeNull(); // short link
+    expect(parseGmapsUrl("")).toBeNull();
+    expect(parseGmapsUrl(null)).toBeNull();
   });
 });

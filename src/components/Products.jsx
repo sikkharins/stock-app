@@ -167,6 +167,8 @@ export default function ProdPage({sh}){
         <Field label="ต้นทุน"><input type="number" value={form.cost} onChange={e=>setF("cost",e.target.value)} style={IB}/></Field>
         <Field label="สต็อก"><input type="number" value={form.stock} onChange={e=>setF("stock",e.target.value)} style={IB}/></Field>
         <Field label="ขั้นต่ำ"><input type="number" value={form.minStock} onChange={e=>setF("minStock",e.target.value)} style={IB}/></Field>
+        <Field label="กลุ่มขนาด (จัดส่ง)"><CustomSelect value={form.sizeClass||"M"} onChange={v=>setF("sizeClass",v)} options={[{value:"S",label:"S — เล็ก (~0.05 m³)"},{value:"M",label:"M — กลาง (~0.30 m³)"},{value:"L",label:"L — ใหญ่ (~1.00 m³)"},{value:"XL",label:"XL — ใหญ่มาก (~2.50 m³)"}]}/></Field>
+        <Field label="ปริมาตร m³ (override)"><input type="number" step="0.01" value={form.cubicM??""} onChange={e=>setF("cubicM",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="เว้นไว้ = ใช้ตามกลุ่ม"/></Field>
       </div>
       <label style={{display:"flex",alignItems:"center",gap:8,marginTop:12,padding:"10px 14px",borderRadius:8,border:"1px solid "+(form.discontinued?"var(--orange)":"var(--line)"),background:form.discontinued?"rgba(255,149,0,0.08)":"var(--bg)",cursor:"pointer"}}>
         <input type="checkbox" checked={!!form.discontinued} onChange={e=>setF("discontinued",e.target.checked)} style={{accentColor:"var(--orange)"}}/>

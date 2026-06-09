@@ -45,6 +45,7 @@ const KEY_MAP = {
   v3_promos: "promos",
   v3_events: "events",
   v3_bot_config: "bot_config",
+  v3_trucks: "trucks",
 } as const;
 
 type LsKey = keyof typeof KEY_MAP;
