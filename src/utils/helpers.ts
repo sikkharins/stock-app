@@ -79,15 +79,33 @@ export interface Truck {
   widthCm?: number;
   lengthCm?: number;
   heightCm?: number;
+  // Driver permanently assigned to this truck (changes rarely; not per-run)
+  driverName?: string;
 }
 
+// Delivery helper pool (พนักงานส่งของ) — small fixed set (typically ≤ 8).
+// 1-2 helpers ride each run alongside the driver.
+export interface DeliveryHelper {
+  id: number;
+  name: string;
+  phone?: string;
+  isActive?: boolean;
+  note?: string;
+}
+
+export const MAX_HELPERS_PER_RUN = 2;
+export const MAX_HELPER_POOL = 8;
+
 // A finalized delivery run — created when dispatcher commits a pick to a truck/date.
-// Customer/truck names are denormalized so history stays readable even after rename.
+// Driver and helper names are denormalized so history stays readable after rename/delete.
 export interface DeliveryRun {
   id: number;
   date: string;          // YYYY-MM-DD — the planned delivery date
   truckId: number;
   truckName: string;
+  driverName?: string;   // denormalized from truck at commit time
+  helperIds?: number[];  // 0-2 helpers from the pool
+  helperNames?: string[];
   soNums: string[];
   customerNames: string[];
   revenue: number;

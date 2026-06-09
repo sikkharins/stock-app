@@ -9,6 +9,8 @@ import {
   soRevenue,
   consolidatePickList,
   soItemsByCategory,
+  MAX_HELPERS_PER_RUN,
+  MAX_HELPER_POOL,
 } from "../utils/helpers.js";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Field from "./ui/Field.jsx";
@@ -44,6 +46,8 @@ export default function DeliveryPlanningPage({ sh }) {
     setTrucks,
     deliveryRuns,
     setDeliveryRuns,
+    deliveryHelpers,
+    setDeliveryHelpers,
     canE,
     canD,
     cu,
@@ -72,6 +76,66 @@ export default function DeliveryPlanningPage({ sh }) {
   // Truck CRUD form (lives in manage trucks modal)
   const [driverNote, setDriverNote] = useState("");
   const [warnMsg, setWarnMsg] = useState(null);
+  const [runHelperIds, setRunHelperIds] = useState([]);
+
+  // Helper-pool CRUD form
+  const emptyHelper = { id: null, name: "", phone: "", isActive: true };
+  const [helperForm, setHelperForm] = useState(emptyHelper);
+  const activeHelpers = useMemo(
+    () => (deliveryHelpers || []).filter((h) => h.isActive !== false),
+    [deliveryHelpers]
+  );
+  const toggleRunHelper = (id) => {
+    setRunHelperIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= MAX_HELPERS_PER_RUN) return prev; // cap silently
+      return [...prev, id];
+    });
+  };
+  const startNewHelper = () => {
+    setHelperForm(emptyHelper);
+    oM("editHelper");
+  };
+  const startEditHelper = (h) => {
+    setHelperForm({ ...emptyHelper, ...h });
+    oM("editHelper");
+  };
+  const saveHelper = () => {
+    if (!helperForm.name.trim()) return;
+    setDeliveryHelpers((prev) => {
+      if (helperForm.id != null) {
+        return (prev || []).map((h) =>
+          h.id === helperForm.id
+            ? {
+                ...h,
+                name: helperForm.name.trim(),
+                phone: helperForm.phone || "",
+                isActive: helperForm.isActive !== false,
+              }
+            : h
+        );
+      }
+      if ((prev || []).length >= MAX_HELPER_POOL) {
+        setWarnMsg(`พนักงานส่งของเก็บได้สูงสุด ${MAX_HELPER_POOL} คน`);
+        return prev || [];
+      }
+      return [
+        ...(prev || []),
+        {
+          id: Date.now(),
+          name: helperForm.name.trim(),
+          phone: helperForm.phone || "",
+          isActive: true,
+        },
+      ];
+    });
+    cM();
+  };
+  const delHelper = (id) => {
+    if (!confirm("ลบพนักงานคนนี้?")) return;
+    setDeliveryHelpers((prev) => (prev || []).filter((h) => h.id !== id));
+    setRunHelperIds((prev) => prev.filter((x) => x !== id));
+  };
 
   const commitRun = () => {
     if (pickedRows.length === 0) {
@@ -83,11 +147,17 @@ export default function DeliveryPlanningPage({ sh }) {
       return;
     }
     const pickedSoNums = pickedRows.map((r) => r.so.soNum);
+    const helperNames = runHelperIds
+      .map((id) => (deliveryHelpers || []).find((h) => h.id === id)?.name)
+      .filter(Boolean);
     const run = {
       id: Date.now(),
       date,
       truckId: truck.id,
       truckName: truck.name,
+      driverName: truck.driverName || "",
+      helperIds: [...runHelperIds],
+      helperNames,
       soNums: pickedSoNums,
       customerNames: pickedCustomers,
       revenue: pickedRevenue,
@@ -105,6 +175,7 @@ export default function DeliveryPlanningPage({ sh }) {
     );
     setPicked(new Set());
     setDriverNote("");
+    setRunHelperIds([]);
     cM();
   };
 
@@ -117,6 +188,7 @@ export default function DeliveryPlanningPage({ sh }) {
     widthCm: 200,
     lengthCm: 400,
     heightCm: 200,
+    driverName: "",
   };
   const [truckForm, setTruckForm] = useState(emptyTruck);
 
@@ -202,6 +274,7 @@ export default function DeliveryPlanningPage({ sh }) {
       widthCm: +truckForm.widthCm || undefined,
       lengthCm: +truckForm.lengthCm || undefined,
       heightCm: +truckForm.heightCm || undefined,
+      driverName: (truckForm.driverName || "").trim() || undefined,
     };
     setTrucks((prev) => {
       if (truckForm.id != null) {
@@ -318,6 +391,18 @@ export default function DeliveryPlanningPage({ sh }) {
               style={IB}
             />
           </Field>
+          <div style={{ gridColumn: "1/-1" }}>
+            <Field label="คนขับประจำรถ">
+              <input
+                value={truckForm.driverName || ""}
+                onChange={(e) =>
+                  setTruckForm((f) => ({ ...f, driverName: e.target.value }))
+                }
+                style={IB}
+                placeholder="เช่น สมชาย"
+              />
+            </Field>
+          </div>
           <div
             style={{
               gridColumn: "1/-1",
@@ -1195,6 +1280,7 @@ export default function DeliveryPlanningPage({ sh }) {
                     {t.widthCm && t.lengthCm && t.heightCm
                       ? ` · ${t.widthCm}×${t.lengthCm}×${t.heightCm} cm`
                       : ""}
+                    {t.driverName ? ` · 🚚 ${t.driverName}` : ""}
                     {t.note ? ` · ${t.note}` : ""}
                   </div>
                 </div>
@@ -1273,6 +1359,17 @@ export default function DeliveryPlanningPage({ sh }) {
             <div style={{ marginBottom: 4 }}>
               <span style={{ color: "var(--dim)" }}>รถ:</span>{" "}
               <strong>{truck?.name}</strong>
+              {truck?.driverName ? (
+                <>
+                  {" "}
+                  <span style={{ color: "var(--dim)" }}>· คนขับ:</span>{" "}
+                  <strong>{truck.driverName}</strong>
+                </>
+              ) : (
+                <span style={{ fontSize: 11, color: "var(--orange)", marginLeft: 6 }}>
+                  ⚠️ ยังไม่ตั้งคนขับ (แก้ใน "จัดการรถ")
+                </span>
+              )}
             </div>
             <div style={{ marginBottom: 4 }}>
               <span style={{ color: "var(--dim)" }}>วันที่:</span>{" "}
@@ -1295,12 +1392,97 @@ export default function DeliveryPlanningPage({ sh }) {
               </span>
             </div>
           </div>
-          <Field label="หมายเหตุคนขับ (ไม่บังคับ)">
+
+          <div style={{ marginBottom: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 6,
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--dim)" }}>
+                พนักงานส่งของ ({runHelperIds.length}/{MAX_HELPERS_PER_RUN})
+              </span>
+              {ed && (
+                <button
+                  onClick={() => oM("manageHelpers")}
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    border: "1px solid var(--line)",
+                    background: "var(--bg2)",
+                    color: "var(--dim)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  จัดการพนักงาน
+                </button>
+              )}
+            </div>
+            {activeHelpers.length === 0 ? (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--faint)",
+                  padding: "10px 12px",
+                  background: "var(--bg)",
+                  borderRadius: 6,
+                  border: "1px dashed var(--line)",
+                }}
+              >
+                ยังไม่มีพนักงานส่งของ — กด "จัดการพนักงาน" เพื่อเพิ่ม
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {activeHelpers.map((h) => {
+                  const isPicked = runHelperIds.includes(h.id);
+                  const atMax =
+                    !isPicked && runHelperIds.length >= MAX_HELPERS_PER_RUN;
+                  return (
+                    <button
+                      key={h.id}
+                      onClick={() => toggleRunHelper(h.id)}
+                      disabled={atMax}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 99,
+                        border: "1px solid",
+                        borderColor: isPicked ? "var(--blue)" : "var(--line)",
+                        background: isPicked
+                          ? "var(--blue)"
+                          : atMax
+                          ? "var(--hover2)"
+                          : "var(--bg2)",
+                        color: isPicked
+                          ? "#fff"
+                          : atMax
+                          ? "var(--faint)"
+                          : "var(--text)",
+                        cursor: atMax ? "not-allowed" : "pointer",
+                        fontSize: 12,
+                        fontFamily: "inherit",
+                        fontWeight: isPicked ? 600 : 400,
+                      }}
+                    >
+                      {isPicked ? "✓ " : ""}
+                      {h.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <Field label="หมายเหตุ (ไม่บังคับ)">
             <input
               value={driverNote}
               onChange={(e) => setDriverNote(e.target.value)}
               style={IB}
-              placeholder="เช่น คนขับ: สมชาย / ออก 8:00"
+              placeholder="เช่น ออก 8:00 / แวะปั๊มก่อน"
             />
           </Field>
           <div
@@ -1397,13 +1579,13 @@ export default function DeliveryPlanningPage({ sh }) {
                       borderBottom: "1px solid var(--line)",
                     }}
                   >
-                    {["วันที่", "รถ", "SO", "ปลายทาง", "ปริมาตร", "ยอดรวม", "หมายเหตุ"].map(
+                    {["วันที่", "รถ", "ผู้ส่ง", "SO", "ปลายทาง", "ปริมาตร", "ยอดรวม", "หมายเหตุ"].map(
                       (h, i) => (
                         <th
                           key={i}
                           style={{
                             padding: "8px 12px",
-                            textAlign: i >= 2 && i <= 5 ? "right" : "left",
+                            textAlign: i >= 3 && i <= 6 ? "right" : "left",
                             fontWeight: 500,
                             color: "var(--dim)",
                             fontSize: 12,
@@ -1430,6 +1612,34 @@ export default function DeliveryPlanningPage({ sh }) {
                         </td>
                         <td style={{ padding: "8px 12px", fontWeight: 500 }}>
                           {r.truckName}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 12px",
+                            fontSize: 12,
+                            color: "var(--text)",
+                            minWidth: 140,
+                          }}
+                        >
+                          {r.driverName ? (
+                            <>
+                              <span style={{ color: "var(--dim)" }}>🚚</span>{" "}
+                              {r.driverName}
+                            </>
+                          ) : (
+                            <span style={{ color: "var(--faint)" }}>—</span>
+                          )}
+                          {(r.helperNames || []).length > 0 && (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "var(--dim)",
+                                marginTop: 2,
+                              }}
+                            >
+                              👥 {r.helperNames.join(", ")}
+                            </div>
+                          )}
                         </td>
                         <td
                           style={{
@@ -1490,6 +1700,186 @@ export default function DeliveryPlanningPage({ sh }) {
               </table>
             </div>
           )}
+        </Modal>
+      )}
+
+      {modal === "manageHelpers" && (
+        <Modal title={`จัดการพนักงานส่งของ (${(deliveryHelpers||[]).length}/${MAX_HELPER_POOL})`} onClose={cM}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              marginBottom: 12,
+            }}
+          >
+            {(deliveryHelpers || []).length === 0 && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--faint)",
+                  textAlign: "center",
+                  padding: "16px 0",
+                }}
+              >
+                ยังไม่มีพนักงาน
+              </div>
+            )}
+            {(deliveryHelpers || []).map((h) => (
+              <div
+                key={h.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "8px 12px",
+                  background:
+                    h.isActive === false ? "var(--hover)" : "var(--bg2)",
+                  border: "1px solid var(--line)",
+                  borderRadius: 7,
+                  opacity: h.isActive === false ? 0.6 : 1,
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>
+                    {h.name}
+                    {h.isActive === false && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "var(--dim)",
+                          marginLeft: 6,
+                        }}
+                      >
+                        (ปิดใช้)
+                      </span>
+                    )}
+                  </div>
+                  {h.phone && (
+                    <div style={{ fontSize: 11, color: "var(--dim)" }}>
+                      ☎ {h.phone}
+                    </div>
+                  )}
+                </div>
+                {ed && (
+                  <button
+                    onClick={() => startEditHelper(h)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 5,
+                      border: "1px solid var(--blue)",
+                      background: "var(--blue-bg)",
+                      color: "var(--blue)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    แก้ไข
+                  </button>
+                )}
+                {cd && (
+                  <button
+                    onClick={() => delHelper(h.id)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 5,
+                      border: "1px solid var(--red)",
+                      background: "rgba(255,59,48,0.12)",
+                      color: "var(--red)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    ลบ
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {ed && (deliveryHelpers || []).length < MAX_HELPER_POOL && (
+            <button
+              onClick={startNewHelper}
+              style={{
+                width: "100%",
+                padding: "8px 14px",
+                borderRadius: 7,
+                border: "1px dashed var(--blue)",
+                background: "var(--blue-bg)",
+                color: "var(--blue)",
+                cursor: "pointer",
+                fontSize: 13,
+                fontFamily: "inherit",
+              }}
+            >
+              + เพิ่มพนักงาน
+            </button>
+          )}
+          {(deliveryHelpers || []).length >= MAX_HELPER_POOL && (
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--faint)",
+                textAlign: "center",
+                marginTop: 6,
+              }}
+            >
+              ถึงโควต้าสูงสุด {MAX_HELPER_POOL} คนแล้ว
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {modal === "editHelper" && (
+        <Modal
+          title={helperForm.id != null ? "แก้ไขพนักงาน" : "เพิ่มพนักงาน"}
+          onClose={cM}
+        >
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+          >
+            <Field label="ชื่อ">
+              <input
+                value={helperForm.name}
+                onChange={(e) =>
+                  setHelperForm((f) => ({ ...f, name: e.target.value }))
+                }
+                style={IB}
+                placeholder="เช่น สมศักดิ์"
+              />
+            </Field>
+            <Field label="เบอร์โทร (ไม่บังคับ)">
+              <input
+                value={helperForm.phone || ""}
+                onChange={(e) =>
+                  setHelperForm((f) => ({ ...f, phone: e.target.value }))
+                }
+                style={IB}
+                placeholder="081-..."
+              />
+            </Field>
+            <label
+              style={{
+                gridColumn: "1/-1",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={helperForm.isActive !== false}
+                onChange={(e) =>
+                  setHelperForm((f) => ({ ...f, isActive: e.target.checked }))
+                }
+              />
+              ใช้งานอยู่
+            </label>
+          </div>
+          <MBtns onCancel={cM} onSave={saveHelper} />
         </Modal>
       )}
 
