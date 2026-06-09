@@ -9,6 +9,8 @@ import {
   soRevenue,
   consolidatePickList,
   soItemsByCategory,
+  haversineKm,
+  PROXIMITY_RADIUS_KM,
   MAX_HELPERS_PER_RUN,
   MAX_HELPER_POOL,
 } from "../utils/helpers.js";
@@ -219,6 +221,7 @@ export default function DeliveryPlanningPage({ sh }) {
         hasGeo: cust && typeof cust.lat === "number" && typeof cust.lng === "number",
         byCategory,
         hasNoLayDown: byCategory.some((g) => g.hasNoLayDown),
+        distToPicked: null, // populated below when picks exist
       };
     });
     const filtered = zoneFilter
@@ -227,8 +230,55 @@ export default function DeliveryPlanningPage({ sh }) {
           return blob.toLowerCase().includes(zoneFilter.toLowerCase());
         })
       : rows;
-    return filtered.sort((a, b) => b.score - a.score);
-  }, [pendingSOs, contacts, products, truckCapM3, zoneFilter, cN]);
+
+    // No picks yet → static intrinsic ranking
+    if (picked.size === 0) {
+      return filtered.sort((a, b) => b.score - a.score);
+    }
+
+    // With picks: keep picked rows at the top (sorted by intrinsic score among
+    // themselves), then unpicked rows sorted by "closest to nearest picked
+    // customer" — so the dispatcher sees nearby SOs surface as they build the
+    // pick. Items without geo fall to the bottom of the unpicked block,
+    // ordered by their intrinsic score.
+    const pickedAnchors = filtered
+      .filter((r) => picked.has(r.so.soNum))
+      .map((r) => r.cust)
+      .filter((c) => c && typeof c.lat === "number" && typeof c.lng === "number");
+
+    const annotated = filtered.map((r) => {
+      if (
+        pickedAnchors.length === 0 ||
+        !r.cust ||
+        typeof r.cust.lat !== "number" ||
+        typeof r.cust.lng !== "number"
+      ) {
+        return r;
+      }
+      let minD = Infinity;
+      for (const a of pickedAnchors) {
+        const d = haversineKm(r.cust.lat, r.cust.lng, a.lat, a.lng);
+        if (d < minD) minD = d;
+      }
+      return { ...r, distToPicked: minD };
+    });
+
+    const pickedRowsLocal = annotated
+      .filter((r) => picked.has(r.so.soNum))
+      .sort((a, b) => b.score - a.score);
+    const unpicked = annotated.filter((r) => !picked.has(r.so.soNum));
+
+    unpicked.sort((a, b) => {
+      const aHas = a.distToPicked != null;
+      const bHas = b.distToPicked != null;
+      if (aHas && bHas) return a.distToPicked - b.distToPicked; // nearer first
+      if (aHas) return -1; // geo'd rows beat un-geo'd
+      if (bHas) return 1;
+      return b.score - a.score; // both un-geo'd → by intrinsic score
+    });
+
+    return [...pickedRowsLocal, ...unpicked];
+  }, [pendingSOs, contacts, products, truckCapM3, zoneFilter, cN, picked]);
 
   const pickedRows = useMemo(
     () => ranked.filter((r) => picked.has(r.so.soNum)),
@@ -876,6 +926,33 @@ export default function DeliveryPlanningPage({ sh }) {
                         >
                           {r.hasGeo ? "มีพิกัด" : "ไม่มีพิกัด"}
                         </span>
+                        {r.distToPicked != null && !picked.has(r.so.soNum) && (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color:
+                                r.distToPicked <= PROXIMITY_RADIUS_KM
+                                  ? "var(--blue)"
+                                  : "var(--dim)",
+                              background:
+                                r.distToPicked <= PROXIMITY_RADIUS_KM
+                                  ? "var(--blue-bg)"
+                                  : "var(--bg)",
+                              padding: "1px 7px",
+                              borderRadius: 99,
+                              border:
+                                r.distToPicked <= PROXIMITY_RADIUS_KM
+                                  ? "1px solid var(--blue)"
+                                  : "1px solid var(--line)",
+                            }}
+                            title="ระยะถึง SO ที่เลือกใกล้สุด"
+                          >
+                            {r.distToPicked < 1
+                              ? `${(r.distToPicked * 1000).toFixed(0)} m`
+                              : `${r.distToPicked.toFixed(1)} km`}{" "}
+                            จากที่เลือก
+                          </span>
+                        )}
                         <span style={{ fontSize: 13, color: "var(--text)" }}>
                           {r.custName}
                         </span>
