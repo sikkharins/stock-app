@@ -14,6 +14,7 @@ import ExcelImport from "./ExcelImport.jsx";
 import { stockValueSeries, lowStockSeries, reservedSeries, newProductsSeries } from "../utils/productStats.ts";
 import BrandChipRow from "./ui/BrandChipRow.tsx";
 import ProductsTable from "./ProductsTable.tsx";
+import SlideOver from "./ui/SlideOver.tsx";
 
 export default function ProdPage({sh}){
   const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
@@ -374,8 +375,12 @@ export default function ProdPage({sh}){
 
       const dRes=reservedMap[pr.id]||0;
       const catObj=cats.find(c=>c.id===pr.categoryId);const subObj=catObj?(catObj.subs||[]).find(s=>s.id===pr.subcategoryId):null;
-      return<Modal title={pr.brand+" — "+pN(pr)} onClose={()=>setDetailPr(null)} wide>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+      return<SlideOver title={pr.brand+" — "+pN(pr)} onClose={()=>setDetailPr(null)} width={560} footer={ed?<>
+        <button onClick={()=>{setFormErrors([]);setForm({...pr,categoryId:String(pr.categoryId),subcategoryId:String(pr.subcategoryId),price:String(pr.price),cost:String(pr.cost),stock:String(pr.stock),minStock:String(pr.minStock)});oM("product");}} style={{padding:"7px 14px",borderRadius:7,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:500}}>แก้ไข</button>
+        <button onClick={()=>{setAdjPr(pr);setAdjForm({type:"adjust_in",qty:"",note:""});oM("adjust");}} style={{padding:"7px 14px",borderRadius:7,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.14)",color:"var(--orange)",cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:500}}>ปรับสต็อก</button>
+        {cd&&<button onClick={()=>setConfirmDel(pr)} style={{padding:"7px 14px",borderRadius:7,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:500}}>ลบ</button>}
+      </>:undefined}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:16}}>
           <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",textAlign:"center"}}>
             <div style={{fontSize:11,color:"var(--dim)",marginBottom:2}}>สต็อกปัจจุบัน</div>
             <div style={{fontSize:22,fontWeight:700,color:isLow?"var(--red)":"var(--green)"}}>{pr.stock}<span style={{fontSize:12,fontWeight:400,color:"var(--dim)"}}>{" "+pr.unit}</span></div>
@@ -401,11 +406,6 @@ export default function ProdPage({sh}){
           {pr.size&&<span style={{fontSize:11,background:"var(--blue-bg)",borderRadius:4,padding:"2px 8px",color:"var(--blue)",fontWeight:500}}>{pr.size}</span>}
           {pr.distributor&&<span style={{fontSize:11,color:"var(--dim)"}}>{pr.distributor}</span>}
         </div>
-        {ed&&<div style={{display:"flex",gap:8,marginBottom:16}}>
-          <button onClick={()=>{setDetailPr(null);setForm({...pr,categoryId:String(pr.categoryId),subcategoryId:String(pr.subcategoryId),price:String(pr.price),cost:String(pr.cost),stock:String(pr.stock),minStock:String(pr.minStock)});oM("product");}} style={{padding:"6px 16px",borderRadius:6,border:"1px solid var(--blue)",cursor:"pointer",background:"var(--blue-bg)",color:"var(--blue)",fontSize:12,fontFamily:"inherit"}}>แก้ไข</button>
-          <button onClick={()=>{setDetailPr(null);setAdjPr(pr);setAdjForm({type:"adjust_in",qty:"",note:""});oM("adjust");}} style={{padding:"6px 16px",borderRadius:6,border:"1px solid var(--orange)",cursor:"pointer",background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontSize:12,fontFamily:"inherit"}}>ปรับสต็อก</button>
-        </div>}
-
         {soList.length>0&&<>
           <div style={{fontWeight:600,fontSize:13,margin:"16px 0 8px",color:"var(--text)"}}>{"ประวัติการขาย ("+soList.length+" รายการ)"}</div>
           <div style={{overflowX:"auto",border:"1px solid var(--line)",borderRadius:8,marginBottom:16}}>
@@ -448,7 +448,7 @@ export default function ProdPage({sh}){
         </>}
 
         {soList.length===0&&movements.length===0&&<div style={{textAlign:"center",color:"var(--faint)",padding:"2rem"}}>ยังไม่มีประวัติ</div>}
-      </Modal>;
+      </SlideOver>;
     })()}
   </div>;
 }
