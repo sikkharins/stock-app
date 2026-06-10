@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import { fmt, toBE, todayStr } from "../utils/helpers.js";
 import Badge from "./ui/Badge.jsx";
 import StatCard from "./ui/StatCard.jsx";
+import SlideOver from "./ui/SlideOver.tsx";
+import { useMediaQuery } from "../utils/useMediaQuery.ts";
 
 const QT_STATUS_LABEL = {draft:"ร่าง",sent:"ส่งแล้ว",approved:"อนุมัติ",converted:"แปลง SO",cancelled:"ยกเลิก",expired:"หมดอายุ"};
 const isQTExpired = qt => !["converted","cancelled"].includes(qt.status) && !!qt.validUntil && qt.validUntil < todayStr();
@@ -40,6 +42,20 @@ function getLast6Months() {
 export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], setContacts, canEdit = true, onClose }) {
   const [tab, setTab] = useState("so");
   const [confirmAct, setConfirmAct] = useState(null); // {title, msg, onOk}
+
+  const isDesktop = useMediaQuery("(min-width: 900px)");
+
+  // Mobile back-button: SlideOver path registers internally on its own; Modal
+  // path needs the same hook so mobile back closes the panel instead of
+  // falling through to setTab("dashboard"). Stack pattern: SlideOver, if
+  // mounted, will push over us and restore on unmount.
+  useEffect(() => {
+    const prev = window.__slideoverClose;
+    window.__slideoverClose = onClose;
+    return () => {
+      window.__slideoverClose = prev;
+    };
+  }, [onClose]);
 
   const custSales  = [...sales].filter(so => so.customerId === customer.id).reverse();
   const custQuotes = [...quotes].filter(qt => qt.customerId === customer.id).reverse();
@@ -91,8 +107,9 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
 
   const thTd = (label,i) => <th key={i} style={{padding:"7px 8px",textAlign:"left",fontWeight:500,color:"var(--dim)",fontSize:12}}>{label}</th>;
 
-  return (
-    <Modal title={`${customer.nameT||customer.name} — ประวัติลูกค้า`} onClose={onClose} wide>
+  const titleNode = `${customer.nameT||customer.name} — ประวัติลูกค้า`;
+  const body = (
+    <>
 
       {/* Header info */}
       <div style={{background:"var(--bg)",borderRadius:8,padding:"14px 16px",marginBottom:16}}>
@@ -406,6 +423,12 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
           <MBtns onCancel={()=>setConfirmAct(null)} onSave={()=>{const f=confirmAct.onOk;setConfirmAct(null);if(typeof f==="function")f();}} saveLabel="ยืนยันลบ"/>
         </Modal>
       )}
-    </Modal>
+    </>
+  );
+
+  return isDesktop ? (
+    <SlideOver title={titleNode} onClose={onClose}>{body}</SlideOver>
+  ) : (
+    <Modal title={titleNode} onClose={onClose} wide>{body}</Modal>
   );
 }
