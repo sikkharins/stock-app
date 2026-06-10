@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import StatCard from "./StatCard";
+// Sparkline imported via StatCard internals — no direct import needed.
 
 describe("StatCard", () => {
   test("renders label and value", () => {
@@ -29,5 +30,28 @@ describe("StatCard", () => {
     // StatCard is dumb — it doesn't parse currency. Caller formats with fmt().
     render(<StatCard label="ยอดค้าง" value="฿1,234.50" />);
     expect(screen.getByText("฿1,234.50")).toBeInTheDocument();
+  });
+
+  test("renders delta chip when provided", () => {
+    render(
+      <StatCard
+        label="มูลค่าสต็อก"
+        value="฿1,000"
+        delta={{ text: "+฿120K", positive: true }}
+      />
+    );
+    expect(screen.getByText("+฿120K")).toBeInTheDocument();
+  });
+
+  test("renders sparkline svg when points provided", () => {
+    const { container } = render(
+      <StatCard label="x" value="1" sparkline={[1, 2, 3, 4]} />
+    );
+    expect(container.querySelector("polyline")).toBeTruthy();
+  });
+
+  test("no sparkline rendered when prop omitted", () => {
+    const { container } = render(<StatCard label="x" value="1" />);
+    expect(container.querySelector("polyline")).toBeFalsy();
   });
 });
