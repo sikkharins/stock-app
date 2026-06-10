@@ -85,7 +85,7 @@ export default function ProdPage({sh}){
           <div style={{fontFamily:"var(--mono,monospace)",fontSize:11,color:"var(--dim)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pr.code}</div>
         </div>
         <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
-          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:999,background:"var(--hover)",color:"var(--dim)"}}>{pr.brand}</span>
+          <span onClick={e=>{e.stopPropagation();setFBrand(fBrand===pr.brand?"":pr.brand);}} title={fBrand===pr.brand?"คลิกเพื่อล้างตัวกรอง":"กรองยี่ห้อ "+pr.brand} style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:999,background:fBrand===pr.brand?"var(--blue-bg)":"var(--hover)",color:fBrand===pr.brand?"var(--blue)":"var(--dim)",cursor:"pointer"}}>{pr.brand}</span>
           <span title={ss.label} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,padding:"2px 7px",borderRadius:999,background:ss.bg,color:ss.color,fontWeight:700}}>
             <span style={{width:6,height:6,borderRadius:"50%",background:ss.color,display:"inline-block"}}/>
             {ss.icon}
@@ -96,7 +96,7 @@ export default function ProdPage({sh}){
         {pN(pr)}
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,background:"var(--hover)",borderRadius:4,padding:"2px 8px",color:"var(--dim)"}}>{getCN(pr.categoryId)}</span>
+        <span onClick={e=>{e.stopPropagation();const cidStr=String(pr.categoryId);setFCat(fCat===cidStr?"":cidStr);}} title={fCat===String(pr.categoryId)?"คลิกเพื่อล้างตัวกรอง":"กรองหมวด "+getCN(pr.categoryId)} style={{fontSize:11,background:fCat===String(pr.categoryId)?"var(--blue-bg)":"var(--hover)",borderRadius:4,padding:"2px 8px",color:fCat===String(pr.categoryId)?"var(--blue)":"var(--dim)",cursor:"pointer",fontWeight:fCat===String(pr.categoryId)?600:400}}>{getCN(pr.categoryId)}</span>
         {pr.size&&<span style={{fontSize:11,background:"var(--blue-bg)",borderRadius:4,padding:"2px 8px",color:"var(--blue)",fontWeight:500}}>{pr.size}</span>}
         {pr.discontinued&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:999,background:"rgba(255,149,0,0.18)",color:"var(--orange)",fontWeight:600,border:"1px solid var(--orange)"}}>เลิกจำหน่าย</span>}
         {res>0&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:999,background:"rgba(0,122,255,0.12)",color:"var(--blue)",fontWeight:600}}>{"จอง "+res}</span>}
