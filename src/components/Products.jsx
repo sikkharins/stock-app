@@ -13,6 +13,7 @@ import { buildBrandSubData } from "./ui/StockValueDonut.jsx";
 import ExcelImport from "./ExcelImport.jsx";
 import { stockValueSeries, lowStockSeries, reservedSeries, newProductsSeries } from "../utils/productStats.ts";
 import BrandChipRow from "./ui/BrandChipRow.tsx";
+import ProductsTable from "./ProductsTable.tsx";
 
 export default function ProdPage({sh}){
   const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
@@ -61,15 +62,51 @@ export default function ProdPage({sh}){
   const sups=contacts.filter(c=>c.type==="supplier");
   const hasFilter=fBrand||fCat||fStat||search;
   const renderCard=(pr)=>{
-    const ss=getSS(pr.id,sales);const isLow=pr.minStock>0&&pr.stock<=pr.minStock;const pct=pr.minStock>0?Math.min(100,Math.round(pr.stock/pr.minStock*100)):100;const res=reservedMap[pr.id]||0;const isSel=sel.has(pr.id);
-    return <div key={pr.id} onClick={()=>bulkMode?toggleSel(pr.id):setDetailPr(pr)} style={{background:isSel&&bulkMode?"var(--blue-bg)":"var(--panel)",border:"1px solid "+(isSel&&bulkMode?"var(--blue)":isLow?"var(--orange)":"var(--line)"),borderRadius:12,padding:"14px 16px",display:"flex",flexDirection:"column",gap:10,cursor:"pointer",transition:"background 0.15s,border-color 0.15s"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div style={{display:"flex",alignItems:"flex-start",gap:8}}>{bulkMode&&ed&&<input type="checkbox" checked={isSel} onChange={()=>toggleSel(pr.id)} onClick={e=>e.stopPropagation()} style={{width:16,height:16,accentColor:"var(--blue)",cursor:"pointer",marginTop:2,flexShrink:0}}/>}<div><div style={{fontSize:11,color:"var(--dim)"}}>{pr.code}</div><div style={{fontWeight:600,fontSize:14,textDecoration:pr.discontinued?"line-through":"none",color:pr.discontinued?"var(--dim)":"var(--text)"}}>{pN(pr)}</div></div></div><div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>{pr.discontinued&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(255,149,0,0.18)",color:"var(--orange)",fontWeight:600,border:"1px solid var(--orange)"}}>{"เลิกจำหน่าย"}</span>}{isLow&&!pr.discontinued&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontWeight:600}}>{"สต็อกต่ำ"}</span>}{res>0&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(0,122,255,0.12)",color:"var(--blue)",fontWeight:600}}>{"จอง "+res}</span>}</div></div>
-      <div style={{display:"flex",gap:6}}><span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,fontWeight:600}}>{ss.icon+" "+ss.label}</span><span style={{fontSize:10,color:"var(--faint)"}}>{ss.days!=null?ss.days+" วัน":"ยังไม่เคยขาย"}</span></div>
-      <div style={{display:"flex",gap:6}}><span style={{fontSize:11,background:"var(--hover)",borderRadius:4,padding:"2px 8px",color:"var(--dim)"}}>{getCN(pr.categoryId)}</span>{pr.size&&<span style={{fontSize:11,background:"var(--blue-bg)",borderRadius:4,padding:"2px 8px",color:"var(--blue)",fontWeight:500}}>{pr.size}</span>}</div>
-      <div><div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--dim)"}}>สต็อก{(pr.defectiveStock||0)>0?<span style={{color:"var(--orange)",fontSize:10,marginLeft:4}}>{"(ชำรุด "+pr.defectiveStock+")"}</span>:""}{res>0?<span style={{color:"var(--blue)",fontSize:10,marginLeft:4}}>{"(พร้อมขาย "+(pr.stock-res)+")"}</span>:""}</span><span><strong style={{color:isLow?"var(--red)":"var(--green)",fontSize:15}}>{pr.stock}</strong><span style={{color:"var(--dim)"}}>{" / "+pr.minStock+" "+pr.unit}</span></span></div><div style={{background:"var(--hover)",borderRadius:4,height:6}}><div style={{background:isLow?"var(--red)":"var(--green)",borderRadius:4,height:6,width:pct+"%"}}/></div></div>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}><div><span style={{color:"var(--dim)",fontSize:11}}>ราคาขาย </span><strong style={{color:"var(--blue)"}}>{"฿"+fmt(pr.price)}</strong></div>{pr.code&&<div><span style={{color:"var(--dim)",fontSize:11}}>รหัส </span><strong>{pr.code}</strong></div>}</div>
-      {pr.distributor&&<div style={{fontSize:11,color:"var(--dim)"}}>{pr.distributor}</div>}
-      {ed&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,paddingTop:4,borderTop:"0.5px solid var(--line)"}}>
+    const ss=getSS(pr.id,sales);
+    const isLow=pr.minStock>0&&pr.stock<=pr.minStock;
+    const pct=pr.minStock>0?Math.min(100,Math.round(pr.stock/pr.minStock*100)):100;
+    const res=reservedMap[pr.id]||0;
+    const isSel=sel.has(pr.id);
+    return <div key={pr.id} onClick={()=>bulkMode?toggleSel(pr.id):setDetailPr(pr)} onMouseEnter={e=>{const el=e.currentTarget;el.style.transform="translateY(-2px)";el.style.boxShadow="var(--shadow-card-hi)";const a=el.querySelector("[data-card-actions]");if(a)a.style.opacity="1";}} onMouseLeave={e=>{const el=e.currentTarget;el.style.transform="translateY(0)";el.style.boxShadow="var(--shadow-card)";const a=el.querySelector("[data-card-actions]");if(a)a.style.opacity="0";}} style={{background:isSel&&bulkMode?"var(--blue-bg)":"var(--panel)",border:"1px solid "+(isSel&&bulkMode?"var(--blue)":isLow?"var(--orange)":"var(--line)"),borderRadius:"var(--radius-card,14px)",padding:"16px 18px",display:"flex",flexDirection:"column",gap:10,cursor:"pointer",boxShadow:"var(--shadow-card)",transition:"transform 120ms var(--ease-out,ease-out),box-shadow 120ms var(--ease-out,ease-out),background 120ms var(--ease-out,ease-out)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}>
+          {bulkMode&&ed&&<input type="checkbox" checked={isSel} onChange={()=>toggleSel(pr.id)} onClick={e=>e.stopPropagation()} style={{width:16,height:16,accentColor:"var(--blue)",cursor:"pointer",flexShrink:0}}/>}
+          <div style={{fontFamily:"var(--mono,monospace)",fontSize:11,color:"var(--dim)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pr.code}</div>
+        </div>
+        <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
+          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:999,background:"var(--hover)",color:"var(--dim)"}}>{pr.brand}</span>
+          <span title={ss.label} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,padding:"2px 7px",borderRadius:999,background:ss.bg,color:ss.color,fontWeight:700}}>
+            <span style={{width:6,height:6,borderRadius:"50%",background:ss.color,display:"inline-block"}}/>
+            {ss.icon}
+          </span>
+        </div>
+      </div>
+      <div style={{fontWeight:600,fontSize:15,lineHeight:1.3,textDecoration:pr.discontinued?"line-through":"none",color:pr.discontinued?"var(--dim)":"var(--text)",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",minHeight:"2.6em"}}>
+        {pN(pr)}
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,background:"var(--hover)",borderRadius:4,padding:"2px 8px",color:"var(--dim)"}}>{getCN(pr.categoryId)}</span>
+        {pr.size&&<span style={{fontSize:11,background:"var(--blue-bg)",borderRadius:4,padding:"2px 8px",color:"var(--blue)",fontWeight:500}}>{pr.size}</span>}
+        {pr.discontinued&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:999,background:"rgba(255,149,0,0.18)",color:"var(--orange)",fontWeight:600,border:"1px solid var(--orange)"}}>เลิกจำหน่าย</span>}
+        {res>0&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:999,background:"rgba(0,122,255,0.12)",color:"var(--blue)",fontWeight:600}}>{"จอง "+res}</span>}
+      </div>
+      <div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
+          <span style={{color:"var(--dim)"}}>สต็อก{(pr.defectiveStock||0)>0?<span style={{color:"var(--orange)",fontSize:10,marginLeft:4}}>{"(ชำรุด "+pr.defectiveStock+")"}</span>:""}{res>0?<span style={{color:"var(--blue)",fontSize:10,marginLeft:4}}>{"(พร้อม "+(pr.stock-res)+")"}</span>:""}</span>
+          <span><strong className="num" style={{color:isLow?"var(--red)":"var(--green)",fontSize:16}}>{pr.stock}</strong><span style={{color:"var(--dim)"}}>{" / "+pr.minStock+" "+pr.unit}</span></span>
+        </div>
+        <div style={{background:"var(--hover)",borderRadius:4,height:8}}>
+          <div style={{background:isLow?"var(--red)":"var(--green)",borderRadius:4,height:8,width:pct+"%",transition:"width 200ms var(--ease-out,ease-out)"}}/>
+        </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+        <div>
+          <div style={{fontSize:10,color:"var(--dim)",textTransform:"uppercase",letterSpacing:"0.05em"}}>ราคาขาย</div>
+          <strong className="num" style={{color:"var(--text)",fontSize:18,fontWeight:700}}>{"฿"+fmt(pr.price)}</strong>
+        </div>
+        {ss.days!=null&&<div style={{fontSize:11,color:"var(--faint)"}}>ขายล่าสุด {ss.days}d</div>}
+      </div>
+      {ed&&<div data-card-actions onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,paddingTop:6,borderTop:"0.5px solid var(--line)",opacity:0,transition:"opacity 120ms var(--ease-out,ease-out)"}}>
         <button onClick={()=>{setFormErrors([]);setForm({...pr,categoryId:String(pr.categoryId),subcategoryId:String(pr.subcategoryId),price:String(pr.price),cost:String(pr.cost),stock:String(pr.stock),minStock:String(pr.minStock)});oM("product");}} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--blue)",cursor:"pointer",background:"var(--blue-bg)",color:"var(--blue)",fontFamily:"inherit"}}>แก้ไข</button>
         <button onClick={()=>{setAdjPr(pr);setAdjForm({type:"adjust_in",qty:"",note:""});oM("adjust");}} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--orange)",cursor:"pointer",background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontFamily:"inherit"}}>สต็อก</button>
         {cd&&<button onClick={()=>setConfirmDel(pr)} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--red)",cursor:"pointer",background:"rgba(255,59,48,0.12)",color:"var(--red)",fontFamily:"inherit"}}>ลบ</button>}
@@ -146,7 +183,29 @@ export default function ProdPage({sh}){
     {sorted.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}><div style={{fontSize:48,marginBottom:8}}>{hasFilter?"":""}
 </div><div style={{color:"var(--dim)",fontSize:14,marginBottom:4}}>{hasFilter?"ไม่พบสินค้าที่ตรงกับเงื่อนไข":"ยังไม่มีสินค้า"}</div>{hasFilter&&<div style={{color:"var(--faint)",fontSize:12}}>ลองเปลี่ยนตัวกรอง หรือล้างการค้นหา</div>}{!hasFilter&&ed&&<button onClick={()=>{setFormErrors([]);setForm(emptyF);oM("product");}} style={{marginTop:12,padding:"8px 20px",borderRadius:8,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>+ เพิ่มสินค้าแรก</button>}</div>}
     <div style={{paddingBottom:bulkMode&&sel.size>0?70:0}}>
-    <div className="product-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>{visible.map(pr=>renderCard(pr))}</div>
+    {view==="card"?(
+      <div className="product-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:14}}>{visible.map(pr=>renderCard(pr))}</div>
+    ):(
+      <ProductsTable
+        products={visible}
+        sales={sales}
+        pN={pN}
+        getCN={getCN}
+        onRowClick={pr=>setDetailPr(pr)}
+        onEdit={pr=>{setFormErrors([]);setForm({...pr,categoryId:String(pr.categoryId),subcategoryId:String(pr.subcategoryId),price:String(pr.price),cost:String(pr.cost),stock:String(pr.stock),minStock:String(pr.minStock)});oM("product");}}
+        onAdjust={pr=>{setAdjPr(pr);setAdjForm({type:"adjust_in",qty:"",note:""});oM("adjust");}}
+        onDelete={pr=>setConfirmDel(pr)}
+        ed={ed}
+        cd={cd}
+        bulkMode={bulkMode}
+        selected={sel}
+        onToggleSelect={toggleSel}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        density={density}
+      />
+    )}
+    <style>{`@media (hover: none) { [data-card-actions] { opacity: 1 !important; } }`}</style>
     {hasMore&&<div style={{textAlign:"center",padding:"20px 0"}}><div style={{fontSize:12,color:"var(--dim)",marginBottom:8}}>{"แสดง "+visible.length+" / "+sorted.length+" รายการ"}</div><button onClick={()=>setShowCount(c=>c+PAGE)} style={{padding:"8px 24px",borderRadius:8,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontSize:13,fontWeight:500,fontFamily:"inherit"}}>{"โหลดเพิ่ม "+Math.min(PAGE,sorted.length-showCount)+" รายการ"}</button></div>}
     </div>
     {bulkMode&&sel.size>0&&<div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,background:"var(--panel)",borderTop:"1.5px solid var(--line)",padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",boxShadow:"0 -4px 20px rgba(0,0,0,0.15)"}}>
