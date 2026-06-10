@@ -27,6 +27,11 @@ export default function ProdPage({sh}){
   const[density,setDensity]=useState(()=>localStorage.getItem("productTableDensity")||"comfortable");
   useEffect(()=>{localStorage.setItem("productTableDensity",density);},[density]);
   useEffect(()=>{localStorage.setItem("productSort",sortBy);},[sortBy]);
+  // Derived data needed by filter/sort (reservedMap, salesByProd) must be
+  // declared BEFORE `filtered`/`sorted` to avoid TDZ ReferenceError —
+  // useMemo factories execute in source order during render.
+  const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
+  const salesByProd=useMemo(()=>salesCountByProduct(sales,new Date()),[sales]);
   const filtered=useMemo(()=>baseP.filter(pr=>{
     if(fBrand&&pr.brand!==fBrand)return false;
     if(fCat&&pr.categoryId!==+fCat)return false;
@@ -50,10 +55,8 @@ export default function ProdPage({sh}){
   const toggleSel=id=>setSel(prev=>{const n=new Set(prev);if(n.has(id))n.delete(id);else n.add(id);return n;});
   const selAll=()=>setSel(new Set(sorted.map(p=>p.id)));const selNone=()=>setSel(new Set());
   const selProds=useMemo(()=>products.filter(p=>sel.has(p.id)),[products,sel]);
-  const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
   const stats=useMemo(()=>{const total=baseP.length;const stockVal=baseP.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);const low=baseP.filter(p=>p.minStock>0&&p.stock<=p.minStock).length;const totalRes=Object.values(reservedMap).reduce((s,v)=>s+v,0);return{total,stockVal,low,totalRes};},[baseP,reservedMap]);
   const brandCounts=useMemo(()=>{const m={};baseP.forEach(p=>{m[p.brand]=(m[p.brand]||0)+1;});return m;},[baseP]);
-  const salesByProd=useMemo(()=>salesCountByProduct(sales,new Date()),[sales]);
   const series=useMemo(()=>{const ref=new Date();return{total:newProductsSeries(logs||[],30,ref),stockVal:stockValueSeries(baseP,logs||[],30,ref),low:lowStockSeries(baseP,logs||[],30,ref),res:reservedSeries(sales,30,ref)};},[baseP,logs,sales]);
   const deltas=useMemo(()=>{const sumTail=(arr,n)=>arr.slice(-n).reduce((s,v)=>s+v,0);const newCnt=sumTail(series.total,7);const stockNow=series.stockVal[series.stockVal.length-1]||0;const stock7=series.stockVal[series.stockVal.length-8]??stockNow;const stockDelta=stockNow-stock7;return{total:newCnt>0?{text:"+"+newCnt+" สัปดาห์นี้",positive:true}:null,stockVal:stockDelta!==0?{text:(stockDelta>0?"+":"")+"฿"+fmt(Math.round(stockDelta))+" 7 วัน",positive:stockDelta>0}:null};},[series]);
   const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");
@@ -109,7 +112,7 @@ export default function ProdPage({sh}){
         <div style={{background:"var(--hover)",borderRadius:4,height:8}}>
           <div style={{background:isLow?"var(--red)":"var(--green)",borderRadius:4,height:8,width:pct+"%",transition:"width 200ms var(--ease-out,ease-out)"}}/>
         </div>
-        {(()=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const days=daysOfStock(pr.stock,sc.d30);if(days===null||days===Infinity||days>=60)return null;const urgent=days<14;return <div style={{fontSize:11,color:urgent?"var(--red)":"var(--orange)",fontWeight:600,marginTop:5,display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:10}}>{urgent?"⚠":"⏱"}</span>หมดใน ~{Math.max(1,Math.round(days))} วัน</div>;})()}
+        {(()=>{if(pr.stock<=0)return null;const sc=salesByProd[pr.id]||{d7:0,d30:0};const days=daysOfStock(pr.stock,sc.d30);if(days===null||days===Infinity||days>=60)return null;const urgent=days<14;return <div style={{fontSize:11,color:urgent?"var(--red)":"var(--orange)",fontWeight:600,marginTop:5,display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:10}}>{urgent?"⚠":"⏱"}</span>หมดใน ~{Math.max(1,Math.round(days))} วัน</div>;})()}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
         <div>
