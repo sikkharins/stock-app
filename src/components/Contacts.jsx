@@ -12,6 +12,11 @@ import StatCard from "./ui/StatCard.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import SupplierProfile from "./SupplierProfile.jsx";
 import ContactExcelImport from "./ContactExcelImport.jsx";
+import {
+  salesByCustomerId,
+  outstandingDetail,
+  arStatus,
+} from "../utils/customerStats.ts";
 
 const STAFF_TABS = ["dashboard","products","stock_log","purchase","sales","finance","reports"];
 
@@ -84,6 +89,57 @@ export default function ContactPage({sh,ft}){
   };
   const del=async id=>{const c=(contacts||[]).find(x=>x.id===id);if(!c)return;const staffWithAuth=(c.type==="supplier"&&Array.isArray(c.staff))?c.staff.filter(s=>s.authId):[];const extraWarn=staffWithAuth.length>0?"\n\nจะลบบัญชีผู้ใช้ที่ผูกอยู่ "+staffWithAuth.length+" คนด้วย":"";if(!confirm("ต้องการลบ "+(cN(c)||c.name||"รายการนี้")+" ?"+extraWarn))return;for(const s of staffWithAuth){try{await deleteUser(s.authId);}catch(e){console.warn("Failed to delete supplier auth:",s.username,e?.message);}}setContacts(p=>p.filter(x=>x.id!==id));};
 
+  const todayDate=useMemo(()=>new Date(),[]);
+  const salesByCust=useMemo(()=>salesByCustomerId(sales||[]),[sales]);
+
+  const custStats=useMemo(()=>{
+    if(!isC)return null;
+    const custs=(contacts||[]).filter(c=>c&&c.type==="customer"&&(!sf||c.salesPerson===cu.salesName));
+    const cutoff30=new Date(todayDate.getTime()-30*86_400_000).toISOString().slice(0,10);
+    const cutoff60=new Date(todayDate.getTime()-60*86_400_000).toISOString().slice(0,10);
+    let newCount=0,newCountPrev=0;
+    const thirtyMs=30*86_400_000;
+    for(const c of custs){
+      if(typeof c.id!=="number")continue;
+      const age=todayDate.getTime()-c.id;
+      if(age<thirtyMs)newCount++;
+      else if(age<2*thirtyMs)newCountPrev++;
+    }
+    const countDelta=newCountPrev>0?Math.round(((newCount-newCountPrev)/newCountPrev)*100):0;
+    let revLast30=0,revPrev30=0,orderCount=0;
+    const custIdSet=new Set(custs.map(c=>c.id));
+    for(const so of sales||[]){
+      if(so==null||!so.date||!custIdSet.has(so.customerId))continue;
+      const net=(so.items||[]).reduce((s,i)=>s+(i.qty||0)*(i.price||0),0)-(so.discountAmt||0);
+      if(so.date>=cutoff30){revLast30+=net;orderCount++;}
+      else if(so.date>=cutoff60)revPrev30+=net;
+    }
+    const revDelta=revPrev30>0?Math.round(((revLast30-revPrev30)/revPrev30)*100):0;
+    let arTotal=0,arCount=0,overdueCount=0,dormantCount=0,dormantCountPrior=0;
+    const sevenAgo=new Date(todayDate.getTime()-7*86_400_000);
+    for(const c of custs){
+      const mine=salesByCust[c.id]||[];
+      const od=outstandingDetail(c,mine,payments||[],todayDate);
+      arTotal+=od.total;arCount+=od.count;overdueCount+=od.overdueCount;
+      if(arStatus(c,mine,payments||[],todayDate)==="dormant")dormantCount++;
+      if(arStatus(c,mine,payments||[],sevenAgo)==="dormant")dormantCountPrior++;
+    }
+    const dormantDelta=dormantCount-dormantCountPrior;
+    const revSeries=new Array(30).fill(0);
+    const cumCustSeries=new Array(30).fill(0);
+    for(let i=0;i<30;i++){
+      const day=new Date(todayDate.getTime()-(29-i)*86_400_000).toISOString().slice(0,10);
+      for(const so of sales||[]){
+        if(!so||so.date!==day||!custIdSet.has(so.customerId))continue;
+        const net=(so.items||[]).reduce((s,it)=>s+(it.qty||0)*(it.price||0),0)-(so.discountAmt||0);
+        revSeries[i]+=net;
+      }
+      const dayMs=new Date(day+"T23:59:59Z").getTime();
+      cumCustSeries[i]=custs.filter(c=>typeof c.id==="number"&&c.id<=dayMs).length;
+    }
+    return{total:custs.length,newCount,countDelta,revLast30,orderCount,revDelta,arTotal,arCount,overdueCount,dormantCount,dormantDelta,revSeries,cumCustSeries};
+  },[isC,contacts,sales,payments,salesByCust,sf,cu,todayDate]);
+
   const supStats=useMemo(()=>{
     if(isC)return null;
     const sups=filtered;
@@ -107,6 +163,45 @@ export default function ContactPage({sh,ft}){
       <StatCard label="PO ทั้งหมด" value={supStats.totalPO} sub={"฿"+fmt(supStats.totalVal)}/>
       <StatCard label="PO รอดำเนินการ" value={supStats.pendingPOs} color={supStats.pendingPOs>0?"var(--orange)":"var(--green)"} accentBg={supStats.pendingPOs>0?"rgba(255,149,0,0.14)":"rgba(52,199,89,0.12)"}/>
       <StatCard label="Staff ทั้งหมด" value={supStats.totalStaff} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>
+    </div>}
+    {isC&&custStats&&<div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+      <StatCard
+        label="ลูกค้าทั้งหมด"
+        value={null}
+        animatedValue={custStats.total}
+        format={n=>Math.round(n).toLocaleString()}
+        sub={"+"+custStats.newCount+" ใหม่ 30 วัน"}
+        delta={custStats.countDelta!==0?{text:(custStats.countDelta>0?"+":"")+custStats.countDelta+"%",positive:custStats.countDelta>=0}:undefined}
+        sparkline={custStats.cumCustSeries}
+        color="var(--blue)"
+        accentBg="rgba(0,122,255,0.12)"
+      />
+      <StatCard
+        label="ยอดขาย 30 วัน"
+        value={null}
+        animatedValue={custStats.revLast30}
+        format={n=>"฿"+fmt(Math.round(n))}
+        sub={"จาก "+custStats.orderCount+" orders"}
+        delta={custStats.revDelta!==0?{text:(custStats.revDelta>0?"+":"")+custStats.revDelta+"%",positive:custStats.revDelta>=0}:undefined}
+        sparkline={custStats.revSeries}
+        color="var(--green)"
+        accentBg="rgba(52,199,89,0.12)"
+      />
+      <StatCard
+        label="AR ค้าง"
+        value={"฿"+fmt(Math.round(custStats.arTotal))}
+        sub={custStats.arCount+" ใบ · "+custStats.overdueCount+" เกินกำหนด"}
+        color={custStats.overdueCount>0?"var(--red)":"var(--orange)"}
+        accentBg={custStats.overdueCount>0?"rgba(255,59,48,0.12)":"rgba(255,149,0,0.14)"}
+      />
+      <StatCard
+        label="เสี่ยงหาย"
+        value={custStats.dormantCount}
+        sub="ไม่ซื้อเกิน 60 วัน"
+        delta={custStats.dormantDelta!==0?{text:(custStats.dormantDelta>0?"+":"")+custStats.dormantDelta+" สัปดาห์นี้",positive:custStats.dormantDelta<=0}:undefined}
+        color={custStats.dormantCount>0?"var(--red)":"var(--green)"}
+        accentBg={custStats.dormantCount>0?"rgba(255,59,48,0.12)":"rgba(52,199,89,0.12)"}
+      />
     </div>}
     {isC&&<div style={{display:"flex",gap:6,marginBottom:12}}>
       {[{k:"all",label:"ทั้งหมด",icon:""},{k:"regular",label:"ประจำ",icon:""},{k:"walkin",label:"หน้าร้าน",icon:""}].map(g=><button key={g.k} onClick={()=>setGroupFilter(g.k)} style={{padding:"6px 14px",borderRadius:20,border:groupFilter===g.k?"2px solid var(--blue)":"1px solid var(--line)",background:groupFilter===g.k?"rgba(0,122,255,0.1)":"var(--bg)",color:groupFilter===g.k?"var(--blue)":"var(--dim)",fontSize:12,fontWeight:groupFilter===g.k?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>{g.icon&&<span>{g.icon}</span>}{g.label}<span style={{fontSize:11,opacity:0.7,marginLeft:2}}>({groupCounts[g.k]||0})</span></button>)}
