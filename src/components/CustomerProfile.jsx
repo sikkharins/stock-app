@@ -130,25 +130,28 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
           {customer.address&&<div style={{gridColumn:"1/-1"}}>{customer.address}</div>}
         </div>
         {(customer.vatReps||[]).length>0&&(
-          <div style={{marginTop:10,background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:6,padding:"8px 10px",fontSize:12}}>
-            <div style={{color:"var(--blue)",fontWeight:600,marginBottom:6}}>{"ตัวแทน VAT ("+(customer.vatReps.length)+" คน)"}</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {customer.vatReps.map(r=><div key={r.id} style={{background:"var(--panel)",borderRadius:6,padding:"5px 9px",border:"1px solid var(--line)"}}>
-                <div style={{fontWeight:500}}>{r.name}</div>
-                <div style={{color:"var(--faint)",fontSize:11}}>{r.idCard}</div>
-              </div>)}
+          <details style={{marginTop:10}}>
+            <summary style={{cursor:"pointer",color:"var(--blue)",fontWeight:600,fontSize:12,background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:6,padding:"6px 10px",listStyle:"none"}}>
+              VAT {customer.vatReps.length} คน — ดูรายชื่อ ▾
+            </summary>
+            <div style={{marginTop:6,background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:6,padding:"8px 10px",fontSize:12}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {customer.vatReps.map(r=><div key={r.id} style={{background:"var(--panel)",borderRadius:6,padding:"5px 9px",border:"1px solid var(--line)"}}>
+                  <div style={{fontWeight:500}}>{r.name}</div>
+                  <div style={{color:"var(--faint)",fontSize:11}}>{r.idCard}</div>
+                </div>)}
+              </div>
             </div>
-          </div>
+          </details>
         )}
       </div>
 
-      {/* Stat cards */}
-      <div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:16}}>
-        <StatCard label="ยอดซื้อสะสม"    value={"฿"+fmt(totalRevenue)} color="var(--green)"/>
-        <StatCard label="จำนวนใบขาย"     value={custSales.length}/>
-        <StatCard label="ค้างชำระ"        value={"฿"+fmt(outstanding)} color={outstanding>0?"var(--red)":"var(--green)"}/>
-        <StatCard label="ใบเสนอราคา"     value={custQuotes.length}/>
-        <StatCard label="รางวัลคงเหลือ"   value={(customer.savedRewards||[]).length} color={(customer.savedRewards||[]).length>0?"var(--purple)":"var(--dim)"}/>
+      {/* Stat cards — 2x2 grid for SlideOver fit; auto-flows wider on Modal mobile-full */}
+      <div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:16}}>
+        <StatCard label="ซื้อรวม" value={"฿"+fmt(totalRevenue)} color="var(--text)"/>
+        <StatCard label="รอเก็บ" value={"฿"+fmt(outstanding)} color={outstanding>0?"var(--orange)":"var(--green)"} accentBg={outstanding>0?"rgba(255,149,0,0.14)":"rgba(52,199,89,0.12)"}/>
+        <StatCard label="เฉลี่ย/ใบ" value={"฿"+fmt(Math.round(avgPerSO))} sub={custSales.length+" orders"}/>
+        <StatCard label="ซื้อล่าสุด" value={lastPurchase?toBE(lastPurchase):"—"} sub={lastPurchase?"":"ยังไม่มีคำสั่งซื้อ"}/>
       </div>
 
       {/* Sub-tabs */}
@@ -166,7 +169,7 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
           ?<div style={{textAlign:"center",color:"var(--faint)",padding:"2rem",fontSize:13}}>ยังไม่มีใบขาย</div>
           :<div style={{overflowX:"auto"}}>
             <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
-              <thead><tr style={{borderBottom:"1px solid var(--line)",background:"var(--bg)"}}>{["SO No.","วันที่","สถานะ","การชำระ","ยอด","ตัวแทน VAT"].map(thTd)}</tr></thead>
+              <thead><tr style={{borderBottom:"1px solid var(--line)",background:"var(--bg)"}}>{["SO No.","วันที่","สถานะ","ยอด"].map(thTd)}</tr></thead>
               <tbody>{custSales.map(so=>{
                 const net=soNet(so);
                 const ost=so.status==="completed"?Math.max(0,net-getPaid(so.soNum)):0;
@@ -174,15 +177,12 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
                   <td style={{padding:"7px 8px",fontWeight:500}}>{so.soNum}</td>
                   <td style={{padding:"7px 8px",color:"var(--dim)"}}>{toBE(so.date)}</td>
                   <td style={{padding:"7px 8px"}}><SOBadge status={so.status}/></td>
-                  <td style={{padding:"7px 8px",color:"var(--dim)",fontSize:12}}>{so.payType==="cash"?"เงินสด":"เครดิต "+(so.creditDays||0)+" วัน"}</td>
                   <td style={{padding:"7px 8px",fontWeight:500}}>{"฿"+fmt(net)}</td>
-                  <td style={{padding:"7px 8px"}}>{so.vatRepName?<span style={{fontSize:11,background:"var(--blue-bg)",color:"var(--blue)",borderRadius:4,padding:"2px 8px"}}>{so.vatRepName}</span>:<span style={{color:"var(--faint)"}}>—</span>}</td>
                 </tr>;
               })}</tbody>
               <tfoot><tr style={{borderTop:"2px solid var(--line)",background:"var(--bg)"}}>
-                <td colSpan={4} style={{padding:"7px 8px",fontWeight:600,fontSize:13}}>รวมทั้งหมด</td>
+                <td colSpan={3} style={{padding:"7px 8px",fontWeight:600,fontSize:13}}>รวมทั้งหมด</td>
                 <td style={{padding:"7px 8px",fontWeight:700,fontSize:14,color:"var(--green)"}}>{"฿"+fmt(totalRevenue)}</td>
-                <td/>
               </tr></tfoot>
             </table>
           </div>
@@ -216,15 +216,10 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
           ?<div style={{textAlign:"center",color:"var(--faint)",padding:"2rem",fontSize:13}}>ยังไม่มีใบขายที่สำเร็จ</div>
           :<div style={{overflowX:"auto"}}>
             <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
-              <thead><tr style={{borderBottom:"1px solid var(--line)",background:"var(--bg)"}}>{["SO No.","วันที่","ยอดเต็ม","ชำระแล้ว","ค้าง","สถานะ","ครบกำหนด"].map(thTd)}</tr></thead>
+              <thead><tr style={{borderBottom:"1px solid var(--line)",background:"var(--bg)"}}>{["SO No.","ครบกำหนด","ยอดคงเหลือ","สถานะ"].map(thTd)}</tr></thead>
               <tbody>{arList.map(ar=>(
                 <tr key={ar.id} style={{borderBottom:"0.5px solid var(--line)",background:ar.overdueDays>0&&ar.status2!=="paid"?"rgba(255,149,0,0.14)":""}}>
                   <td style={{padding:"7px 8px",fontWeight:500}}>{ar.soNum}</td>
-                  <td style={{padding:"7px 8px",color:"var(--dim)"}}>{toBE(ar.date)}</td>
-                  <td style={{padding:"7px 8px"}}>{"฿"+fmt(ar.total)}</td>
-                  <td style={{padding:"7px 8px",color:"var(--green)"}}>{"฿"+fmt(ar.paid)}</td>
-                  <td style={{padding:"7px 8px",fontWeight:600,color:ar.remaining>0?"var(--red)":"var(--green)"}}>{"฿"+fmt(Math.max(0,ar.remaining))}</td>
-                  <td style={{padding:"7px 8px"}}><PayBadge s={ar.status2}/></td>
                   <td style={{padding:"7px 8px",fontSize:12}}>
                     {ar.dueDate
                       ?<span style={{color:ar.overdueDays>0&&ar.status2!=="paid"?"var(--red)":"var(--dim)"}}>
@@ -233,13 +228,14 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
                       :<span style={{color:"var(--faint)"}}>—</span>
                     }
                   </td>
+                  <td style={{padding:"7px 8px",fontWeight:600,color:ar.remaining>0?"var(--red)":"var(--green)"}}>{"฿"+fmt(Math.max(0,ar.remaining))}</td>
+                  <td style={{padding:"7px 8px"}}><PayBadge s={ar.status2}/></td>
                 </tr>
               ))}</tbody>
               <tfoot><tr style={{borderTop:"2px solid var(--line)",background:"var(--bg)"}}>
-                <td colSpan={3} style={{padding:"7px 8px",fontWeight:600}}>รวม</td>
-                <td style={{padding:"7px 8px",color:"var(--green)",fontWeight:700}}>{"฿"+fmt(arList.reduce((s,a)=>s+a.paid,0))}</td>
+                <td colSpan={2} style={{padding:"7px 8px",fontWeight:600}}>รวม</td>
                 <td style={{padding:"7px 8px",color:outstanding>0?"var(--red)":"var(--green)",fontWeight:700}}>{"฿"+fmt(arList.reduce((s,a)=>s+Math.max(0,a.remaining),0))}</td>
-                <td colSpan={2}/>
+                <td/>
               </tr></tfoot>
             </table>
           </div>
