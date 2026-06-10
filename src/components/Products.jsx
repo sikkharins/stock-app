@@ -120,14 +120,18 @@ export default function ProdPage({sh}){
         {res>0&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:999,background:"rgba(0,122,255,0.12)",color:"var(--blue)",fontWeight:600}}>{"จอง "+res}</span>}
       </div>
       <div>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
-          <span style={{color:"var(--dim)"}}>สต็อก{(pr.defectiveStock||0)>0?<span style={{color:"var(--orange)",fontSize:10,marginLeft:4}}>{"(ชำรุด "+pr.defectiveStock+")"}</span>:""}{res>0?<span style={{color:"var(--blue)",fontSize:10,marginLeft:4}}>{"(พร้อม "+(pr.stock-res)+")"}</span>:""}</span>
-          <span><strong className="num" style={{color:isLow?"var(--red)":"var(--green)",fontSize:16}}>{pr.stock}</strong><span style={{color:"var(--dim)"}}>{" / "+pr.minStock+" "+pr.unit}</span></span>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <div style={{display:"flex",flexDirection:"column",gap:1}}>
+            <span style={{fontSize:10,color:"var(--dim)",textTransform:"uppercase",letterSpacing:"0.05em"}}>สต็อก</span>
+            {((pr.defectiveStock||0)>0||res>0)&&<div style={{display:"flex",gap:6,fontSize:10}}>{(pr.defectiveStock||0)>0&&<span style={{color:"var(--orange)"}}>{"ชำรุด "+pr.defectiveStock}</span>}{res>0&&<span style={{color:"var(--blue)"}}>{"พร้อม "+(pr.stock-res)}</span>}</div>}
+          </div>
+          {(()=>{const critical=isLow||pr.stock<=0;const stockColor=critical?"var(--red)":"var(--green)";const glowRgba=critical?"rgba(255,59,48,0.55)":"rgba(52,199,89,0.5)";return <div style={{display:"flex",alignItems:"baseline",gap:7}}>
+            <span aria-hidden="true" style={{width:9,height:9,borderRadius:"50%",background:stockColor,boxShadow:`0 0 10px ${glowRgba}`,alignSelf:"center"}}/>
+            <strong className="num" style={{color:stockColor,fontSize:24,fontWeight:800,letterSpacing:"-0.025em",lineHeight:1}}>{pr.stock}</strong>
+            <span style={{color:"var(--dim)",fontSize:11,fontWeight:500}}>{"/ "+pr.minStock+" "+pr.unit}</span>
+          </div>;})()}
         </div>
-        <div style={{background:"var(--hover)",borderRadius:4,height:8}}>
-          <div style={{background:isLow?"var(--red)":"var(--green)",borderRadius:4,height:8,width:pct+"%",transition:"width 200ms var(--ease-out,ease-out)"}}/>
-        </div>
-        {(()=>{if(pr.stock<=0)return null;const sc=salesByProd[pr.id]||{d7:0,d30:0};const days=daysOfStock(pr.stock,sc.d30);if(days===null||days===Infinity||days>=60)return null;const urgent=days<14;return <div style={{fontSize:11,color:urgent?"var(--red)":"var(--orange)",fontWeight:600,marginTop:5,display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:10}}>{urgent?"⚠":"⏱"}</span>หมดใน ~{Math.max(1,Math.round(days))} วัน</div>;})()}
+        {(()=>{if(pr.stock<=0)return null;const sc=salesByProd[pr.id]||{d7:0,d30:0};const days=daysOfStock(pr.stock,sc.d30);if(days===null||days===Infinity||days>=60)return null;const urgent=days<14;return <div style={{fontSize:11,color:urgent?"var(--red)":"var(--orange)",fontWeight:600,marginTop:6,display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:10}}>{urgent?"⚠":"⏱"}</span>หมดใน ~{Math.max(1,Math.round(days))} วัน</div>;})()}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
         <div>
