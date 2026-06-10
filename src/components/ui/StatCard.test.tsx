@@ -54,4 +54,22 @@ describe("StatCard", () => {
     const { container } = render(<StatCard label="x" value="1" />);
     expect(container.querySelector("polyline")).toBeFalsy();
   });
+
+  test("animatedValue + format renders the formatted value", () => {
+    render(
+      <StatCard
+        label="x"
+        value="ignored"
+        animatedValue={42}
+        format={(n) => "฿" + Math.round(n)}
+      />
+    );
+    // First render: useCountUp returns 0, so the formatted "฿0" shows initially
+    expect(screen.getByText(/^฿\d/)).toBeInTheDocument();
+  });
+
+  test("falls back to value when animatedValue omitted", () => {
+    render(<StatCard label="x" value="hello" />);
+    expect(screen.getByText("hello")).toBeInTheDocument();
+  });
 });

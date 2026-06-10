@@ -141,10 +141,10 @@ export default function ProdPage({sh}){
   };
   return <div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12,marginBottom:18}}>
-      <StatCard label="สินค้าทั้งหมด" value={stats.total} color="var(--blue)" sparkline={series.total} delta={deltas.total||undefined}/>
-      <StatCard label="มูลค่าสต็อก" value={"฿"+fmt(stats.stockVal)} color="var(--green)" sparkline={series.stockVal} delta={deltas.stockVal||undefined}/>
-      <StatCard label="สต็อกต่ำ" value={stats.low} color={stats.low>0?"var(--red)":"var(--dim)"} sparkline={series.low}/>
-      <StatCard label="จองอยู่" value={stats.totalRes+" ชิ้น"} color="var(--orange)" sparkline={series.res}/>
+      <StatCard label="สินค้าทั้งหมด" value={stats.total} animatedValue={stats.total} format={n=>Math.round(n)} color="var(--blue)" sparkline={series.total} delta={deltas.total||undefined}/>
+      <StatCard label="มูลค่าสต็อก" value={"฿"+fmt(stats.stockVal)} animatedValue={stats.stockVal} format={n=>"฿"+fmt(Math.round(n))} color="var(--green)" sparkline={series.stockVal} delta={deltas.stockVal||undefined}/>
+      <StatCard label="สต็อกต่ำ" value={stats.low} animatedValue={stats.low} format={n=>Math.round(n)} color={stats.low>0?"var(--red)":"var(--dim)"} sparkline={series.low}/>
+      <StatCard label="จองอยู่" value={stats.totalRes+" ชิ้น"} animatedValue={stats.totalRes} format={n=>Math.round(n)+" ชิ้น"} color="var(--orange)" sparkline={series.res}/>
     </div>
     {/* Brand × Subcategory Breakdown */}
     <div style={{marginBottom:16}}>

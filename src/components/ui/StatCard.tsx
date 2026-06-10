@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Sparkline from "./Sparkline";
+import { useCountUp } from "./useCountUp";
 
 interface StatCardProps {
   label: ReactNode;
@@ -10,6 +11,10 @@ interface StatCardProps {
   accentBg?: string;
   sparkline?: number[];
   delta?: { text: string; positive: boolean };
+  /** When set, animates 0 → animatedValue on first mount. Ignores `value`. */
+  animatedValue?: number;
+  /** Formatter for the animated tick value (e.g. n => "฿" + fmt(Math.round(n))). */
+  format?: (n: number) => ReactNode;
 }
 
 export default function StatCard({
@@ -21,7 +26,18 @@ export default function StatCard({
   accentBg,
   sparkline,
   delta,
+  animatedValue,
+  format,
 }: StatCardProps) {
+  const animated = useCountUp(
+    animatedValue ?? 0,
+    600,
+    animatedValue === undefined
+  );
+  const displayValue =
+    animatedValue !== undefined
+      ? (format ? format(animated) : Math.round(animated))
+      : value;
   return (
     <div
       style={{
@@ -59,7 +75,7 @@ export default function StatCard({
           className="num"
           style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.025em", color: color || "var(--text)", lineHeight: 1.1 }}
         >
-          {value}
+          {displayValue}
         </div>
         {sparkline && sparkline.length > 0 && (
           <Sparkline points={sparkline} color={color || "var(--blue)"} />
