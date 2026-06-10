@@ -201,7 +201,7 @@ export default function ProdPage({sh}){
         )}
         {ed&&<div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><Btn onClick={()=>oM("manageCats")}>{"จัดการหมวด"}</Btn><Btn onClick={()=>oM("excelImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm(emptyF);oM("product");}}>{"+ เพิ่มสินค้า"}</Btn><Btn variant={bulkMode?"pri":undefined} onClick={()=>{if(bulkMode){selNone();setBulkMode(false);}else setBulkMode(true);}}>{bulkMode?"ยกเลิกเลือก":"เลือกหลายรายการ"}</Btn>{bulkMode&&<><Btn size="sm" onClick={selAll}>{"เลือกทั้งหมด ("+sorted.length+")"}</Btn>{sel.size>0&&<Btn size="sm" onClick={selNone}>{"ล้าง"}</Btn>}</>}</div>}
       </div>
-      <BrandChipRow brands={brands} counts={brandCounts} value={fBrand} onChange={setFBrand}/>
+      <BrandChipRow brands={brands.filter(b=>(brandCounts[b]||0)>0)} counts={brandCounts} value={fBrand} onChange={setFBrand}/>
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
       {(()=>{const cnt=baseP.filter(pr=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const res=reservedMap[pr.id]||0;return needsAttention(pr,sc.d30,res);}).length;return <div onClick={()=>setFAttn(v=>!v)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fAttn?"rgba(255,59,48,0.14)":"var(--bg)",border:"1.5px solid "+(fAttn?"var(--red)":cnt>0?"var(--red)":"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:600,color:fAttn?"var(--red)":cnt>0?"var(--red)":"var(--dim)"}}><span>⚠</span><span>ต้องดูแล</span><span style={{background:fAttn?"rgba(255,59,48,0.22)":cnt>0?"rgba(255,59,48,0.14)":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})()}
