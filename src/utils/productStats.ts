@@ -71,6 +71,33 @@ export const reservedSeries = (
   return series;
 };
 
+/**
+ * Returns a map { productId → { d7: qtySold, d30: qtySold } } over the given
+ * sales array. Only counts SOs whose status is not "cancelled". Sums item.qty
+ * for each matching item.productId — split-parts are NOT double-counted because
+ * the parent item carries the unit qty (parts live in `item.parts`).
+ */
+export const salesCountByProduct = (
+  sales: Sale[],
+  ref: Date = new Date()
+): Record<string, { d7: number; d30: number }> => {
+  const d7Cutoff = daysAgoISO(6, ref);   // include today + last 6 days = 7 days
+  const d30Cutoff = daysAgoISO(29, ref); // include today + last 29 days = 30 days
+  const out: Record<string, { d7: number; d30: number }> = {};
+  for (const so of sales) {
+    if ((so as any).status === "cancelled") continue;
+    const d = dayKey(so.date);
+    if (d < d30Cutoff) continue;
+    for (const it of ((so as any).items || []) as Array<{ productId: number | string; qty: number }>) {
+      const key = String(it.productId);
+      if (!out[key]) out[key] = { d7: 0, d30: 0 };
+      out[key].d30 += it.qty || 0;
+      if (d >= d7Cutoff) out[key].d7 += it.qty || 0;
+    }
+  }
+  return out;
+};
+
 export const newProductsSeries = (
   logs: Log[],
   days: number,

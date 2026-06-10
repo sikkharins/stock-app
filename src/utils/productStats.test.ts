@@ -4,6 +4,7 @@ import {
   lowStockSeries,
   reservedSeries,
   newProductsSeries,
+  salesCountByProduct,
   daysAgoISO,
 } from "./productStats";
 
@@ -89,5 +90,34 @@ describe("newProductsSeries", () => {
       { productId: 2, type: "out", qty: 1, date: "2026-06-09" },
     ];
     expect(newProductsSeries(logs, 3, today)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("salesCountByProduct", () => {
+  test("sums qty for last 7 and 30 days, excludes cancelled", () => {
+    const sales = [
+      { status: "completed", date: "2026-06-10", items: [{ productId: 1, qty: 2 }] },
+      { status: "completed", date: "2026-06-05", items: [{ productId: 1, qty: 3 }] },
+      { status: "completed", date: "2026-05-20", items: [{ productId: 1, qty: 4 }] },
+      { status: "cancelled", date: "2026-06-09", items: [{ productId: 1, qty: 99 }] },
+    ];
+    const r = salesCountByProduct(sales as any, today);
+    expect(r["1"]).toEqual({ d7: 5, d30: 9 });
+  });
+
+  test("ignores SOs older than 30 days", () => {
+    const sales = [
+      { status: "completed", date: "2026-01-01", items: [{ productId: 1, qty: 50 }] },
+    ];
+    const r = salesCountByProduct(sales as any, today);
+    expect(r["1"]).toBeUndefined();
+  });
+
+  test("counts pending_delivery as sold", () => {
+    const sales = [
+      { status: "pending_delivery", date: "2026-06-10", items: [{ productId: 2, qty: 7 }] },
+    ];
+    const r = salesCountByProduct(sales as any, today);
+    expect(r["2"]).toEqual({ d7: 7, d30: 7 });
   });
 });
