@@ -12,13 +12,19 @@ import StatCard from "./ui/StatCard.jsx";
 import { buildBrandSubData } from "./ui/StockValueDonut.jsx";
 import ExcelImport from "./ExcelImport.jsx";
 import { stockValueSeries, lowStockSeries, reservedSeries, newProductsSeries } from "../utils/productStats.ts";
+import BrandChipRow from "./ui/BrandChipRow.tsx";
 
 export default function ProdPage({sh}){
   const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
   const ed=canE("products");const cd=canD("products");
   const baseP=isSup?products.filter(p=>p.distributor===supN):products;
   const[fBrand,setFBrand]=useState("");const[fCat,setFCat]=useState("");const[fStat,setFStat]=useState("");const[bsExpanded,setBsExpanded]=useState({});const[showBreakdown,setShowBreakdown]=useState(false);
-  const[detailPr,setDetailPr]=useState(null);const[sortBy,setSortBy]=useState("brand");
+  const[detailPr,setDetailPr]=useState(null);const[sortBy,setSortBy]=useState(()=>{const s=localStorage.getItem("productSort");return s&&s!=="brand"?s:"name";});
+  const[view,setView]=useState(()=>localStorage.getItem("productView")||"card");
+  useEffect(()=>{localStorage.setItem("productView",view);},[view]);
+  const[density,setDensity]=useState(()=>localStorage.getItem("productTableDensity")||"comfortable");
+  useEffect(()=>{localStorage.setItem("productTableDensity",density);},[density]);
+  useEffect(()=>{localStorage.setItem("productSort",sortBy);},[sortBy]);
   const filtered=useMemo(()=>baseP.filter(pr=>{if(fBrand&&pr.brand!==fBrand)return false;if(fCat&&pr.categoryId!==+fCat)return false;if(fStat&&getSS(pr.id,sales).key!==fStat)return false;if(search&&!((pN(pr)||"").toLowerCase().includes(search.toLowerCase())||(pr.code||"").toLowerCase().includes(search.toLowerCase())||(pr.brand||"").toLowerCase().includes(search.toLowerCase())))return false;return true;}),[baseP,fBrand,fCat,fStat,search,sales,pN]);
   const sorted=useMemo(()=>{const arr=[...filtered];if(sortBy==="name")arr.sort((a,b)=>pN(a).localeCompare(pN(b)));else if(sortBy==="price_asc")arr.sort((a,b)=>a.price-b.price);else if(sortBy==="price_desc")arr.sort((a,b)=>b.price-a.price);else if(sortBy==="stock_asc")arr.sort((a,b)=>a.stock-b.stock);else if(sortBy==="stock_desc")arr.sort((a,b)=>b.stock-a.stock);else if(sortBy==="last_sold")arr.sort((a,b)=>(getSS(a.id,sales).days??9999)-(getSS(b.id,sales).days??9999));return arr;},[filtered,sortBy]);
   const PAGE=20;const[showCount,setShowCount]=useState(PAGE);
@@ -37,6 +43,7 @@ export default function ProdPage({sh}){
   const selProds=useMemo(()=>products.filter(p=>sel.has(p.id)),[products,sel]);
   const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
   const stats=useMemo(()=>{const total=baseP.length;const stockVal=baseP.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);const low=baseP.filter(p=>p.minStock>0&&p.stock<=p.minStock).length;const totalRes=Object.values(reservedMap).reduce((s,v)=>s+v,0);return{total,stockVal,low,totalRes};},[baseP,reservedMap]);
+  const brandCounts=useMemo(()=>{const m={};baseP.forEach(p=>{m[p.brand]=(m[p.brand]||0)+1;});return m;},[baseP]);
   const series=useMemo(()=>{const ref=new Date();return{total:newProductsSeries(logs||[],30,ref),stockVal:stockValueSeries(baseP,logs||[],30,ref),low:lowStockSeries(baseP,logs||[],30,ref),res:reservedSeries(sales,30,ref)};},[baseP,logs,sales]);
   const deltas=useMemo(()=>{const sumTail=(arr,n)=>arr.slice(-n).reduce((s,v)=>s+v,0);const newCnt=sumTail(series.total,7);const stockNow=series.stockVal[series.stockVal.length-1]||0;const stock7=series.stockVal[series.stockVal.length-8]??stockNow;const stockDelta=stockNow-stock7;return{total:newCnt>0?{text:"+"+newCnt+" สัปดาห์นี้",positive:true}:null,stockVal:stockDelta!==0?{text:(stockDelta>0?"+":"")+"฿"+fmt(Math.round(stockDelta))+" 7 วัน",positive:stockDelta>0}:null};},[series]);
   const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");
@@ -50,9 +57,6 @@ export default function ProdPage({sh}){
   const doBulkMinStock=()=>{const v=+bkMinF;if(bkMinF===""||v<0||selProds.length===0)return;setProducts(prev=>prev.map(p=>{if(!sel.has(p.id))return p;return{...p,minStock:v};}));addA("เปลี่ยน minStock (กลุ่ม)",sel.size+" รายการ → "+v);setBulkAct(null);selNone();setBulkMode(false);};
   const doBulkDist=()=>{if(selProds.length===0)return;setProducts(prev=>prev.map(p=>{if(!sel.has(p.id))return p;return{...p,distributor:bkDistF};}));addA("เปลี่ยนผู้จัดจำหน่าย (กลุ่ม)",sel.size+" รายการ → "+(bkDistF||"ไม่ระบุ"));setBulkAct(null);selNone();setBulkMode(false);};
   const doBulkDelete=()=>{if(selProds.length===0)return;const codes=selProds.map(p=>p.code).join(", ");setProducts(prev=>prev.filter(p=>!sel.has(p.id)));addA("ลบสินค้า (กลุ่ม)",sel.size+" รายการ: "+codes.slice(0,100));setBulkAct(null);selNone();setBulkMode(false);};
-  const useGrouped=sortBy==="brand";
-  const bG={};if(useGrouped)visible.forEach(pr=>{if(!bG[pr.brand])bG[pr.brand]=[];bG[pr.brand].push(pr);});
-  const bK=useGrouped?Object.keys(bG).sort():[];
   const fCO=form.categoryId?cats.find(c=>c.id===+form.categoryId):null;
   const sups=contacts.filter(c=>c.type==="supplier");
   const hasFilter=fBrand||fCat||fStat||search;
@@ -115,28 +119,34 @@ export default function ProdPage({sh}){
         </div>;
       })()}
     </div>
+    <div style={{position:"sticky",top:0,zIndex:20,background:"var(--bg)",margin:"0 -16px",padding:"10px 16px",borderBottom:"1px solid var(--line)",marginBottom:10,backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{minWidth:180}}><SB value={search} onChange={setSearch} placeholder="ค้นหาสินค้า..."/></div>
+        <BrandChipRow brands={brands} counts={brandCounts} value={fBrand} onChange={setFBrand}/>
+        <CustomSelect value={fCat} onChange={setFCat} options={[{value:"",label:"ทุกหมวด"},...cats.map(c=>({value:String(c.id),label:c.name}))]} style={{width:"auto",minWidth:120}}/>
+        <CustomSelect value={sortBy} onChange={setSortBy} options={[{value:"name",label:"ชื่อ"},{value:"price_asc",label:"ราคา ↑"},{value:"price_desc",label:"ราคา ↓"},{value:"stock_asc",label:"สต็อก ↑"},{value:"stock_desc",label:"สต็อก ↓"},{value:"last_sold",label:"ขายล่าสุด"}]} style={{width:"auto",minWidth:140}}/>
+        <div style={{display:"flex",gap:0,border:"1px solid var(--line)",borderRadius:7,overflow:"hidden"}}>
+          {[["card","▤"],["table","▦"]].map(([k,ic])=>(
+            <button key={k} onClick={()=>setView(k)} title={k==="card"?"การ์ด":"ตาราง"} style={{padding:"6px 11px",border:"none",background:view===k?"var(--blue-bg)":"transparent",color:view===k?"var(--blue)":"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:500}}>{ic}</button>
+          ))}
+        </div>
+        {view==="table"&&(
+          <div style={{display:"flex",gap:0,border:"1px solid var(--line)",borderRadius:7,overflow:"hidden"}}>
+            {[["comfortable","≡"],["compact","☰"]].map(([k,ic])=>(
+              <button key={k} onClick={()=>setDensity(k)} title={k==="comfortable"?"comfortable":"compact"} style={{padding:"6px 10px",border:"none",background:density===k?"var(--hover2)":"transparent",color:"var(--text)",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>{ic}</button>
+            ))}
+          </div>
+        )}
+        {ed&&<div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><Btn onClick={()=>oM("manageCats")}>{"จัดการหมวด"}</Btn><Btn onClick={()=>oM("excelImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm(emptyF);oM("product");}}>{"+ เพิ่มสินค้า"}</Btn><Btn variant={bulkMode?"pri":undefined} onClick={()=>{if(bulkMode){selNone();setBulkMode(false);}else setBulkMode(true);}}>{bulkMode?"ยกเลิกเลือก":"เลือกหลายรายการ"}</Btn>{bulkMode&&<><Btn size="sm" onClick={selAll}>{"เลือกทั้งหมด ("+sorted.length+")"}</Btn>{sel.size>0&&<Btn size="sm" onClick={selNone}>{"ล้าง"}</Btn>}</>}</div>}
+      </div>
+    </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
       {STOCK_STATUS.map(s=>{const cnt=baseP.filter(pr=>getSS(pr.id,sales).key===s.key).length;return <div key={s.key} onClick={()=>setFStat(fStat===s.key?"":s.key)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fStat===s.key?s.bg:"var(--bg)",border:"1.5px solid "+(fStat===s.key?s.color:"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:500,color:fStat===s.key?s.color:"var(--dim)"}}><span>{s.icon}</span><span>{s.label}</span><span style={{background:fStat===s.key?s.color+"22":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})}
-    </div>
-    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
-      <SB value={search} onChange={setSearch} placeholder="ค้นหาสินค้า..."/>
-      <CustomSelect value={fBrand} onChange={setFBrand} options={[{value:"",label:"ทุกยี่ห้อ"},...brands.map(b=>({value:b,label:b}))]} style={{width:"auto",minWidth:120}}/>
-      <CustomSelect value={fCat} onChange={setFCat} options={[{value:"",label:"ทุกหมวด"},...cats.map(c=>({value:String(c.id),label:c.name}))]} style={{width:"auto",minWidth:120}}/>
-      <CustomSelect value={sortBy} onChange={setSortBy} options={[{value:"brand",label:"ยี่ห้อ"},{value:"name",label:"ชื่อ"},{value:"price_asc",label:"ราคา ↑"},{value:"price_desc",label:"ราคา ↓"},{value:"stock_asc",label:"สต็อก ↑"},{value:"stock_desc",label:"สต็อก ↓"},{value:"last_sold",label:"ขายล่าสุด"}]} style={{width:"auto",minWidth:140}}/>
-      {ed&&<div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><Btn onClick={()=>oM("manageCats")}>{"จัดการหมวด"}</Btn><Btn onClick={()=>oM("excelImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm(emptyF);oM("product");}}>{"+ เพิ่มสินค้า"}</Btn><Btn variant={bulkMode?"pri":undefined} onClick={()=>{if(bulkMode){selNone();setBulkMode(false);}else setBulkMode(true);}}>{bulkMode?"ยกเลิกเลือก":"เลือกหลายรายการ"}</Btn>{bulkMode&&<><Btn size="sm" onClick={selAll}>{"เลือกทั้งหมด ("+sorted.length+")"}</Btn>{sel.size>0&&<Btn size="sm" onClick={selNone}>{"ล้าง"}</Btn>}</>}</div>}
     </div>
     {sorted.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}><div style={{fontSize:48,marginBottom:8}}>{hasFilter?"":""}
 </div><div style={{color:"var(--dim)",fontSize:14,marginBottom:4}}>{hasFilter?"ไม่พบสินค้าที่ตรงกับเงื่อนไข":"ยังไม่มีสินค้า"}</div>{hasFilter&&<div style={{color:"var(--faint)",fontSize:12}}>ลองเปลี่ยนตัวกรอง หรือล้างการค้นหา</div>}{!hasFilter&&ed&&<button onClick={()=>{setFormErrors([]);setForm(emptyF);oM("product");}} style={{marginTop:12,padding:"8px 20px",borderRadius:8,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>+ เพิ่มสินค้าแรก</button>}</div>}
     <div style={{paddingBottom:bulkMode&&sel.size>0?70:0}}>
-    {useGrouped?bK.map((brand,bi)=>{
-      const prods=bG[brand];
-      return <div key={brand} style={{marginBottom:28,background:"var(--bg)",borderRadius:12,padding:"16px 16px 20px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontWeight:700,fontSize:16}}>{brand}</div><div style={{height:1,flex:1,background:"var(--line)"}}/><span style={{fontSize:12,color:"var(--dim)",background:"var(--bg2)",borderRadius:99,padding:"2px 10px"}}>{prods.length+" รายการ"}</span></div>
-        <div className="product-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
-          {prods.map(pr=>renderCard(pr))}
-        </div>
-      </div>;
-    }):<div className="product-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>{visible.map(pr=>renderCard(pr))}</div>}
+    <div className="product-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>{visible.map(pr=>renderCard(pr))}</div>
     {hasMore&&<div style={{textAlign:"center",padding:"20px 0"}}><div style={{fontSize:12,color:"var(--dim)",marginBottom:8}}>{"แสดง "+visible.length+" / "+sorted.length+" รายการ"}</div><button onClick={()=>setShowCount(c=>c+PAGE)} style={{padding:"8px 24px",borderRadius:8,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontSize:13,fontWeight:500,fontFamily:"inherit"}}>{"โหลดเพิ่ม "+Math.min(PAGE,sorted.length-showCount)+" รายการ"}</button></div>}
     </div>
     {bulkMode&&sel.size>0&&<div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,background:"var(--panel)",borderTop:"1.5px solid var(--line)",padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",boxShadow:"0 -4px 20px rgba(0,0,0,0.15)"}}>
