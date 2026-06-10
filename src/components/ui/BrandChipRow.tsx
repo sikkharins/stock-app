@@ -1,15 +1,11 @@
+import { brandColor } from "../../utils/brandColors";
+
 interface BrandChipRowProps {
   brands: string[];
   counts: Record<string, number>;
   value: string;
   onChange: (next: string) => void;
 }
-
-const hueFor = (s: string): number => {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-  return h;
-};
 
 export default function BrandChipRow({ brands, counts, value, onChange }: BrandChipRowProps) {
   return (
@@ -26,8 +22,7 @@ export default function BrandChipRow({ brands, counts, value, onChange }: BrandC
     >
       {brands.map((b) => {
         const active = value === b;
-        const hue = hueFor(b);
-        const accent = `hsl(${hue} 65% 50%)`;
+        const c = brandColor(b);
         return (
           <button
             key={b}
@@ -38,9 +33,9 @@ export default function BrandChipRow({ brands, counts, value, onChange }: BrandC
               gap: 6,
               padding: "5px 12px",
               borderRadius: "var(--radius-pill, 999px)",
-              border: `1.5px solid ${active ? accent : "var(--line)"}`,
-              background: active ? `hsl(${hue} 70% 50% / 0.12)` : "var(--panel)",
-              color: active ? accent : "var(--text)",
+              border: `1.5px solid ${active ? c.base : "var(--line)"}`,
+              background: active ? c.alpha(0.14) : "var(--panel)",
+              color: active ? c.base : "var(--text)",
               fontSize: 12,
               fontWeight: 500,
               cursor: "pointer",
@@ -56,8 +51,8 @@ export default function BrandChipRow({ brands, counts, value, onChange }: BrandC
                 fontWeight: 700,
                 padding: "1px 6px",
                 borderRadius: 999,
-                background: active ? `hsl(${hue} 70% 50% / 0.22)` : "var(--hover)",
-                color: active ? accent : "var(--dim)",
+                background: active ? c.alpha(0.24) : "var(--hover)",
+                color: active ? c.base : "var(--dim)",
               }}
             >
               {counts[b] ?? 0}
