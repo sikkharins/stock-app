@@ -16,6 +16,8 @@ import {
   salesByCustomerId,
   outstandingDetail,
   arStatus,
+  lifetimeValue,
+  lastPurchaseDays,
 } from "../utils/customerStats.ts";
 
 const STAFF_TABS = ["dashboard","products","stock_log","purchase","sales","finance","reports"];
@@ -55,13 +57,32 @@ export default function ContactPage({sh,ft}){
 
   const mk="c_"+ft;const title=isC?"ลูกค้า":"ซัพพลายเออร์";
   const[groupFilter,setGroupFilter]=useState("all");
-  const filtered=(contacts||[]).filter(c=>{
-    if(!c||c.type!==ft)return false;
-    if(sf&&c.salesPerson!==cu.salesName)return false;
-    if(isC&&groupFilter!=="all"){if(groupFilter==="regular"&&c.customerGroup!=="regular")return false;if(groupFilter==="walkin"&&c.customerGroup!=="walkin")return false;}
-    if(search){const s=search.toLowerCase();if(!((cN(c)||"").toLowerCase().includes(s)||(c.email||"").toLowerCase().includes(s)))return false;}
-    return true;
-  });
+  const[sortMode,setSortMode]=useState("name");
+  const[viewMode,setViewMode]=useState("grid");
+  const filtered=useMemo(()=>{
+    const arr=(contacts||[]).filter(c=>{
+      if(!c||c.type!==ft)return false;
+      if(sf&&c.salesPerson!==cu.salesName)return false;
+      if(isC&&groupFilter!=="all"){if(groupFilter==="regular"&&c.customerGroup!=="regular")return false;if(groupFilter==="walkin"&&c.customerGroup!=="walkin")return false;}
+      if(search){const s=search.toLowerCase();if(!((cN(c)||"").toLowerCase().includes(s)||(c.email||"").toLowerCase().includes(s)))return false;}
+      return true;
+    });
+    if(!isC)return arr;
+    const cmp={
+      name:(a,b)=>(cN(a)||"").localeCompare(cN(b)||"","th"),
+      revenue:(a,b)=>lifetimeValue(b,salesByCust[b.id]||[])-lifetimeValue(a,salesByCust[a.id]||[]),
+      recent:(a,b)=>{
+        const da=lastPurchaseDays(a,salesByCust[a.id]||[],todayDate);
+        const db=lastPurchaseDays(b,salesByCust[b.id]||[],todayDate);
+        if(da===null&&db===null)return 0;
+        if(da===null)return 1;
+        if(db===null)return -1;
+        return da-db;
+      },
+      outstanding:(a,b)=>outstandingDetail(b,salesByCust[b.id]||[],payments||[],todayDate).total-outstandingDetail(a,salesByCust[a.id]||[],payments||[],todayDate).total,
+    };
+    return arr.slice().sort(cmp[sortMode]||cmp.name);
+  },[contacts,ft,sf,cu,isC,groupFilter,search,cN,sortMode,salesByCust,payments,todayDate]);
   const groupCounts=useMemo(()=>{if(!isC)return{};const custs=(contacts||[]).filter(c=>c&&c.type==="customer"&&(!sf||c.salesPerson===cu.salesName));return{all:custs.length,regular:custs.filter(c=>c.customerGroup==="regular").length,walkin:custs.filter(c=>c.customerGroup==="walkin").length};},[contacts,isC,sf,cu]);
   const[savingContact,setSavingContact]=useState(false);const[formErrors,setFormErrors]=useState([]);
   const save=async()=>{
@@ -206,9 +227,27 @@ export default function ContactPage({sh,ft}){
     {isC&&<div style={{display:"flex",gap:6,marginBottom:12}}>
       {[{k:"all",label:"ทั้งหมด",icon:""},{k:"regular",label:"ประจำ",icon:""},{k:"walkin",label:"หน้าร้าน",icon:""}].map(g=><button key={g.k} onClick={()=>setGroupFilter(g.k)} style={{padding:"6px 14px",borderRadius:20,border:groupFilter===g.k?"2px solid var(--blue)":"1px solid var(--line)",background:groupFilter===g.k?"rgba(0,122,255,0.1)":"var(--bg)",color:groupFilter===g.k?"var(--blue)":"var(--dim)",fontSize:12,fontWeight:groupFilter===g.k?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>{g.icon&&<span>{g.icon}</span>}{g.label}<span style={{fontSize:11,opacity:0.7,marginLeft:2}}>({groupCounts[g.k]||0})</span></button>)}
     </div>}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
-      <SB value={search} onChange={setSearch} placeholder={"ค้นหา"+title+"..."}/>
-      {ed&&<div style={{display:"flex",gap:8}}><Btn onClick={()=>oM("contactImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm({...ef,customerGroup:isC?"walkin":undefined});oM(mk);}}>{"+ เพิ่ม"+title}</Btn></div>}
+    <div style={{position:"sticky",top:0,zIndex:10,background:"var(--bg)",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",paddingTop:4,paddingBottom:8,marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <SB value={search} onChange={setSearch} placeholder={"ค้นหา"+title+"..."}/>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {isC&&<>
+            <CustomSelect value={sortMode} onChange={setSortMode} options={[
+              {value:"name",label:"ชื่อ ก-ฮ"},
+              {value:"revenue",label:"ขายดี (ยอดรวม)"},
+              {value:"recent",label:"ซื้อล่าสุด"},
+              {value:"outstanding",label:"ค้างเก็บ"},
+            ]}/>
+            <div style={{display:"inline-flex",border:"1px solid var(--line)",borderRadius:8,overflow:"hidden"}}>
+              {["grid","table"].map(m=><button key={m} onClick={()=>setViewMode(m)} style={{padding:"6px 12px",background:viewMode===m?"var(--blue-bg)":"transparent",color:viewMode===m?"var(--blue)":"var(--dim)",border:"none",cursor:"pointer",fontSize:12,fontWeight:viewMode===m?600:400,fontFamily:"inherit"}}>{m==="grid"?"⊞ Grid":"☰ Table"}</button>)}
+            </div>
+          </>}
+          {ed&&<>
+            <Btn onClick={()=>oM("contactImport")}>{"นำเข้า Excel"}</Btn>
+            <Btn onClick={()=>{setFormErrors([]);setForm({...ef,customerGroup:isC?"walkin":undefined});oM(mk);}}>{"+ เพิ่ม"+title}</Btn>
+          </>}
+        </div>
+      </div>
     </div>
     {filtered.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}>
       <div style={{fontSize:48,marginBottom:12}}>{isC?"C":"S"}</div>
