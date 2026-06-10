@@ -316,6 +316,8 @@ export default function ContactPage({sh,ft}){
       .cust-card:hover .cust-reveal{max-height:80px;opacity:1;padding-top:6px;border-top:1px solid var(--line);}
       .cust-card .salesPerson-mark{transition:opacity 240ms;opacity:0.5;}
       .cust-card:hover .salesPerson-mark{opacity:0.85;}
+      .cust-card .hero-name{transition:letter-spacing 240ms,filter 240ms;}
+      .cust-card:hover .hero-name{letter-spacing:-0.01em;filter:drop-shadow(0 0 12px var(--accent-rgba));}
     `}</style>}
     {(!isC||viewMode==="grid")&&<div className="contact-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:12}}>
       {filtered.map(c=>{
@@ -385,7 +387,7 @@ export default function ContactPage({sh,ft}){
             </div>
             <span style={{width:10,height:10,borderRadius:99,background:dotColor,boxShadow:`0 0 8px ${dotColor}`}}/>
           </div>
-          <div onClick={()=>setViewProfile(c)} style={{fontSize:17,fontWeight:800,lineHeight:1.15,cursor:"pointer",color:accentText,marginBottom:1}}>{c.nameT||c.name}</div>
+          <div className="hero-name" onClick={()=>setViewProfile(c)} style={{fontSize:17,fontWeight:800,lineHeight:1.15,cursor:"pointer",color:accentText,marginBottom:1}}>{c.nameT||c.name}</div>
           <div style={{fontSize:12,color:"var(--dim)",marginBottom:8}}>{[c.nameT&&c.name,c.phone].filter(Boolean).join(" · ")||"—"}</div>
           {(c.vatReps||[]).length>0&&<div style={{marginBottom:8}}><span style={{fontSize:10,borderRadius:99,padding:"1px 8px",background:"var(--blue-bg)",color:"var(--blue)",fontWeight:500}}>VAT {c.vatReps.length}</span></div>}
           <div style={{fontSize:11,color:"var(--dim)",marginTop:4}}>ซื้อรวม</div>
