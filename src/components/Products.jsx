@@ -18,7 +18,7 @@ import ProductsTable from "./ProductsTable.tsx";
 import SlideOver from "./ui/SlideOver.tsx";
 
 export default function ProdPage({sh}){
-  const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
+  const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH,priceHist}=sh;
   const ed=canE("products");const cd=canD("products");
   const baseP=isSup?products.filter(p=>p.distributor===supN):products;
   const[fBrand,setFBrand]=useState("");const[fCat,setFCat]=useState("");const[fStat,setFStat]=useState("");const[fAttn,setFAttn]=useState(false);const[bsExpanded,setBsExpanded]=useState({});const[showBreakdown,setShowBreakdown]=useState(false);
@@ -58,6 +58,8 @@ export default function ProdPage({sh}){
   const selProds=useMemo(()=>products.filter(p=>sel.has(p.id)),[products,sel]);
   const stats=useMemo(()=>{const total=baseP.length;const stockVal=baseP.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);const low=baseP.filter(p=>p.minStock>0&&p.stock<=p.minStock).length;const totalRes=Object.values(reservedMap).reduce((s,v)=>s+v,0);return{total,stockVal,low,totalRes};},[baseP,reservedMap]);
   const brandCounts=useMemo(()=>{const m={};baseP.forEach(p=>{m[p.brand]=(m[p.brand]||0)+1;});return m;},[baseP]);
+  // Most-recent price change per product within last 30 days (for "ลดจาก ฿X" indicator).
+  const priceCuts=useMemo(()=>{const out={};if(!priceHist||!priceHist.length)return out;const cutoff=Date.now()-30*86400000;for(const h of priceHist){if(h.field!=="price")continue;const t=new Date(h.date).getTime();if(isNaN(t)||t<cutoff)continue;if(out[h.productId])continue;out[h.productId]=h;}return out;},[priceHist]);
   const series=useMemo(()=>{const ref=new Date();return{total:newProductsSeries(logs||[],30,ref),stockVal:stockValueSeries(baseP,logs||[],30,ref),low:lowStockSeries(baseP,logs||[],30,ref),res:reservedSeries(sales,30,ref)};},[baseP,logs,sales]);
   const deltas=useMemo(()=>{const sumTail=(arr,n)=>arr.slice(-n).reduce((s,v)=>s+v,0);const newCnt=sumTail(series.total,7);const stockNow=series.stockVal[series.stockVal.length-1]||0;const stock7=series.stockVal[series.stockVal.length-8]??stockNow;const stockDelta=stockNow-stock7;return{total:newCnt>0?{text:"+"+newCnt+" สัปดาห์นี้",positive:true}:null,stockVal:stockDelta!==0?{text:(stockDelta>0?"+":"")+"฿"+fmt(Math.round(stockDelta))+" 7 วัน",positive:stockDelta>0}:null};},[series]);
   const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");
@@ -101,9 +103,16 @@ export default function ProdPage({sh}){
           </span>
         </div>
       </div>
-      <div style={{fontWeight:600,fontSize:15,lineHeight:1.3,textDecoration:pr.discontinued?"line-through":"none",color:pr.discontinued?"var(--dim)":"var(--text)",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",minHeight:"2.6em"}}>
-        {pN(pr)}
-      </div>
+      {(()=>{
+        const full=pN(pr)||"";
+        const sp=full.indexOf(" ");
+        const modelCode=sp===-1?full:full.slice(0,sp);
+        const descriptor=sp===-1?"":full.slice(sp+1);
+        return <div style={{minHeight:"2.6em",textDecoration:pr.discontinued?"line-through":"none"}}>
+          <div style={{fontFamily:"var(--mono, ui-monospace, Consolas, monospace)",fontSize:17,fontWeight:800,letterSpacing:"-0.015em",lineHeight:1.15,backgroundImage:`linear-gradient(135deg, ${bc.base} 0%, ${bc.base} 30%, var(--text) 100%)`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",color:bc.base,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:pr.discontinued?0.5:1}}>{modelCode}</div>
+          {descriptor&&<div style={{fontSize:12,color:"var(--dim)",fontWeight:500,marginTop:2,lineHeight:1.3,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{descriptor}</div>}
+        </div>;
+      })()}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         <span onClick={e=>{e.stopPropagation();const cidStr=String(pr.categoryId);setFCat(fCat===cidStr?"":cidStr);}} title={fCat===String(pr.categoryId)?"คลิกเพื่อล้างตัวกรอง":"กรองหมวด "+getCN(pr.categoryId)} style={{fontSize:11,background:fCat===String(pr.categoryId)?"var(--blue-bg)":"var(--hover)",borderRadius:4,padding:"2px 8px",color:fCat===String(pr.categoryId)?"var(--blue)":"var(--dim)",cursor:"pointer",fontWeight:fCat===String(pr.categoryId)?600:400}}>{getCN(pr.categoryId)}</span>
         {pr.size&&<span style={{fontSize:11,background:"var(--blue-bg)",borderRadius:4,padding:"2px 8px",color:"var(--blue)",fontWeight:500}}>{pr.size}</span>}
@@ -120,10 +129,14 @@ export default function ProdPage({sh}){
         </div>
         {(()=>{if(pr.stock<=0)return null;const sc=salesByProd[pr.id]||{d7:0,d30:0};const days=daysOfStock(pr.stock,sc.d30);if(days===null||days===Infinity||days>=60)return null;const urgent=days<14;return <div style={{fontSize:11,color:urgent?"var(--red)":"var(--orange)",fontWeight:600,marginTop:5,display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:10}}>{urgent?"⚠":"⏱"}</span>หมดใน ~{Math.max(1,Math.round(days))} วัน</div>;})()}
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
         <div>
           <div style={{fontSize:10,color:"var(--dim)",textTransform:"uppercase",letterSpacing:"0.05em"}}>ราคาขาย</div>
-          <strong className="num" style={{color:"var(--text)",fontSize:18,fontWeight:700}}>{"฿"+fmt(pr.price)}</strong>
+          <div style={{display:"flex",alignItems:"baseline",gap:2,marginTop:1}}>
+            <span style={{fontSize:14,color:"var(--dim)",fontWeight:500,alignSelf:"flex-start",marginTop:4}}>฿</span>
+            <strong className="num" style={{color:"var(--text)",fontSize:26,fontWeight:800,letterSpacing:"-0.025em",lineHeight:1}}>{fmt(pr.price)}</strong>
+          </div>
+          {(()=>{const cut=priceCuts[pr.id];if(!cut||cut.newVal!==pr.price||!(cut.newVal<cut.oldVal))return null;const pct=Math.round((1-cut.newVal/cut.oldVal)*100);return <div style={{display:"flex",alignItems:"center",gap:5,marginTop:3,fontSize:10}}><span className="num" style={{color:"var(--faint)",textDecoration:"line-through"}}>{"฿"+fmt(cut.oldVal)}</span><span style={{padding:"1px 5px",borderRadius:4,background:"rgba(255,59,48,0.14)",color:"var(--red)",fontWeight:700}}>{"-"+pct+"%"}</span></div>;})()}
         </div>
         {ss.days!=null&&<div style={{fontSize:11,color:"var(--faint)"}}>ขายล่าสุด {ss.days}d</div>}
       </div>
