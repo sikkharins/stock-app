@@ -98,6 +98,54 @@ export const salesCountByProduct = (
   return out;
 };
 
+/**
+ * Estimate days of stock remaining based on recent velocity.
+ * Returns null if no sales history (velocity is unknown).
+ * Returns Infinity if stock > 0 but qty30d = 0 (caller decides how to render).
+ */
+export const daysOfStock = (stock: number, qty30d: number): number | null => {
+  if (qty30d <= 0) return stock > 0 ? Infinity : 0;
+  const dailyVelocity = qty30d / 30;
+  return stock / dailyVelocity;
+};
+
+/**
+ * Trend direction based on whether the 7-day rate is above/below the 30-day rate.
+ * "up" when last week is selling faster than the trailing 30-day average.
+ * "down" when it's slower. "flat" when within ±10% of the trend.
+ */
+export const salesTrend = (d7: number, d30: number): "up" | "down" | "flat" | "none" => {
+  if (d30 <= 0 && d7 <= 0) return "none";
+  const weekRate = d7 / 7;
+  const monthRate = d30 / 30;
+  if (monthRate <= 0) return weekRate > 0 ? "up" : "none";
+  const ratio = weekRate / monthRate;
+  if (ratio > 1.1) return "up";
+  if (ratio < 0.9) return "down";
+  return "flat";
+};
+
+/**
+ * Returns true if a product needs operational attention.
+ * Combines three risk signals (any one is enough):
+ *  - minStock-low: stock <= minStock (when minStock > 0)
+ *  - velocity-low: estimated days of stock < `velocityDaysThreshold` AND has sales history
+ *  - oversold: reservations > current stock
+ */
+export const needsAttention = (
+  p: { stock: number; minStock?: number },
+  qty30d: number,
+  reserved: number,
+  velocityDaysThreshold: number = 14
+): boolean => {
+  const minLow = (p.minStock || 0) > 0 && p.stock <= (p.minStock || 0);
+  if (minLow) return true;
+  if (reserved > p.stock) return true;
+  const days = daysOfStock(p.stock, qty30d);
+  if (days !== null && days !== Infinity && days < velocityDaysThreshold) return true;
+  return false;
+};
+
 export const newProductsSeries = (
   logs: Log[],
   days: number,

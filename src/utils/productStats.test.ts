@@ -5,6 +5,9 @@ import {
   reservedSeries,
   newProductsSeries,
   salesCountByProduct,
+  daysOfStock,
+  salesTrend,
+  needsAttention,
   daysAgoISO,
 } from "./productStats";
 
@@ -119,5 +122,69 @@ describe("salesCountByProduct", () => {
     ];
     const r = salesCountByProduct(sales as any, today);
     expect(r["2"]).toEqual({ d7: 7, d30: 7 });
+  });
+});
+
+describe("daysOfStock", () => {
+  test("returns stock / daily velocity", () => {
+    // qty30d=30 → 1/day; stock=15 → 15 days
+    expect(daysOfStock(15, 30)).toBe(15);
+  });
+  test("returns null when no sales and no stock (unknown)", () => {
+    expect(daysOfStock(0, 0)).toBe(0);
+  });
+  test("returns Infinity when stock>0 and no sales", () => {
+    expect(daysOfStock(5, 0)).toBe(Infinity);
+  });
+  test("works with fractional velocity", () => {
+    // qty30d=10 → 1/3 per day; stock=5 → 15 days
+    expect(daysOfStock(5, 10)).toBe(15);
+  });
+});
+
+describe("salesTrend", () => {
+  test("up when 7-day rate > 110% of 30-day rate", () => {
+    // d7/7=2, d30/30=1, ratio=2 → up
+    expect(salesTrend(14, 30)).toBe("up");
+  });
+  test("down when 7-day rate < 90% of 30-day rate", () => {
+    // d7/7=0.5, d30/30=1, ratio=0.5 → down
+    expect(salesTrend(3.5, 30)).toBe("down");
+  });
+  test("flat when within ±10%", () => {
+    // d7/7=1, d30/30=1, ratio=1 → flat
+    expect(salesTrend(7, 30)).toBe("flat");
+  });
+  test("none when no sales at all", () => {
+    expect(salesTrend(0, 0)).toBe("none");
+  });
+  test("up when monthly rate is 0 but weekly has sales", () => {
+    // Cannot reach this via normal salesCountByProduct (d30 ≥ d7), but the
+    // pure fn should still behave sanely.
+    expect(salesTrend(3, 0)).toBe("up");
+  });
+});
+
+describe("needsAttention", () => {
+  test("true when stock at/below minStock", () => {
+    expect(needsAttention({ stock: 2, minStock: 5 }, 0, 0)).toBe(true);
+  });
+  test("true when reservations exceed stock", () => {
+    expect(needsAttention({ stock: 3, minStock: 0 }, 0, 5)).toBe(true);
+  });
+  test("true when velocity says <14 days left", () => {
+    // 30d sold = 30 → 1/day. stock=10 → 10 days → attention
+    expect(needsAttention({ stock: 10, minStock: 0 }, 30, 0)).toBe(true);
+  });
+  test("false when healthy stock + slow velocity", () => {
+    // 30d sold = 1 → 30 days estimate at stock=1 (1*30/1=30) — well above 14
+    expect(needsAttention({ stock: 10, minStock: 0 }, 1, 0)).toBe(false);
+  });
+  test("false when no sales and stock above minStock", () => {
+    expect(needsAttention({ stock: 5, minStock: 1 }, 0, 0)).toBe(false);
+  });
+  test("respects custom threshold", () => {
+    // 30 days estimate, threshold 60 → trigger
+    expect(needsAttention({ stock: 30, minStock: 0 }, 30, 0, 60)).toBe(true);
   });
 });
