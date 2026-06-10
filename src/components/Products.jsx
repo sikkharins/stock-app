@@ -20,17 +20,24 @@ export default function ProdPage({sh}){
   const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
   const ed=canE("products");const cd=canD("products");
   const baseP=isSup?products.filter(p=>p.distributor===supN):products;
-  const[fBrand,setFBrand]=useState("");const[fCat,setFCat]=useState("");const[fStat,setFStat]=useState("");const[bsExpanded,setBsExpanded]=useState({});const[showBreakdown,setShowBreakdown]=useState(false);
+  const[fBrand,setFBrand]=useState("");const[fCat,setFCat]=useState("");const[fStat,setFStat]=useState("");const[fAttn,setFAttn]=useState(false);const[bsExpanded,setBsExpanded]=useState({});const[showBreakdown,setShowBreakdown]=useState(false);
   const[detailPr,setDetailPr]=useState(null);const[sortBy,setSortBy]=useState(()=>{const s=localStorage.getItem("productSort");return s&&s!=="brand"?s:"name";});
   const[view,setView]=useState(()=>localStorage.getItem("productView")||"card");
   useEffect(()=>{localStorage.setItem("productView",view);},[view]);
   const[density,setDensity]=useState(()=>localStorage.getItem("productTableDensity")||"comfortable");
   useEffect(()=>{localStorage.setItem("productTableDensity",density);},[density]);
   useEffect(()=>{localStorage.setItem("productSort",sortBy);},[sortBy]);
-  const filtered=useMemo(()=>baseP.filter(pr=>{if(fBrand&&pr.brand!==fBrand)return false;if(fCat&&pr.categoryId!==+fCat)return false;if(fStat&&getSS(pr.id,sales).key!==fStat)return false;if(search&&!((pN(pr)||"").toLowerCase().includes(search.toLowerCase())||(pr.code||"").toLowerCase().includes(search.toLowerCase())||(pr.brand||"").toLowerCase().includes(search.toLowerCase())))return false;return true;}),[baseP,fBrand,fCat,fStat,search,sales,pN]);
-  const sorted=useMemo(()=>{const arr=[...filtered];if(sortBy==="name")arr.sort((a,b)=>pN(a).localeCompare(pN(b)));else if(sortBy==="price_asc")arr.sort((a,b)=>a.price-b.price);else if(sortBy==="price_desc")arr.sort((a,b)=>b.price-a.price);else if(sortBy==="stock_asc")arr.sort((a,b)=>a.stock-b.stock);else if(sortBy==="stock_desc")arr.sort((a,b)=>b.stock-a.stock);else if(sortBy==="last_sold")arr.sort((a,b)=>(getSS(a.id,sales).days??9999)-(getSS(b.id,sales).days??9999));return arr;},[filtered,sortBy]);
+  const filtered=useMemo(()=>baseP.filter(pr=>{
+    if(fBrand&&pr.brand!==fBrand)return false;
+    if(fCat&&pr.categoryId!==+fCat)return false;
+    if(fStat&&getSS(pr.id,sales).key!==fStat)return false;
+    if(fAttn){const sc=salesByProd[pr.id]||{d7:0,d30:0};const res=reservedMap[pr.id]||0;if(!needsAttention(pr,sc.d30,res))return false;}
+    if(search&&!((pN(pr)||"").toLowerCase().includes(search.toLowerCase())||(pr.code||"").toLowerCase().includes(search.toLowerCase())||(pr.brand||"").toLowerCase().includes(search.toLowerCase())))return false;
+    return true;
+  }),[baseP,fBrand,fCat,fStat,fAttn,search,sales,pN,salesByProd,reservedMap]);
+  const sorted=useMemo(()=>{const arr=[...filtered];if(sortBy==="name")arr.sort((a,b)=>pN(a).localeCompare(pN(b)));else if(sortBy==="price_asc")arr.sort((a,b)=>a.price-b.price);else if(sortBy==="price_desc")arr.sort((a,b)=>b.price-a.price);else if(sortBy==="stock_asc")arr.sort((a,b)=>a.stock-b.stock);else if(sortBy==="stock_desc")arr.sort((a,b)=>b.stock-a.stock);else if(sortBy==="last_sold")arr.sort((a,b)=>(getSS(a.id,sales).days??9999)-(getSS(b.id,sales).days??9999));else if(sortBy==="sold_30d_desc")arr.sort((a,b)=>((salesByProd[b.id]||{d30:0}).d30)-((salesByProd[a.id]||{d30:0}).d30));return arr;},[filtered,sortBy,salesByProd]);
   const PAGE=20;const[showCount,setShowCount]=useState(PAGE);
-  useEffect(()=>{setShowCount(PAGE);},[fBrand,fCat,fStat,search,sortBy]);
+  useEffect(()=>{setShowCount(PAGE);},[fBrand,fCat,fStat,fAttn,search,sortBy]);
   const visible=useMemo(()=>sorted.slice(0,showCount),[sorted,showCount]);
   const hasMore=showCount<sorted.length;
   const emptyF={code:"",name:"",nameT:"",brand:brands[0]||"",categoryId:"",subcategoryId:"",size:"",distributor:"",price:"",cost:"",stock:"",minStock:"",unit:"เครื่อง",discontinued:false};
@@ -176,7 +183,7 @@ export default function ProdPage({sh}){
       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
         <div style={{minWidth:220,flex:"1 1 220px",maxWidth:360}}><SB value={search} onChange={setSearch} placeholder="ค้นหาสินค้า..."/></div>
         <CustomSelect value={fCat} onChange={setFCat} options={[{value:"",label:"ทุกหมวด"},...cats.map(c=>({value:String(c.id),label:c.name}))]} style={{width:"auto",minWidth:120}}/>
-        <CustomSelect value={sortBy} onChange={setSortBy} options={[{value:"name",label:"ชื่อ"},{value:"price_asc",label:"ราคา ↑"},{value:"price_desc",label:"ราคา ↓"},{value:"stock_asc",label:"สต็อก ↑"},{value:"stock_desc",label:"สต็อก ↓"},{value:"last_sold",label:"ขายล่าสุด"}]} style={{width:"auto",minWidth:140}}/>
+        <CustomSelect value={sortBy} onChange={setSortBy} options={[{value:"name",label:"ชื่อ"},{value:"price_asc",label:"ราคา ↑"},{value:"price_desc",label:"ราคา ↓"},{value:"stock_asc",label:"สต็อก ↑"},{value:"stock_desc",label:"สต็อก ↓"},{value:"last_sold",label:"ขายล่าสุด"},{value:"sold_30d_desc",label:"ขายดี 30 วัน"}]} style={{width:"auto",minWidth:140}}/>
         <div style={{display:"flex",gap:0,border:"1px solid var(--line)",borderRadius:7,overflow:"hidden"}}>
           {[["card","▤"],["table","▦"]].map(([k,ic])=>(
             <button key={k} onClick={()=>setView(k)} title={k==="card"?"การ์ด":"ตาราง"} style={{padding:"6px 11px",border:"none",background:view===k?"var(--blue-bg)":"transparent",color:view===k?"var(--blue)":"var(--dim)",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:500}}>{ic}</button>
@@ -194,6 +201,7 @@ export default function ProdPage({sh}){
       <BrandChipRow brands={brands} counts={brandCounts} value={fBrand} onChange={setFBrand}/>
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+      {(()=>{const cnt=baseP.filter(pr=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const res=reservedMap[pr.id]||0;return needsAttention(pr,sc.d30,res);}).length;return <div onClick={()=>setFAttn(v=>!v)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fAttn?"rgba(255,59,48,0.14)":"var(--bg)",border:"1.5px solid "+(fAttn?"var(--red)":cnt>0?"var(--red)":"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:600,color:fAttn?"var(--red)":cnt>0?"var(--red)":"var(--dim)"}}><span>⚠</span><span>ต้องดูแล</span><span style={{background:fAttn?"rgba(255,59,48,0.22)":cnt>0?"rgba(255,59,48,0.14)":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})()}
       {STOCK_STATUS.map(s=>{const cnt=baseP.filter(pr=>getSS(pr.id,sales).key===s.key).length;return <div key={s.key} onClick={()=>setFStat(fStat===s.key?"":s.key)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fStat===s.key?s.bg:"var(--bg)",border:"1.5px solid "+(fStat===s.key?s.color:"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:500,color:fStat===s.key?s.color:"var(--dim)"}}><span>{s.icon}</span><span>{s.label}</span><span style={{background:fStat===s.key?s.color+"22":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})}
     </div>
     {sorted.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}><div style={{fontSize:48,marginBottom:8}}>{hasFilter?"":""}
