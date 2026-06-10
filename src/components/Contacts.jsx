@@ -304,6 +304,18 @@ export default function ContactPage({sh,ft}){
       <div style={{color:"var(--faint)",fontSize:12,marginBottom:16}}>{search?"ลองค้นหาด้วยคำอื่น":("เพิ่ม"+title+"รายแรกเพื่อเริ่มต้นใช้งาน")}</div>
       {ed&&!search&&<Btn onClick={()=>{setFormErrors([]);setForm({...ef});oM(mk);}}>{"+ เพิ่ม"+title+"แรก"}</Btn>}
     </div>}
+    {isC&&<style>{`
+      .cust-card{transition:transform 220ms var(--ease-out,ease-out),box-shadow 220ms var(--ease-out,ease-out),border-color 220ms;transform-style:preserve-3d;will-change:transform;background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),var(--accent-soft,rgba(0,122,255,0.05)) 0%,transparent 60%),var(--panel);}
+      .cust-card:hover{box-shadow:0 24px 48px var(--accent-rgba,rgba(0,122,255,0.35));}
+      .cust-card:hover .cust-stripe{width:9px;box-shadow:0 0 14px var(--stripe-glow);}
+      .cust-card .cust-stripe{transition:width 200ms var(--ease-out,ease-out);}
+      .cust-card .cust-actions{opacity:0;transition:opacity 220ms;}
+      .cust-card:hover .cust-actions{opacity:1;}
+      .cust-card .cust-reveal{max-height:0;opacity:0;padding-top:0;border-top:none;transition:max-height 260ms,opacity 260ms,padding-top 260ms,border-top 260ms;overflow:hidden;}
+      .cust-card:hover .cust-reveal{max-height:80px;opacity:1;padding-top:6px;border-top:1px solid var(--line);}
+      .cust-card .salesPerson-mark{transition:opacity 240ms;opacity:0.5;}
+      .cust-card:hover .salesPerson-mark{opacity:0.85;}
+    `}</style>}
     {(!isC||viewMode==="grid")&&<div className="contact-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:12}}>
       {filtered.map(c=>{
         if(!isC){
@@ -350,8 +362,20 @@ export default function ContactPage({sh,ft}){
         const dotColor=STATUS_COLOR[status];
         const velocityColor=lpd===null?"var(--faint)":lpd<30?"var(--green)":lpd<=60?"var(--orange)":"var(--red)";
         const velocityText=lpd===null?"ยังไม่มีคำสั่งซื้อ":`⏱ ซื้อล่าสุด ${lpd} วันก่อน`;
-        return <div key={c.id} className="cust-card" style={{position:"relative",background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem 1.25rem 0.9rem 1.5rem",overflow:"hidden"}}>
-          <span style={{position:"absolute",left:0,top:0,bottom:0,width:6,background:dotColor}}/>
+        return <div key={c.id} className="cust-card"
+          onMouseMove={e=>{
+            const r=e.currentTarget.getBoundingClientRect();
+            const mx=((e.clientX-r.left)/r.width)*100;
+            const my=((e.clientY-r.top)/r.height)*100;
+            e.currentTarget.style.setProperty("--mx",mx+"%");
+            e.currentTarget.style.setProperty("--my",my+"%");
+            const tiltX=(my-50)/10;
+            const tiltY=(50-mx)/10;
+            e.currentTarget.style.transform=`perspective(900px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateY(-4px) scale(1.012)`;
+          }}
+          onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.setProperty("--mx","50%");e.currentTarget.style.setProperty("--my","50%");}}
+          style={{position:"relative",border:"1px solid var(--line)",borderRadius:12,padding:"1rem 1.25rem 0.9rem 1.5rem",overflow:"hidden","--accent-rgba":bc?bc.alpha(0.45):"rgba(0,122,255,0.35)","--accent-soft":bc?bc.alpha(0.08):"rgba(0,122,255,0.05)","--stripe-glow":dotColor}}>
+          <span className="cust-stripe" style={{position:"absolute",left:0,top:0,bottom:0,width:6,background:dotColor}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontFamily:"monospace",fontSize:11,color:"var(--faint)"}}>{"CUST-"+String(c.id).slice(-4)}</span>
@@ -380,15 +404,15 @@ export default function ContactPage({sh,ft}){
               </div>
             </div>
           </>}
-          {top&&<div style={{fontSize:11,color:"var(--dim)",marginTop:4,paddingTop:6,borderTop:"1px solid var(--line)"}}>
+          {top&&<div className="cust-reveal" style={{fontSize:11,color:"var(--dim)",marginTop:4}}>
             <div>สินค้าหลัก: {top.name}</div>
             {avg>0&&<div>เฉลี่ย ฿{fmt(avg)}/ใบ</div>}
           </div>}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,fontSize:11,color:"var(--faint)"}}>
             <span>ขายไป {trend.deltaPct>=10?"↑":trend.deltaPct<=-10?"↓":""} ฿{fmt(Math.round(trend.last30))}/30วัน</span>
-            {c.salesPerson&&<span style={{fontWeight:700,opacity:0.5,color:accentText}}>{c.salesPerson}</span>}
+            {c.salesPerson&&<span className="salesPerson-mark" style={{fontWeight:700,color:accentText}}>{c.salesPerson}</span>}
           </div>
-          {ed&&<div style={{display:"flex",gap:8,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
+          {ed&&<div className="cust-actions" style={{display:"flex",gap:8,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
             <button onClick={()=>{setFormErrors([]);setForm({vatReps:[],address:"",taxId:"",salesPerson:"",staff:[],...c});oM(mk);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid var(--blue)",background:"rgba(0,122,255,0.08)",color:"var(--blue)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"แก้ไข"}</button>
             {cd&&<button onClick={()=>del(c.id)} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"ลบ"}</button>}
           </div>}
