@@ -12,6 +12,7 @@ import StatCard from "./ui/StatCard.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import SupplierProfile from "./SupplierProfile.jsx";
 import ContactExcelImport from "./ContactExcelImport.jsx";
+import CustomersTable from "./CustomersTable.jsx";
 import {
   salesByCustomerId,
   outstandingDetail,
@@ -419,6 +420,7 @@ export default function ContactPage({sh,ft}){
         </div>;
       })}
     </div>}
+    {isC&&viewMode==="table"&&<CustomersTable customers={filtered} sales={sales} payments={payments} today={todayDate} cN={cN} onRowClick={c=>setViewProfile(c)}/>}
 
     {modal==="contactImport"&&<ContactExcelImport contactType={ft} onClose={cM} onImport={(items)=>{setContacts(p=>[...p,...items]);sh.addA("นำเข้า Excel",items.length+" "+title);}}/>}
 
