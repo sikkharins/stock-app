@@ -18,6 +18,9 @@ import {
   arStatus,
   lifetimeValue,
   lastPurchaseDays,
+  revenueTrend,
+  topProduct,
+  avgPerSO,
 } from "../utils/customerStats.ts";
 import BrandChipRow from "./ui/BrandChipRow.tsx";
 import { brandColor } from "../utils/brandColors.ts";
@@ -301,40 +304,97 @@ export default function ContactPage({sh,ft}){
       <div style={{color:"var(--faint)",fontSize:12,marginBottom:16}}>{search?"ลองค้นหาด้วยคำอื่น":("เพิ่ม"+title+"รายแรกเพื่อเริ่มต้นใช้งาน")}</div>
       {ed&&!search&&<Btn onClick={()=>{setFormErrors([]);setForm({...ef});oM(mk);}}>{"+ เพิ่ม"+title+"แรก"}</Btn>}
     </div>}
-    <div className="contact-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:12}}>
-      {filtered.map(c=>{const poInfo=!isC?poCountMap[c.id]:null;return<div key={c.id} style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem 1.25rem"}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-          <div onClick={isC?()=>setViewProfile(c):()=>setViewSupplier(c)} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{fontWeight:600,fontSize:14,cursor:"pointer",color:"var(--blue)"}}>{cN(c)}</div>
-          <Badge status={c.type}/>
-        </div>
-        {isC&&c.customerGroup&&<div style={{marginBottom:4}}><span style={{fontSize:11,borderRadius:99,padding:"2px 8px",fontWeight:500,...(c.customerGroup==="regular"?{background:"rgba(52,199,89,0.12)",color:"var(--green)"}:{background:"rgba(142,142,147,0.12)",color:"var(--faint)"})}}>{c.customerGroup==="regular"?"ประจำ":"หน้าร้าน"}</span></div>}
-        <div style={{fontSize:12,color:"var(--dim)",marginBottom:2}}>{c.phone||"-"}</div>
-        <div style={{fontSize:12,color:"var(--blue)",marginBottom:4}}>{c.email||"-"}</div>
-        {!isC&&c.taxId&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:2}}>{"Tax ID: "+c.taxId}</div>}
-        {!isC&&c.address&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.address}</div>}
-        {!isC&&poInfo&&<div style={{display:"flex",gap:8,marginBottom:8,marginTop:6}}>
-          <span style={{fontSize:11,background:"rgba(0,122,255,0.1)",color:"var(--blue)",borderRadius:99,padding:"3px 10px",fontWeight:500}}>{poInfo.count+" PO"}</span>
-          <span style={{fontSize:11,background:"rgba(52,199,89,0.1)",color:"var(--green)",borderRadius:99,padding:"3px 10px",fontWeight:500}}>{"฿"+fmt(poInfo.val)}</span>
-        </div>}
-        {isC&&c.salesPerson&&<div style={{fontSize:12,marginBottom:6}}><span style={{background:"rgba(175,82,222,0.12)",color:"var(--purple)",borderRadius:99,padding:"2px 10px",fontWeight:500,fontSize:11}}>{c.salesPerson}</span></div>}
-        {isC&&c.vatReps&&c.vatReps.length>0&&<div style={{background:"var(--blue-bg)",border:"1px solid var(--blue)",borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:12}}>
-          <div style={{color:"var(--blue)",fontWeight:500,marginBottom:4}}>{"ตัวแทน VAT ("+c.vatReps.length+")"}</div>
-          {c.vatReps.map(r=><div key={r.id} style={{marginBottom:3}}><span style={{fontWeight:500}}>{r.name}</span><span style={{color:"var(--faint)",marginLeft:6}}>{r.idCard}</span></div>)}
-        </div>}
-        {!isC&&(c.staff||[]).length>0&&<div style={{background:"rgba(52,199,89,0.08)",border:"1px solid var(--green)",borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:12}}>
-          <div style={{color:"var(--green)",fontWeight:500,marginBottom:4}}>{"Staff ("+c.staff.length+" คน)"}</div>
-          {c.staff.map(s=><div key={s.id} style={{marginBottom:3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontWeight:500}}>{s.name}</span>
-            <span style={{background:"rgba(52,199,89,0.12)",color:"var(--green)",borderRadius:99,padding:"1px 7px",fontSize:10}}>{s.roleTitle}</span>
-            <span style={{color:"var(--faint)",fontSize:11}}>{"@"+s.username}</span>
-          </div>)}
-        </div>}
-        {ed&&<div style={{display:"flex",gap:8,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
-          <button onClick={()=>{setFormErrors([]);setForm({vatReps:[],address:"",taxId:"",salesPerson:"",staff:[],...c});oM(mk);}} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 0",borderRadius:6,border:"1px solid var(--blue)",background:"rgba(0,122,255,0.08)",color:"var(--blue)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"แก้ไข"}</button>
-          {cd&&<button onClick={()=>del(c.id)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 0",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"ลบ"}</button>}
-        </div>}
-      </div>;})}
-    </div>
+    {(!isC||viewMode==="grid")&&<div className="contact-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:12}}>
+      {filtered.map(c=>{
+        if(!isC){
+          const poInfo=poCountMap[c.id];
+          return <div key={c.id} style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem 1.25rem"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <div onClick={()=>setViewSupplier(c)} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"} style={{fontWeight:600,fontSize:14,cursor:"pointer",color:"var(--blue)"}}>{cN(c)}</div>
+              <Badge status={c.type}/>
+            </div>
+            <div style={{fontSize:12,color:"var(--dim)",marginBottom:2}}>{c.phone||"-"}</div>
+            <div style={{fontSize:12,color:"var(--blue)",marginBottom:4}}>{c.email||"-"}</div>
+            {c.taxId&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:2}}>{"Tax ID: "+c.taxId}</div>}
+            {c.address&&<div style={{fontSize:11,color:"var(--faint)",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.address}</div>}
+            {poInfo&&<div style={{display:"flex",gap:8,marginBottom:8,marginTop:6}}>
+              <span style={{fontSize:11,background:"rgba(0,122,255,0.1)",color:"var(--blue)",borderRadius:99,padding:"3px 10px",fontWeight:500}}>{poInfo.count+" PO"}</span>
+              <span style={{fontSize:11,background:"rgba(52,199,89,0.1)",color:"var(--green)",borderRadius:99,padding:"3px 10px",fontWeight:500}}>{"฿"+fmt(poInfo.val)}</span>
+            </div>}
+            {(c.staff||[]).length>0&&<div style={{background:"rgba(52,199,89,0.08)",border:"1px solid var(--green)",borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:12}}>
+              <div style={{color:"var(--green)",fontWeight:500,marginBottom:4}}>{"Staff ("+c.staff.length+" คน)"}</div>
+              {c.staff.map(s=><div key={s.id} style={{marginBottom:3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontWeight:500}}>{s.name}</span>
+                <span style={{background:"rgba(52,199,89,0.12)",color:"var(--green)",borderRadius:99,padding:"1px 7px",fontSize:10}}>{s.roleTitle}</span>
+                <span style={{color:"var(--faint)",fontSize:11}}>{"@"+s.username}</span>
+              </div>)}
+            </div>}
+            {ed&&<div style={{display:"flex",gap:8,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
+              <button onClick={()=>{setFormErrors([]);setForm({vatReps:[],address:"",taxId:"",salesPerson:"",staff:[],...c});oM(mk);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid var(--blue)",background:"rgba(0,122,255,0.08)",color:"var(--blue)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"แก้ไข"}</button>
+              {cd&&<button onClick={()=>del(c.id)} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"ลบ"}</button>}
+            </div>}
+          </div>;
+        }
+        // CUSTOMER CARD — new anatomy
+        const mine=salesByCust[c.id]||[];
+        const ltv=lifetimeValue(c,mine);
+        const trend=revenueTrend(c,mine,todayDate);
+        const lpd=lastPurchaseDays(c,mine,todayDate);
+        const od=outstandingDetail(c,mine,payments||[],todayDate);
+        const status=arStatus(c,mine,payments||[],todayDate);
+        const top=topProduct(c,mine,products||[]);
+        const avg=avgPerSO(c,mine);
+        const bc=c.salesPerson?brandColor(c.salesPerson):null;
+        const accentText=bc?bc.text:"var(--blue)";
+        const STATUS_COLOR={overdue:"var(--red)",ar:"var(--orange)",dormant:"var(--faint)",normal:"var(--green)"};
+        const dotColor=STATUS_COLOR[status];
+        const velocityColor=lpd===null?"var(--faint)":lpd<30?"var(--green)":lpd<=60?"var(--orange)":"var(--red)";
+        const velocityText=lpd===null?"ยังไม่มีคำสั่งซื้อ":`⏱ ซื้อล่าสุด ${lpd} วันก่อน`;
+        return <div key={c.id} className="cust-card" style={{position:"relative",background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem 1.25rem 0.9rem 1.5rem",overflow:"hidden"}}>
+          <span style={{position:"absolute",left:0,top:0,bottom:0,width:6,background:dotColor}}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontFamily:"monospace",fontSize:11,color:"var(--faint)"}}>{"CUST-"+String(c.id).slice(-4)}</span>
+              {c.customerGroup&&<span style={{fontSize:10,borderRadius:99,padding:"1px 8px",fontWeight:500,...(c.customerGroup==="regular"?{background:"rgba(52,199,89,0.12)",color:"var(--green)"}:{background:"rgba(142,142,147,0.12)",color:"var(--faint)"})}}>{c.customerGroup==="regular"?"ประจำ":"หน้าร้าน"}</span>}
+              {c.salesPerson&&<span style={{fontSize:10,borderRadius:99,padding:"1px 8px",fontWeight:500,background:bc?bc.alpha(0.12):"rgba(0,122,255,0.12)",color:accentText}}>● {c.salesPerson}</span>}
+            </div>
+            <span style={{width:10,height:10,borderRadius:99,background:dotColor,boxShadow:`0 0 8px ${dotColor}`}}/>
+          </div>
+          <div onClick={()=>setViewProfile(c)} style={{fontSize:17,fontWeight:800,lineHeight:1.15,cursor:"pointer",color:accentText,marginBottom:1}}>{c.nameT||c.name}</div>
+          <div style={{fontSize:12,color:"var(--dim)",marginBottom:8}}>{[c.nameT&&c.name,c.phone].filter(Boolean).join(" · ")||"—"}</div>
+          {(c.vatReps||[]).length>0&&<div style={{marginBottom:8}}><span style={{fontSize:10,borderRadius:99,padding:"1px 8px",background:"var(--blue-bg)",color:"var(--blue)",fontWeight:500}}>VAT {c.vatReps.length}</span></div>}
+          <div style={{fontSize:11,color:"var(--dim)",marginTop:4}}>ซื้อรวม</div>
+          <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}>
+            <span style={{fontSize:24,fontWeight:800,letterSpacing:"-0.02em",color:"var(--text)"}}>฿ {fmt(Math.round(ltv))}</span>
+            {trend.deltaPct>=10&&<span style={{fontSize:12,color:"var(--green)",fontWeight:600}}>↑ {trend.deltaPct}%</span>}
+            {trend.deltaPct<=-10&&<span style={{fontSize:12,color:"var(--orange)",fontWeight:600}}>↓ {Math.abs(trend.deltaPct)}%</span>}
+          </div>
+          <div style={{fontSize:12,color:velocityColor,marginBottom:8}}>{velocityText}</div>
+          {od.total>0&&<>
+            <div style={{fontSize:11,color:"var(--dim)",marginTop:2}}>รอเก็บ</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <span style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>฿ {fmt(Math.round(od.total))}</span>
+              <div style={{display:"flex",gap:4}}>
+                <span style={{fontSize:10,background:"rgba(0,122,255,0.1)",color:"var(--blue)",borderRadius:99,padding:"2px 8px",fontWeight:500}}>{od.count} ใบ</span>
+                {od.overdueCount>0&&<span style={{fontSize:10,background:"rgba(255,59,48,0.12)",color:"var(--red)",borderRadius:99,padding:"2px 8px",fontWeight:600}}>{od.overdueCount} เกินกำหนด</span>}
+              </div>
+            </div>
+          </>}
+          {top&&<div style={{fontSize:11,color:"var(--dim)",marginTop:4,paddingTop:6,borderTop:"1px solid var(--line)"}}>
+            <div>สินค้าหลัก: {top.name}</div>
+            {avg>0&&<div>เฉลี่ย ฿{fmt(avg)}/ใบ</div>}
+          </div>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,fontSize:11,color:"var(--faint)"}}>
+            <span>ขายไป {trend.deltaPct>=10?"↑":trend.deltaPct<=-10?"↓":""} ฿{fmt(Math.round(trend.last30))}/30วัน</span>
+            {c.salesPerson&&<span style={{fontWeight:700,opacity:0.5,color:accentText}}>{c.salesPerson}</span>}
+          </div>
+          {ed&&<div style={{display:"flex",gap:8,marginTop:8,borderTop:"1px solid var(--line)",paddingTop:8}}>
+            <button onClick={()=>{setFormErrors([]);setForm({vatReps:[],address:"",taxId:"",salesPerson:"",staff:[],...c});oM(mk);}} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid var(--blue)",background:"rgba(0,122,255,0.08)",color:"var(--blue)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"แก้ไข"}</button>
+            {cd&&<button onClick={()=>del(c.id)} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid var(--red)",background:"rgba(255,59,48,0.08)",color:"var(--red)",cursor:"pointer",fontSize:12,fontWeight:500}}>{"ลบ"}</button>}
+          </div>}
+        </div>;
+      })}
+    </div>}
 
     {modal==="contactImport"&&<ContactExcelImport contactType={ft} onClose={cM} onImport={(items)=>{setContacts(p=>[...p,...items]);sh.addA("นำเข้า Excel",items.length+" "+title);}}/>}
 
