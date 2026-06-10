@@ -11,7 +11,7 @@ import CatMgr from "./CategoryManager.jsx";
 import StatCard from "./ui/StatCard.jsx";
 import { buildBrandSubData } from "./ui/StockValueDonut.jsx";
 import ExcelImport from "./ExcelImport.jsx";
-import { stockValueSeries, lowStockSeries, reservedSeries, newProductsSeries, salesCountByProduct } from "../utils/productStats.ts";
+import { stockValueSeries, lowStockSeries, reservedSeries, newProductsSeries, salesCountByProduct, daysOfStock, salesTrend, needsAttention } from "../utils/productStats.ts";
 import BrandChipRow from "./ui/BrandChipRow.tsx";
 import ProductsTable from "./ProductsTable.tsx";
 import SlideOver from "./ui/SlideOver.tsx";
@@ -69,7 +69,9 @@ export default function ProdPage({sh}){
     const pct=pr.minStock>0?Math.min(100,Math.round(pr.stock/pr.minStock*100)):100;
     const res=reservedMap[pr.id]||0;
     const isSel=sel.has(pr.id);
-    return <div key={pr.id} onClick={()=>bulkMode?toggleSel(pr.id):setDetailPr(pr)} onMouseEnter={e=>{const el=e.currentTarget;el.style.transform="translateY(-2px)";el.style.boxShadow="var(--shadow-card-hi)";const a=el.querySelector("[data-card-actions]");if(a)a.style.opacity="1";}} onMouseLeave={e=>{const el=e.currentTarget;el.style.transform="translateY(0)";el.style.boxShadow="var(--shadow-card)";const a=el.querySelector("[data-card-actions]");if(a)a.style.opacity="0";}} style={{background:isSel&&bulkMode?"var(--blue-bg)":"var(--panel)",border:"1px solid "+(isSel&&bulkMode?"var(--blue)":isLow?"var(--orange)":"var(--line)"),borderRadius:"var(--radius-card,14px)",padding:"16px 18px",display:"flex",flexDirection:"column",gap:10,cursor:"pointer",boxShadow:"var(--shadow-card)",transition:"transform 120ms var(--ease-out,ease-out),box-shadow 120ms var(--ease-out,ease-out),background 120ms var(--ease-out,ease-out)"}}>
+    const isOOS=pr.stock===0&&!pr.discontinued;
+    return <div key={pr.id} onClick={()=>bulkMode?toggleSel(pr.id):setDetailPr(pr)} onMouseEnter={e=>{const el=e.currentTarget;el.style.transform="translateY(-2px)";el.style.boxShadow="var(--shadow-card-hi)";const a=el.querySelector("[data-card-actions]");if(a)a.style.opacity="1";}} onMouseLeave={e=>{const el=e.currentTarget;el.style.transform="translateY(0)";el.style.boxShadow="var(--shadow-card)";const a=el.querySelector("[data-card-actions]");if(a)a.style.opacity="0";}} style={{position:"relative",background:isSel&&bulkMode?"var(--blue-bg)":"var(--panel)",border:"1px solid "+(isSel&&bulkMode?"var(--blue)":isOOS?"var(--red)":isLow?"var(--orange)":"var(--line)"),borderRadius:"var(--radius-card,14px)",padding:"16px 18px",display:"flex",flexDirection:"column",gap:10,cursor:"pointer",boxShadow:"var(--shadow-card)",transition:"transform 120ms var(--ease-out,ease-out),box-shadow 120ms var(--ease-out,ease-out),background 120ms var(--ease-out,ease-out)",overflow:"hidden"}}>
+      {isOOS&&<div style={{position:"absolute",top:14,right:-32,transform:"rotate(35deg)",background:"var(--red)",color:"#fff",fontSize:10,fontWeight:700,letterSpacing:"0.08em",padding:"3px 38px",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",zIndex:1,pointerEvents:"none"}}>หมดสต็อก</div>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}>
           {bulkMode&&ed&&<input type="checkbox" checked={isSel} onChange={()=>toggleSel(pr.id)} onClick={e=>e.stopPropagation()} style={{width:16,height:16,accentColor:"var(--blue)",cursor:"pointer",flexShrink:0}}/>}
@@ -100,6 +102,7 @@ export default function ProdPage({sh}){
         <div style={{background:"var(--hover)",borderRadius:4,height:8}}>
           <div style={{background:isLow?"var(--red)":"var(--green)",borderRadius:4,height:8,width:pct+"%",transition:"width 200ms var(--ease-out,ease-out)"}}/>
         </div>
+        {(()=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const days=daysOfStock(pr.stock,sc.d30);if(days===null||days===Infinity||days>=60)return null;const urgent=days<14;return <div style={{fontSize:11,color:urgent?"var(--red)":"var(--orange)",fontWeight:600,marginTop:5,display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:10}}>{urgent?"⚠":"⏱"}</span>หมดใน ~{Math.max(1,Math.round(days))} วัน</div>;})()}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
         <div>
@@ -113,8 +116,11 @@ export default function ProdPage({sh}){
         <button onClick={()=>{setAdjPr(pr);setAdjForm({type:"adjust_in",qty:"",note:""});oM("adjust");}} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--orange)",cursor:"pointer",background:"rgba(255,149,0,0.14)",color:"var(--orange)",fontFamily:"inherit"}}>สต็อก</button>
         {cd&&<button onClick={()=>setConfirmDel(pr)} style={{flex:1,fontSize:12,padding:"5px 0",borderRadius:6,border:"1px solid var(--red)",cursor:"pointer",background:"rgba(255,59,48,0.12)",color:"var(--red)",fontFamily:"inherit"}}>ลบ</button>}
       </div>}
-      {(()=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const anySold=sc.d7>0||sc.d30>0;return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:11,color:"var(--dim)",paddingTop:6,borderTop:"0.5px dashed var(--line)"}}>
-        <span style={{textTransform:"uppercase",letterSpacing:"0.04em",fontSize:10}}>ขายไป</span>
+      {(()=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const anySold=sc.d7>0||sc.d30>0;const trend=salesTrend(sc.d7,sc.d30);const trendInfo=trend==="up"?{icon:"↑",color:"var(--green)"}:trend==="down"?{icon:"↓",color:"var(--orange)"}:null;return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:11,color:"var(--dim)",paddingTop:6,borderTop:"0.5px dashed var(--line)"}}>
+        <span style={{textTransform:"uppercase",letterSpacing:"0.04em",fontSize:10,display:"flex",alignItems:"center",gap:4}}>
+          ขายไป
+          {trendInfo&&<span title={trend==="up"?"ขายเร็วขึ้น":"ขายช้าลง"} style={{color:trendInfo.color,fontSize:13,fontWeight:700,lineHeight:1}}>{trendInfo.icon}</span>}
+        </span>
         <span style={{display:"flex",gap:10,alignItems:"baseline",color:anySold?"var(--text)":"var(--faint)"}}>
           <span><strong className="num" style={{fontSize:13,fontWeight:700,color:sc.d7>0?"var(--blue)":"var(--faint)"}}>{sc.d7}</strong><span style={{color:"var(--faint)",marginLeft:3}}>{pr.unit+"/7วัน"}</span></span>
           <span style={{color:"var(--line2)"}}>·</span>
