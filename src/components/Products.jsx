@@ -158,9 +158,8 @@ export default function ProdPage({sh}){
       })()}
     </div>
     <div style={{position:"sticky",top:0,zIndex:20,background:"var(--bg)",margin:"0 -16px",padding:"10px 16px",borderBottom:"1px solid var(--line)",marginBottom:10,backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        <div style={{minWidth:180}}><SB value={search} onChange={setSearch} placeholder="ค้นหาสินค้า..."/></div>
-        <BrandChipRow brands={brands} counts={brandCounts} value={fBrand} onChange={setFBrand}/>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
+        <div style={{minWidth:220,flex:"1 1 220px",maxWidth:360}}><SB value={search} onChange={setSearch} placeholder="ค้นหาสินค้า..."/></div>
         <CustomSelect value={fCat} onChange={setFCat} options={[{value:"",label:"ทุกหมวด"},...cats.map(c=>({value:String(c.id),label:c.name}))]} style={{width:"auto",minWidth:120}}/>
         <CustomSelect value={sortBy} onChange={setSortBy} options={[{value:"name",label:"ชื่อ"},{value:"price_asc",label:"ราคา ↑"},{value:"price_desc",label:"ราคา ↓"},{value:"stock_asc",label:"สต็อก ↑"},{value:"stock_desc",label:"สต็อก ↓"},{value:"last_sold",label:"ขายล่าสุด"}]} style={{width:"auto",minWidth:140}}/>
         <div style={{display:"flex",gap:0,border:"1px solid var(--line)",borderRadius:7,overflow:"hidden"}}>
@@ -177,6 +176,7 @@ export default function ProdPage({sh}){
         )}
         {ed&&<div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><Btn onClick={()=>oM("manageCats")}>{"จัดการหมวด"}</Btn><Btn onClick={()=>oM("excelImport")}>{"นำเข้า Excel"}</Btn><Btn onClick={()=>{setFormErrors([]);setForm(emptyF);oM("product");}}>{"+ เพิ่มสินค้า"}</Btn><Btn variant={bulkMode?"pri":undefined} onClick={()=>{if(bulkMode){selNone();setBulkMode(false);}else setBulkMode(true);}}>{bulkMode?"ยกเลิกเลือก":"เลือกหลายรายการ"}</Btn>{bulkMode&&<><Btn size="sm" onClick={selAll}>{"เลือกทั้งหมด ("+sorted.length+")"}</Btn>{sel.size>0&&<Btn size="sm" onClick={selNone}>{"ล้าง"}</Btn>}</>}</div>}
       </div>
+      <BrandChipRow brands={brands} counts={brandCounts} value={fBrand} onChange={setFBrand}/>
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
       {STOCK_STATUS.map(s=>{const cnt=baseP.filter(pr=>getSS(pr.id,sales).key===s.key).length;return <div key={s.key} onClick={()=>setFStat(fStat===s.key?"":s.key)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fStat===s.key?s.bg:"var(--bg)",border:"1.5px solid "+(fStat===s.key?s.color:"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:500,color:fStat===s.key?s.color:"var(--dim)"}}><span>{s.icon}</span><span>{s.label}</span><span style={{background:fStat===s.key?s.color+"22":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})}
