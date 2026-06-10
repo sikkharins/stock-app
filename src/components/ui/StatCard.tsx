@@ -31,7 +31,7 @@ export default function StatCard({
 }: StatCardProps) {
   const animated = useCountUp(
     animatedValue ?? 0,
-    600,
+    1200,
     animatedValue === undefined
   );
   const displayValue =

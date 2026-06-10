@@ -51,7 +51,8 @@ export default function Sparkline({
       {fill && (
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.55" />
+            <stop offset="60%" stopColor={color} stopOpacity="0.18" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
@@ -74,7 +75,7 @@ export default function Sparkline({
         points={polyPoints}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={2.25}
         strokeLinecap="round"
         strokeLinejoin="round"
         style={
@@ -82,9 +83,10 @@ export default function Sparkline({
             ? {
                 strokeDasharray: pathLen,
                 strokeDashoffset: pathLen,
-                animation: "spark-draw 600ms var(--ease-out, ease-out) forwards",
+                animation: "spark-draw 900ms var(--ease-out, ease-out) forwards",
+                filter: `drop-shadow(0 0 3px ${color})`,
               }
-            : undefined
+            : { filter: `drop-shadow(0 0 3px ${color})` }
         }
       />
       <style>{`

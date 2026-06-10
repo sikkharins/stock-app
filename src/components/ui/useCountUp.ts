@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
  * Pass `instant={true}` to skip the animation entirely (useful for tests or
  * when the user prefers reduced motion).
  */
-export function useCountUp(target: number, durationMs: number = 600, instant: boolean = false): number {
+export function useCountUp(target: number, durationMs: number = 1200, instant: boolean = false): number {
   const [val, setVal] = useState<number>(instant ? target : 0);
   const firstMount = useRef(true);
 
@@ -31,7 +31,8 @@ export function useCountUp(target: number, durationMs: number = 600, instant: bo
     let raf: number;
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
-      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      // ease-out quart — slower start, dramatic settle
+      const eased = 1 - Math.pow(1 - t, 4);
       setVal(target * eased);
       if (t < 1) raf = requestAnimationFrame(step);
     };
