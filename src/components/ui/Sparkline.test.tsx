@@ -33,4 +33,16 @@ describe("Sparkline", () => {
     const { container } = render(<Sparkline points={[1, 2]} color="#ff0000" />);
     expect(container.querySelector("polyline")!.getAttribute("stroke")).toBe("#ff0000");
   });
+
+  test("renders area-fill polygon by default", () => {
+    const { container } = render(<Sparkline points={[1, 2, 3]} />);
+    expect(container.querySelector("polygon")).toBeTruthy();
+    expect(container.querySelector("linearGradient")).toBeTruthy();
+  });
+
+  test("omits area-fill when fill=false", () => {
+    const { container } = render(<Sparkline points={[1, 2, 3]} fill={false} />);
+    expect(container.querySelector("polygon")).toBeFalsy();
+    expect(container.querySelector("linearGradient")).toBeFalsy();
+  });
 });

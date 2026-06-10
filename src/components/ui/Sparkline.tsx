@@ -4,7 +4,11 @@ interface SparklineProps {
   width?: number;
   height?: number;
   animate?: boolean;
+  fill?: boolean;
 }
+
+let GID = 0;
+const nextId = () => "spark-grad-" + (++GID);
 
 export default function Sparkline({
   points,
@@ -12,6 +16,7 @@ export default function Sparkline({
   width = 60,
   height = 24,
   animate = true,
+  fill = true,
 }: SparklineProps) {
   if (points.length === 0) {
     return <svg width={width} height={height} aria-hidden="true" />;
@@ -30,7 +35,10 @@ export default function Sparkline({
   });
 
   const polyPoints = coords.join(" ");
+  // Area polygon: line points + baseline at height back to start
+  const areaPoints = polyPoints + ` ${width.toFixed(2)},${height} 0,${height}`;
   const pathLen = padded.length * stepX;
+  const gradId = nextId();
 
   return (
     <svg
@@ -40,6 +48,28 @@ export default function Sparkline({
       aria-hidden="true"
       style={{ overflow: "visible", display: "block" }}
     >
+      {fill && (
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+      )}
+      {fill && (
+        <polygon
+          points={areaPoints}
+          fill={`url(#${gradId})`}
+          style={
+            animate
+              ? {
+                  opacity: 0,
+                  animation: "spark-fade 800ms var(--ease-out, ease-out) 100ms forwards",
+                }
+              : undefined
+          }
+        />
+      )}
       <polyline
         points={polyPoints}
         fill="none"
@@ -57,7 +87,10 @@ export default function Sparkline({
             : undefined
         }
       />
-      <style>{`@keyframes spark-draw { to { stroke-dashoffset: 0; } }`}</style>
+      <style>{`
+        @keyframes spark-draw { to { stroke-dashoffset: 0; } }
+        @keyframes spark-fade { to { opacity: 1; } }
+      `}</style>
     </svg>
   );
 }
