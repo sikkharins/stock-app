@@ -43,4 +43,20 @@ describe("brandColor", () => {
   test("two known brands produce different colors", () => {
     expect(brandColor("LG").base).not.toBe(brandColor("Samsung").base);
   });
+
+  test("text variant lifts dark brand colors to lightness 62", () => {
+    // Samsung #1428A0 is L~35 — text variant must lift it
+    const c = brandColor("Samsung").text;
+    expect(c).toMatch(/^hsl\(\d+ \d+% 62%\)$/);
+  });
+
+  test("text variant preserves brand hue", () => {
+    // Samsung is blue (~225-235), Toshiba is red (~0)
+    expect(brandColor("Samsung").text).toMatch(/^hsl\(2[23][0-9] /);
+    expect(brandColor("Toshiba").text).toMatch(/^hsl\(0 /);
+  });
+
+  test("fallback text variant works for unknown brands", () => {
+    expect(brandColor("Acme").text).toMatch(/^hsl\(\d+ 70% 62%\)$/);
+  });
 });

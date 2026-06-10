@@ -109,7 +109,7 @@ export default function ProdPage({sh}){
         const modelCode=sp===-1?full:full.slice(0,sp);
         const descriptor=sp===-1?"":full.slice(sp+1);
         return <div style={{minHeight:"2.6em",textDecoration:pr.discontinued?"line-through":"none"}}>
-          <div style={{fontFamily:"var(--mono, ui-monospace, Consolas, monospace)",fontSize:17,fontWeight:800,letterSpacing:"-0.015em",lineHeight:1.15,backgroundImage:`linear-gradient(135deg, ${bc.base} 0%, ${bc.base} 30%, var(--text) 100%)`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",color:bc.base,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:pr.discontinued?0.5:1}}>{modelCode}</div>
+          <div style={{fontFamily:"var(--mono, ui-monospace, Consolas, monospace)",fontSize:17,fontWeight:800,letterSpacing:"-0.015em",lineHeight:1.15,backgroundImage:`linear-gradient(135deg, ${bc.text} 0%, ${bc.text} 40%, var(--text) 100%)`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",color:bc.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:pr.discontinued?0.5:1}}>{modelCode}</div>
           {descriptor&&<div style={{fontSize:12,color:"var(--dim)",fontWeight:500,marginTop:2,lineHeight:1.3,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{descriptor}</div>}
         </div>;
       })()}
