@@ -39,7 +39,7 @@ function getLast6Months() {
   });
 }
 
-export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], setContacts, canEdit = true, onClose }) {
+export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], setContacts, canEdit = true, onClose, onEdit }) {
   const [tab, setTab] = useState("so");
   const [confirmAct, setConfirmAct] = useState(null); // {title, msg, onOk}
 
@@ -422,8 +422,17 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
     </>
   );
 
+  const footer = (
+    <>
+      <button onClick={onClose} style={{padding:"7px 14px",borderRadius:6,border:"1px solid var(--line)",cursor:"pointer",background:"transparent",color:"var(--dim)",fontFamily:"inherit"}}>ปิด</button>
+      {canEdit && typeof onEdit === "function" && (
+        <button onClick={onEdit} style={{padding:"7px 14px",borderRadius:6,border:"1px solid var(--blue)",cursor:"pointer",background:"rgba(0,122,255,0.08)",color:"var(--blue)",fontWeight:500,fontFamily:"inherit"}}>แก้ไขข้อมูล</button>
+      )}
+    </>
+  );
+
   return isDesktop ? (
-    <SlideOver title={titleNode} onClose={onClose}>{body}</SlideOver>
+    <SlideOver title={titleNode} onClose={onClose} footer={footer}>{body}</SlideOver>
   ) : (
     <Modal title={titleNode} onClose={onClose} wide>{body}</Modal>
   );

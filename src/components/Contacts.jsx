@@ -424,7 +424,25 @@ export default function ContactPage({sh,ft}){
 
     {modal==="contactImport"&&<ContactExcelImport contactType={ft} onClose={cM} onImport={(items)=>{setContacts(p=>[...p,...items]);sh.addA("นำเข้า Excel",items.length+" "+title);}}/>}
 
-    {viewProfile&&isC&&<CustomerProfile customer={contacts.find(c=>c.id===viewProfile.id)||viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={sh.promos||[]} setContacts={setContacts} canEdit={canE("contacts")} onClose={()=>setViewProfile(null)}/>}
+    {viewProfile&&isC&&<CustomerProfile
+      customer={contacts.find(c=>c.id===viewProfile.id)||viewProfile}
+      sales={sales}
+      quotes={quotes}
+      payments={payments}
+      products={products}
+      pN={pN}
+      promos={sh.promos||[]}
+      setContacts={setContacts}
+      canEdit={canE("contacts")}
+      onClose={()=>setViewProfile(null)}
+      onEdit={()=>{
+        const c=contacts.find(x=>x.id===viewProfile.id)||viewProfile;
+        setFormErrors([]);
+        setForm({vatReps:[],address:"",taxId:"",salesPerson:"",staff:[],...c});
+        setViewProfile(null);
+        oM(mk);
+      }}
+    />}
     {viewSupplier&&!isC&&<SupplierProfile supplier={viewSupplier} pos={pos||[]} payments={payments||[]} products={products||[]} pN={pN} cN={cN} onClose={()=>setViewSupplier(null)}/>}
 
     {modal===mk&&ed&&<Modal title={(form.id?"แก้ไข":"เพิ่ม")+title} onClose={cM} wide>
