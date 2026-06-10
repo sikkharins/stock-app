@@ -11,6 +11,7 @@ import CatMgr from "./CategoryManager.jsx";
 import StatCard from "./ui/StatCard.jsx";
 import { buildBrandSubData } from "./ui/StockValueDonut.jsx";
 import ExcelImport from "./ExcelImport.jsx";
+import { stockValueSeries, lowStockSeries, reservedSeries, newProductsSeries } from "../utils/productStats.ts";
 
 export default function ProdPage({sh}){
   const{pN,cN,canE,canD,products,setProducts,cats,setCats,brands,contacts,search,setSearch,modal,oM,cM,getCN,addLog,cu,sales,logs,pos,isSup,supN,addA,addPH}=sh;
@@ -36,6 +37,8 @@ export default function ProdPage({sh}){
   const selProds=useMemo(()=>products.filter(p=>sel.has(p.id)),[products,sel]);
   const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
   const stats=useMemo(()=>{const total=baseP.length;const stockVal=baseP.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);const low=baseP.filter(p=>p.minStock>0&&p.stock<=p.minStock).length;const totalRes=Object.values(reservedMap).reduce((s,v)=>s+v,0);return{total,stockVal,low,totalRes};},[baseP,reservedMap]);
+  const series=useMemo(()=>{const ref=new Date();return{total:newProductsSeries(logs||[],30,ref),stockVal:stockValueSeries(baseP,logs||[],30,ref),low:lowStockSeries(baseP,logs||[],30,ref),res:reservedSeries(sales,30,ref)};},[baseP,logs,sales]);
+  const deltas=useMemo(()=>{const sumTail=(arr,n)=>arr.slice(-n).reduce((s,v)=>s+v,0);const newCnt=sumTail(series.total,7);const stockNow=series.stockVal[series.stockVal.length-1]||0;const stock7=series.stockVal[series.stockVal.length-8]??stockNow;const stockDelta=stockNow-stock7;return{total:newCnt>0?{text:"+"+newCnt+" สัปดาห์นี้",positive:true}:null,stockVal:stockDelta!==0?{text:(stockDelta>0?"+":"")+"฿"+fmt(Math.round(stockDelta))+" 7 วัน",positive:stockDelta>0}:null};},[series]);
   const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");
     if(form.splitEnabled){const parts=form.splitParts||[];if(parts.length<2)errs.push("ขายแยกส่วน: ต้องมีอย่างน้อย 2 ส่วน");const sum=parts.reduce((s,p)=>s+(+p.priceRatio||0),0);if(Math.abs(sum-1)>0.001)errs.push("ขายแยกส่วน: ผลรวมสัดส่วนต้องเท่ากับ 1 (ปัจจุบัน "+sum.toFixed(3)+")");if(parts.some(p=>!p.key||!p.name))errs.push("ขายแยกส่วน: ทุกส่วนต้องมี key และชื่อ");}
     if(errs.length){setFormErrors(errs);return;}setFormErrors([]);const item={...form,id:form.id||Date.now(),categoryId:+form.categoryId,subcategoryId:+form.subcategoryId,price:+form.price,cost:+form.cost,stock:+form.stock,minStock:+form.minStock};if(form.id){const b=products.find(x=>x.id===form.id);if(b){if(b.price!==item.price)addPH(item.id,"price",b.price,item.price);if(b.cost!==item.cost)addPH(item.id,"cost",b.cost,item.cost);if(b.stock!==item.stock){const d=item.stock-b.stock;addLog(mkLog(item.id,d>0?"adjust_in":"adjust_out",Math.abs(d),b.stock,item.stock,"Edit","แก้ไข",cu.username));}addA("แก้ไขสินค้า",item.code);}}else addA("เพิ่มสินค้า",item.code);setProducts(p=>form.id?p.map(x=>x.id===form.id?item:x):[...p,item]);cM();};
@@ -70,11 +73,11 @@ export default function ProdPage({sh}){
     </div>;
   };
   return <div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10,marginBottom:16}}>
-      <StatCard label="สินค้าทั้งหมด" value={stats.total} color="var(--blue)"/>
-      <StatCard label="มูลค่าสต็อก" value={"฿"+fmt(stats.stockVal)} color="var(--green)"/>
-      <StatCard label="สต็อกต่ำ" value={stats.low} color={stats.low>0?"var(--red)":"var(--dim)"}/>
-      <StatCard label="จองอยู่" value={stats.totalRes+" ชิ้น"} color="var(--orange)"/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12,marginBottom:18}}>
+      <StatCard label="สินค้าทั้งหมด" value={stats.total} color="var(--blue)" sparkline={series.total} delta={deltas.total||undefined}/>
+      <StatCard label="มูลค่าสต็อก" value={"฿"+fmt(stats.stockVal)} color="var(--green)" sparkline={series.stockVal} delta={deltas.stockVal||undefined}/>
+      <StatCard label="สต็อกต่ำ" value={stats.low} color={stats.low>0?"var(--red)":"var(--dim)"} sparkline={series.low}/>
+      <StatCard label="จองอยู่" value={stats.totalRes+" ชิ้น"} color="var(--orange)" sparkline={series.res}/>
     </div>
     {/* Brand × Subcategory Breakdown */}
     <div style={{marginBottom:16}}>
