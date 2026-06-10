@@ -56,4 +56,24 @@ describe("SlideOver", () => {
     fireEvent.click(screen.getByTestId("body"));
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  test("registers onClose to window.__slideoverClose for mobile back-button", () => {
+    const onClose = vi.fn();
+    delete (window as any).__slideoverClose;
+    const { unmount } = render(<SlideOver title="t" onClose={onClose}>x</SlideOver>);
+    expect((window as any).__slideoverClose).toBe(onClose);
+    unmount();
+    expect((window as any).__slideoverClose).toBeUndefined();
+  });
+
+  test("restores previous __slideoverClose on unmount (nested registration safety)", () => {
+    const prev = vi.fn();
+    (window as any).__slideoverClose = prev;
+    const onClose = vi.fn();
+    const { unmount } = render(<SlideOver title="t" onClose={onClose}>x</SlideOver>);
+    expect((window as any).__slideoverClose).toBe(onClose);
+    unmount();
+    expect((window as any).__slideoverClose).toBe(prev);
+    delete (window as any).__slideoverClose;
+  });
 });

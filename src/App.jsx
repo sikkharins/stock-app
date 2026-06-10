@@ -132,6 +132,7 @@ export default function App(){
       if(s.sideOpen){setSideOpen(false);history.pushState({app:true},"");return;}
       if(s.showNotif){setShowNotif(false);history.pushState({app:true},"");return;}
       if(s.showBackup){setShowBackup(false);history.pushState({app:true},"");return;}
+      if(typeof window!=="undefined"&&window.__slideoverClose){window.__slideoverClose();history.pushState({app:true},"");return;}
       if(s.modal){setModal(null);history.pushState({app:true},"");return;}
       if(s.tab!=="dashboard"){setTab("dashboard");history.pushState({app:true},"");return;}
       if(s.exitConfirm){setExitConfirm(false);history.pushState({app:true},"");return;}

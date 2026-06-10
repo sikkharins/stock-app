@@ -23,6 +23,16 @@ export default function SlideOver({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Register with App's global back-button pipeline so mobile back closes the panel
+  // instead of falling through to "tab !== dashboard" → setTab("dashboard").
+  useEffect(() => {
+    const prev = (window as any).__slideoverClose;
+    (window as any).__slideoverClose = onClose;
+    return () => {
+      (window as any).__slideoverClose = prev;
+    };
+  }, [onClose]);
+
   return (
     <div
       data-slideover-backdrop
