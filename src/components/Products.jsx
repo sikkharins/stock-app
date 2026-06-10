@@ -211,7 +211,7 @@ export default function ProdPage({sh}){
       <BrandChipRow brands={brands.filter(b=>(brandCounts[b]||0)>0)} counts={brandCounts} value={fBrand} onChange={setFBrand}/>
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-      {(()=>{const cnt=baseP.filter(pr=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const res=reservedMap[pr.id]||0;return needsAttention(pr,sc.d30,res);}).length;return <div onClick={()=>setFAttn(v=>!v)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fAttn?"rgba(255,59,48,0.14)":"var(--bg)",border:"1.5px solid "+(fAttn?"var(--red)":cnt>0?"var(--red)":"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:600,color:fAttn?"var(--red)":cnt>0?"var(--red)":"var(--dim)"}}><span>⚠</span><span>ต้องดูแล</span><span style={{background:fAttn?"rgba(255,59,48,0.22)":cnt>0?"rgba(255,59,48,0.14)":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})()}
+      {(()=>{const cnt=baseP.filter(pr=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const res=reservedMap[pr.id]||0;return needsAttention(pr,sc.d30,res);}).length;const shouldPulse=cnt>0&&!fAttn;return <div onClick={()=>setFAttn(v=>!v)} className={shouldPulse?"attn-pulse":""} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fAttn?"rgba(255,59,48,0.14)":"var(--bg)",border:"1.5px solid "+(fAttn?"var(--red)":cnt>0?"var(--red)":"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:600,color:fAttn?"var(--red)":cnt>0?"var(--red)":"var(--dim)",transition:"background 150ms var(--ease-out,ease-out)"}}><span>⚠</span><span>ต้องดูแล</span><span style={{background:fAttn?"rgba(255,59,48,0.22)":cnt>0?"rgba(255,59,48,0.14)":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})()}
       {STOCK_STATUS.map(s=>{const cnt=baseP.filter(pr=>getSS(pr.id,sales).key===s.key).length;return <div key={s.key} onClick={()=>setFStat(fStat===s.key?"":s.key)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:99,background:fStat===s.key?s.bg:"var(--bg)",border:"1.5px solid "+(fStat===s.key?s.color:"var(--line)"),cursor:"pointer",fontSize:12,fontWeight:500,color:fStat===s.key?s.color:"var(--dim)"}}><span>{s.icon}</span><span>{s.label}</span><span style={{background:fStat===s.key?s.color+"22":"var(--line)",borderRadius:99,padding:"1px 8px",fontSize:11,fontWeight:700}}>{cnt}</span></div>;})}
     </div>
     {sorted.length===0&&<div style={{textAlign:"center",padding:"3rem 1rem"}}><div style={{fontSize:48,marginBottom:8}}>{hasFilter?"":""}
@@ -239,7 +239,15 @@ export default function ProdPage({sh}){
         density={density}
       />
     )}
-    <style>{`@media (hover: none) { [data-card-actions] { opacity: 1 !important; } }`}</style>
+    <style>{`
+      @media (hover: none) { [data-card-actions] { opacity: 1 !important; } }
+      @keyframes attn-breathe {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.0); }
+        50%      { box-shadow: 0 0 0 6px rgba(255,59,48,0.15); }
+      }
+      .attn-pulse { animation: attn-breathe 2.4s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) { .attn-pulse { animation: none !important; } }
+    `}</style>
     {hasMore&&<div style={{textAlign:"center",padding:"20px 0"}}><div style={{fontSize:12,color:"var(--dim)",marginBottom:8}}>{"แสดง "+visible.length+" / "+sorted.length+" รายการ"}</div><button onClick={()=>setShowCount(c=>c+PAGE)} style={{padding:"8px 24px",borderRadius:8,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)",cursor:"pointer",fontSize:13,fontWeight:500,fontFamily:"inherit"}}>{"โหลดเพิ่ม "+Math.min(PAGE,sorted.length-showCount)+" รายการ"}</button></div>}
     </div>
     {bulkMode&&sel.size>0&&<div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,background:"var(--panel)",borderTop:"1.5px solid var(--line)",padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",boxShadow:"0 -4px 20px rgba(0,0,0,0.15)"}}>
