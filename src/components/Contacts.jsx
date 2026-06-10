@@ -19,6 +19,8 @@ import {
   lifetimeValue,
   lastPurchaseDays,
 } from "../utils/customerStats.ts";
+import BrandChipRow from "./ui/BrandChipRow.tsx";
+import { brandColor } from "../utils/brandColors.ts";
 
 const STAFF_TABS = ["dashboard","products","stock_log","purchase","sales","finance","reports"];
 
@@ -59,12 +61,20 @@ export default function ContactPage({sh,ft}){
   const[groupFilter,setGroupFilter]=useState("all");
   const[sortMode,setSortMode]=useState("name");
   const[viewMode,setViewMode]=useState("grid");
+  const[salesFilter,setSalesFilter]=useState("");
+  const[attentionFilter,setAttentionFilter]=useState("");
   const filtered=useMemo(()=>{
     const arr=(contacts||[]).filter(c=>{
       if(!c||c.type!==ft)return false;
       if(sf&&c.salesPerson!==cu.salesName)return false;
       if(isC&&groupFilter!=="all"){if(groupFilter==="regular"&&c.customerGroup!=="regular")return false;if(groupFilter==="walkin"&&c.customerGroup!=="walkin")return false;}
       if(search){const s=search.toLowerCase();if(!((cN(c)||"").toLowerCase().includes(s)||(c.email||"").toLowerCase().includes(s)))return false;}
+      if(isC&&salesFilter&&c.salesPerson!==salesFilter)return false;
+      if(isC&&attentionFilter){
+        const status=arStatus(c,salesByCust[c.id]||[],payments||[],todayDate);
+        if(attentionFilter==="overdue"&&status!=="overdue")return false;
+        if(attentionFilter==="dormant"&&status!=="dormant")return false;
+      }
       return true;
     });
     if(!isC)return arr;
@@ -82,7 +92,7 @@ export default function ContactPage({sh,ft}){
       outstanding:(a,b)=>outstandingDetail(b,salesByCust[b.id]||[],payments||[],todayDate).total-outstandingDetail(a,salesByCust[a.id]||[],payments||[],todayDate).total,
     };
     return arr.slice().sort(cmp[sortMode]||cmp.name);
-  },[contacts,ft,sf,cu,isC,groupFilter,search,cN,sortMode,salesByCust,payments,todayDate]);
+  },[contacts,ft,sf,cu,isC,groupFilter,search,cN,sortMode,salesByCust,payments,todayDate,salesFilter,attentionFilter]);
   const groupCounts=useMemo(()=>{if(!isC)return{};const custs=(contacts||[]).filter(c=>c&&c.type==="customer"&&(!sf||c.salesPerson===cu.salesName));return{all:custs.length,regular:custs.filter(c=>c.customerGroup==="regular").length,walkin:custs.filter(c=>c.customerGroup==="walkin").length};},[contacts,isC,sf,cu]);
   const[savingContact,setSavingContact]=useState(false);const[formErrors,setFormErrors]=useState([]);
   const save=async()=>{
@@ -161,6 +171,21 @@ export default function ContactPage({sh,ft}){
     return{total:custs.length,newCount,countDelta,revLast30,orderCount,revDelta,arTotal,arCount,overdueCount,dormantCount,dormantDelta,revSeries,cumCustSeries};
   },[isC,contacts,sales,payments,salesByCust,sf,cu,todayDate]);
 
+  const chipCounts=useMemo(()=>{
+    if(!isC)return{overdue:0,dormant:0,perSales:{}};
+    const custs=(contacts||[]).filter(c=>c&&c.type==="customer"&&(!sf||c.salesPerson===cu.salesName));
+    let overdue=0,dormant=0;
+    const perSales={};
+    for(const c of custs){
+      const mine=salesByCust[c.id]||[];
+      const status=arStatus(c,mine,payments||[],todayDate);
+      if(status==="overdue")overdue++;
+      if(status==="dormant")dormant++;
+      if(c.salesPerson)perSales[c.salesPerson]=(perSales[c.salesPerson]||0)+1;
+    }
+    return{overdue,dormant,perSales};
+  },[isC,contacts,salesByCust,payments,sf,cu,todayDate]);
+
   const supStats=useMemo(()=>{
     if(isC)return null;
     const sups=filtered;
@@ -224,8 +249,29 @@ export default function ContactPage({sh,ft}){
         accentBg={custStats.dormantCount>0?"rgba(255,59,48,0.12)":"rgba(52,199,89,0.12)"}
       />
     </div>}
-    {isC&&<div style={{display:"flex",gap:6,marginBottom:12}}>
-      {[{k:"all",label:"ทั้งหมด",icon:""},{k:"regular",label:"ประจำ",icon:""},{k:"walkin",label:"หน้าร้าน",icon:""}].map(g=><button key={g.k} onClick={()=>setGroupFilter(g.k)} style={{padding:"6px 14px",borderRadius:20,border:groupFilter===g.k?"2px solid var(--blue)":"1px solid var(--line)",background:groupFilter===g.k?"rgba(0,122,255,0.1)":"var(--bg)",color:groupFilter===g.k?"var(--blue)":"var(--dim)",fontSize:12,fontWeight:groupFilter===g.k?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>{g.icon&&<span>{g.icon}</span>}{g.label}<span style={{fontSize:11,opacity:0.7,marginLeft:2}}>({groupCounts[g.k]||0})</span></button>)}
+    {isC&&<div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+      {[
+        {k:"all",label:"ทั้งหมด",count:groupCounts.all,color:"var(--blue)"},
+        {k:"regular",label:"ประจำ",count:groupCounts.regular,color:"var(--green)"},
+        {k:"walkin",label:"หน้าร้าน",count:groupCounts.walkin,color:"var(--faint)"},
+      ].map(g=>{
+        const active=groupFilter===g.k;
+        return <button key={g.k} onClick={()=>setGroupFilter(g.k)} style={{padding:"6px 14px",borderRadius:20,border:active?`2px solid ${g.color}`:"1px solid var(--line)",background:active?"rgba(0,122,255,0.08)":"var(--bg)",color:active?g.color:"var(--dim)",fontSize:12,fontWeight:active?600:400,cursor:"pointer",fontFamily:"inherit"}}>{g.label} <span style={{opacity:0.7,marginLeft:2}}>({g.count||0})</span></button>;
+      })}
+      <span style={{width:1,height:18,background:"var(--line)",margin:"0 4px"}}/>
+      {[
+        {k:"overdue",label:"⚠ ต้องตามหนี้",count:chipCounts.overdue,color:"var(--orange)",bg:"rgba(255,149,0,0.14)"},
+        {k:"dormant",label:"⚠ เริ่มหาย",count:chipCounts.dormant,color:"var(--red)",bg:"rgba(255,59,48,0.12)"},
+      ].map(g=>{
+        const active=attentionFilter===g.k;
+        const hasItems=g.count>0;
+        return <button key={g.k} onClick={()=>setAttentionFilter(active?"":g.k)} style={{padding:"6px 14px",borderRadius:20,border:active?`2px solid ${g.color}`:"1px solid var(--line)",background:active?g.bg:"var(--bg)",color:hasItems?g.color:"var(--faint)",fontSize:12,fontWeight:active?600:400,cursor:"pointer",fontFamily:"inherit",animation:hasItems&&!active?"chip-breathe 2.6s ease-in-out infinite":"none"}}>{g.label} <span style={{opacity:0.7,marginLeft:2}}>({g.count})</span></button>;
+      })}
+      <style>{`@keyframes chip-breathe{0%,100%{opacity:1}50%{opacity:.55}}`}</style>
+    </div>}
+    {isC&&(cu.role==="SalesManager"||!cu.salesName)&&Object.keys(chipCounts.perSales).length>0&&<div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}>
+      <button onClick={()=>setSalesFilter("")} style={{padding:"5px 12px",borderRadius:99,border:salesFilter===""?"1.5px solid var(--blue)":"1.5px solid var(--line)",background:salesFilter===""?"rgba(0,122,255,0.08)":"var(--panel)",color:salesFilter===""?"var(--blue)":"var(--dim)",fontSize:12,fontWeight:salesFilter===""?600:500,cursor:"pointer",flexShrink:0,fontFamily:"inherit"}}>ทั้งเซลส์</button>
+      <BrandChipRow brands={Object.keys(chipCounts.perSales).filter(s=>chipCounts.perSales[s]>0).sort()} counts={chipCounts.perSales} value={salesFilter} onChange={setSalesFilter}/>
     </div>}
     <div style={{position:"sticky",top:0,zIndex:10,background:"var(--bg)",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",paddingTop:4,paddingBottom:8,marginBottom:12}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
