@@ -181,7 +181,8 @@ export default function UserPage({sh}){
         </div>
       </div>
       <div style={{marginTop:16,marginBottom:4}}>
-        <div style={{fontWeight:500,fontSize:13,marginBottom:10}}>Dashboard Widgets</div>
+        <div style={{fontWeight:500,fontSize:13,marginBottom:4}}>Dashboard Widgets — อนุญาตให้เห็น (Whitelist)</div>
+        <div style={{fontSize:11,color:"var(--dim)",marginBottom:10}}>เลือก widget ที่ user คนนี้สามารถแสดงบน Dashboard ได้ — user สลับเปิด/ปิด + จัดลำดับเองได้ภายในขอบที่อนุญาต</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
           {DASH_WIDGETS.map(w=>{
             const on=(form.dashboardWidgets||[]).includes(w.key);

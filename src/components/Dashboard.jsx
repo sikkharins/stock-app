@@ -4,8 +4,9 @@ import StockValueDonut from "./ui/StockValueDonut.jsx";
 import SalesAreaChart from "./ui/SalesAreaChart.jsx";
 import NeonGauge, { GAUGE_VARIANTS, useEased, colorAt } from "./ui/NeonGauge.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
+import DashboardSettingsModal from "./ui/DashboardSettingsModal.jsx";
 import { fmt, toBE } from "../utils/helpers.js";
-import { MOVE_TYPES, ALL_WIDGET_KEYS } from "../utils/constants.js";
+import { MOVE_TYPES, ALL_WIDGET_KEYS, DASH_SECTIONS, ALL_SECTION_KEYS } from "../utils/constants.js";
 
 const PO_STATUS={
   pending:   {label:"รอรับของ", bg:"rgba(255,149,0,0.14)", color:"var(--orange)"},
@@ -32,8 +33,30 @@ function StatusBadge({map,status}){
 export default function DashPage({sh}){
   const{pN,cN,products,lowStock,sales,pos,logs,contacts,targets,isSup,supN,cu,handleTab,defectives,cats,theme}=sh;
   const isSales=!!cu.salesName&&cu.role!=="SalesManager";
-  const widgets=cu.dashboardWidgets||ALL_WIDGET_KEYS;
+  // ก่อน refactor: top_products / recent_so / sales_target ถูกแสดงตลอดโดยไม่มี gate
+  // → migrate user เดิมให้เห็น widget เหล่านี้เป็น default (admin สามารถปิดผ่าน Users form ได้)
+  const NEW_DEFAULT_WIDGETS=["sales_target","top_products","recent_so"];
+  const widgets=useMemo(()=>{
+    const raw=cu.dashboardWidgets||ALL_WIDGET_KEYS;
+    const set=new Set(raw);
+    NEW_DEFAULT_WIDGETS.forEach(k=>set.add(k));
+    return[...set];
+  },[cu.dashboardWidgets]);
   const w=key=>widgets.includes(key);
+  const[showSettings,setShowSettings]=useState(false);
+
+  // section ที่ user เห็น (default = ทุกอันถ้ายังไม่เคยตั้ง) + จัดลำดับตาม dashboardOrder
+  const sectionOrderList=cu.dashboardOrder||ALL_SECTION_KEYS;
+  const orderIdx=useMemo(()=>{
+    const m={};
+    sectionOrderList.forEach((k,i)=>m[k]=i);
+    ALL_SECTION_KEYS.forEach((k,i)=>{if(!(k in m))m[k]=1000+i;});
+    return m;
+  },[sectionOrderList]);
+  const sectionAllowed=k=>{const s=DASH_SECTIONS.find(x=>x.key===k);return s?s.widgetKeys.some(wk=>w(wk)):false;};
+  const sectionVisible=k=>{if(!sectionAllowed(k))return false;if(!cu.dashboardOrder)return true;return cu.dashboardOrder.includes(k);};
+  // ใช้ helper function (ไม่ใช่ component) เพื่อหลีกเลี่ยง re-mount loop จาก identity ใหม่ทุก render
+  const sec=(k,content)=>sectionVisible(k)?<div key={k} style={{order:orderIdx[k]??999,marginBottom:"1.5rem"}}>{content}</div>:null;
 
   const{myCI,myP,myLS,myS,myTS,mySales,profit}=useMemo(()=>{
     const ci=isSales?contacts.filter(c=>c.type==="customer"&&c.salesPerson===cu.salesName).map(c=>c.id):null;
@@ -133,44 +156,53 @@ export default function DashPage({sh}){
     <div><div style={{fontSize:18,fontWeight:700,color}}>{count}</div><div style={{fontSize:11,color:"var(--dim)"}}>{label}</div></div>
   </div>:null;
 
-  return<div>
-    <div style={{marginBottom:20}}>
-      <div style={{fontSize:20,fontWeight:700,color:"var(--text)"}}>{greet+", "+(cu.displayName||cu.username)}</div>
-      <div style={{fontSize:13,color:"var(--dim)",marginTop:2}}>{dateStr}</div>
-      {todaySO.length>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,marginTop:6,padding:"5px 14px",borderRadius:8,background:"var(--blue-bg)",border:"1px solid rgba(0,122,255,0.2)"}}>
-        <span style={{fontSize:12,color:"var(--blue)",fontWeight:600}}>{"วันนี้ "+todaySO.length+" รายการ"}</span>
-        <span style={{fontSize:13,color:"var(--blue)",fontWeight:700}}>{"฿"+fmt(todaySales)}</span>
-      </div>}
+  return<>
+    <div style={{display:"flex",flexDirection:"column"}}>
+    <div style={{order:-100,marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontSize:20,fontWeight:700,color:"var(--text)"}}>{greet+", "+(cu.displayName||cu.username)}</div>
+        <div style={{fontSize:13,color:"var(--dim)",marginTop:2}}>{dateStr}</div>
+        {todaySO.length>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,marginTop:6,padding:"5px 14px",borderRadius:8,background:"var(--blue-bg)",border:"1px solid rgba(0,122,255,0.2)"}}>
+          <span style={{fontSize:12,color:"var(--blue)",fontWeight:600}}>{"วันนี้ "+todaySO.length+" รายการ"}</span>
+          <span style={{fontSize:13,color:"var(--blue)",fontWeight:700}}>{"฿"+fmt(todaySales)}</span>
+        </div>}
+      </div>
+      <button onClick={()=>setShowSettings(true)} title="ตั้งค่า Dashboard" style={{padding:"7px 12px",borderRadius:8,border:"1px solid var(--line)",background:"var(--panel)",color:"var(--dim)",cursor:"pointer",fontSize:14,fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6}}>
+        <span style={{fontSize:15,lineHeight:1}}>⚙</span>
+        <span style={{fontSize:12}}>ตั้งค่า</span>
+      </button>
     </div>
 
-    {isSup&&<div style={{display:"flex",alignItems:"center",gap:10,background:"rgba(255,149,0,0.08)",border:"1px solid var(--orange)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--orange)"}}>
+    {isSup&&<div style={{order:-90,display:"flex",alignItems:"center",gap:10,background:"rgba(255,149,0,0.08)",border:"1px solid var(--orange)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--orange)"}}>
       <IB text="S" color="var(--orange)" bg="rgba(255,149,0,0.14)"/>
       <span style={{fontWeight:600}}>{"Supplier: "+supN}</span>
     </div>}
-    {isSales&&<div style={{display:"flex",alignItems:"center",gap:10,background:"rgba(175,82,222,0.08)",border:"1px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--purple)"}}>
+    {isSales&&<div style={{order:-90,display:"flex",alignItems:"center",gap:10,background:"rgba(175,82,222,0.08)",border:"1px solid var(--purple)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--purple)"}}>
       <IB text="S" color="var(--purple)" bg="rgba(175,82,222,0.12)"/>
       <span style={{fontWeight:600}}>{"เซลส์: "+cu.salesName+" — ดูแล "+(myCI?.length||0)+" ราย"}</span>
     </div>}
 
-    {(pendingApprovalPO>0||pendingDeliverySO>0||pendingSpecialSO>0||defectiveCount>0)&&<div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
+    {(pendingApprovalPO>0||pendingDeliverySO>0||pendingSpecialSO>0||defectiveCount>0)&&<div style={{order:-80,display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
       <QAB text="PO" label="PO รออนุมัติ" count={pendingApprovalPO} color="var(--orange)" bg="rgba(255,149,0,0.08)" tab="purchase"/>
       <QAB text="SO" label="SO รออนุมัติพิเศษ" count={pendingSpecialSO} color="var(--purple)" bg="rgba(175,82,222,0.08)" tab="sales"/>
       <QAB text="SO" label="SO รอส่ง" count={pendingDeliverySO} color="var(--blue)" bg="rgba(0,122,255,0.08)" tab="sales"/>
       <QAB text="!!" label="สินค้าชำรุด" count={defectiveCount} color="var(--red)" bg="rgba(255,59,48,0.08)" tab="defective"/>
     </div>}
 
-    {(w("products")||w("stock_value")||w("sales_total")||w("profit"))&&
-    <div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:14,marginBottom:"1.5rem"}}>
+    {sec("stats",
+    (w("products")||w("sales_total")||w("profit"))&&
+    <div className="stat-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:14}}>
       {w("products")&&<StatCard label="สินค้า" value={myP.length} sub={myLS.length+" ต่ำกว่าขั้นต่ำ"} color="var(--blue)" accentBg="var(--blue-bg)"/>}
       {w("sales_total")&&<StatCard label="ยอดขายรวม" value={"฿"+fmt(mySales)} color="var(--green)" accentBg="rgba(52,199,89,0.12)"/>}
       {w("profit")&&<StatCard label="กำไร" value={"฿"+fmt(profit)} color={profit>=0?"var(--green)":"var(--red)"} accentBg={profit>=0?"rgba(52,199,89,0.12)":"rgba(255,59,48,0.12)"}/>}
-    </div>}
+    </div>
+    )}
 
-    {w("stock_value")&&myTS>0&&<StockValueDonut products={myP} cats={cats} theme={theme}/>}
+    {sec("stock_value",myTS>0&&<StockValueDonut products={myP} cats={cats} theme={theme}/>)}
 
-    {!isSup&&w("sales_chart")&&<div style={{marginTop:"1.5rem",marginBottom:"1.5rem"}}><SalesAreaChart sales={myS} pos={pos} theme={theme}/></div>}
+    {sec("sales_chart",!isSup&&<SalesAreaChart sales={myS} pos={pos} theme={theme}/>)}
 
-    {w("low_stock")&&myLS.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",marginBottom:"1.5rem",boxShadow:"var(--shadow)"}}>
+    {sec("low_stock",myLS.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
         <IB text="!" color="var(--orange)" bg="rgba(255,149,0,0.14)"/>
         <span>{"แจ้งเตือนสต็อกต่ำ ("+myLS.length+" รายการ)"}</span>
@@ -185,13 +217,14 @@ export default function DashPage({sh}){
         </div>
         <div style={{background:"var(--hover)",borderRadius:3,height:4}}><div style={{background:pct<50?"var(--red)":"var(--orange)",borderRadius:3,height:4,width:pct+"%"}}/></div>
       </div>;})}
-    </div>}
+    </div>
+    )}
 
-    {gaugeView&&(()=>{
+    {sec("sales_target",gaugeView&&(()=>{
       const showPct=Math.round(gaugeRawPct);
       const hit=showPct>=100;
       const spOpts=overall?[{value:"__all__",label:"ทั้งทีม (รวม)"},...overall.perSp.map(p=>({value:p.salesName,label:p.salesName}))]:[];
-      return<div style={{background:"linear-gradient(180deg,#0c1016 0%,#090c11 100%)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"16px 18px 8px",marginBottom:"1.5rem",boxShadow:"var(--shadow)",position:"relative",overflow:"hidden"}}>
+      return<div style={{background:"linear-gradient(180deg,#0c1016 0%,#090c11 100%)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"16px 18px 8px",boxShadow:"var(--shadow)",position:"relative",overflow:"hidden"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",marginBottom:4}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{width:10,height:10,borderRadius:"50%",background:"#5ed0ff",boxShadow:"0 0 14px 3px #5ed0ff"}}/>
@@ -231,9 +264,10 @@ export default function DashPage({sh}){
             </div>
           </>}
       </div>;
-    })()}
+    })()
+    )}
 
-    {topProducts.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",marginBottom:"1.5rem",boxShadow:"var(--shadow)"}}>
+    {sec("top_products",topProducts.length>0&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
         <IB text="#" color="var(--green)" bg="rgba(52,199,89,0.12)"/>
         <span>สินค้าขายดี Top 5</span>
@@ -248,51 +282,52 @@ export default function DashPage({sh}){
           <div style={{background:"var(--hover)",borderRadius:3,height:4}}><div style={{background:rc,borderRadius:3,height:4,width:Math.round(tp.qty/maxQty*100)+"%"}}/></div>
         </div>;})}
       </div>
-    </div>}
-
-    <div className="dash-panels" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-      {w("recent_po")&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
-        <div style={{fontWeight:600,fontSize:14,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
-          <IB text="PO" color="var(--blue)" bg="var(--blue-bg)"/>
-          ใบสั่งซื้อล่าสุด
-        </div>
-        {recentPOs.length===0
-          ?<div style={{fontSize:12,color:"var(--dim)",textAlign:"center",padding:"1rem 0"}}>ยังไม่มีข้อมูล</div>
-          :recentPOs.map(po=>{const poTotal=(po.items||[]).reduce((s,i)=>s+i.qty*(i.cost||0),0);return<div key={po.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"0.5px solid var(--line)"}}>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:13,fontWeight:500}}>{po.poNum}</span><span style={{fontSize:10,color:"var(--faint)"}}>{toBE(po.date)}</span></div>
-              <div style={{fontSize:11,color:"var(--dim)",marginTop:1}}>{supNameMap[po.supplierId]||"-"}</div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-              {poTotal>0&&<span style={{fontSize:12,fontWeight:600,color:"var(--text)"}}>{"฿"+fmt(poTotal)}</span>}
-              <StatusBadge map={PO_STATUS} status={po.status}/>
-            </div>
-          </div>;})
-        }
-      </div>}
-
-      <div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
-        <div style={{fontWeight:600,fontSize:14,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
-          <IB text="SO" color="var(--green)" bg="rgba(52,199,89,0.12)"/>
-          การขายล่าสุด
-        </div>
-        {recentSOs.length===0
-          ?<div style={{fontSize:12,color:"var(--dim)",textAlign:"center",padding:"1rem 0"}}>ยังไม่มีข้อมูล</div>
-          :recentSOs.map(so=>{const soTotal=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0);return<div key={so.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"0.5px solid var(--line)",gap:8}}>
-            <div style={{minWidth:0,overflow:"hidden"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:13,fontWeight:500}}>{so.soNum}</span><span style={{fontSize:10,color:"var(--faint)"}}>{toBE(so.date)}</span></div>
-              <div style={{fontSize:11,color:"var(--dim)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{custNameMap[so.customerId]||"-"}</div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-              <span style={{fontSize:12,fontWeight:600,color:"var(--green)"}}>{"฿"+fmt(soTotal)}</span>
-              <StatusBadge map={SO_STATUS} status={so.status}/>
-            </div>
-          </div>;})
-        }
-      </div>
     </div>
+    )}
 
-    {w("recent_log")&&<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
+    {sec("recent_po",<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
+      <div style={{fontWeight:600,fontSize:14,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+        <IB text="PO" color="var(--blue)" bg="var(--blue-bg)"/>
+        ใบสั่งซื้อล่าสุด
+      </div>
+      {recentPOs.length===0
+        ?<div style={{fontSize:12,color:"var(--dim)",textAlign:"center",padding:"1rem 0"}}>ยังไม่มีข้อมูล</div>
+        :recentPOs.map(po=>{const poTotal=(po.items||[]).reduce((s,i)=>s+i.qty*(i.cost||0),0);return<div key={po.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"0.5px solid var(--line)"}}>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:13,fontWeight:500}}>{po.poNum}</span><span style={{fontSize:10,color:"var(--faint)"}}>{toBE(po.date)}</span></div>
+            <div style={{fontSize:11,color:"var(--dim)",marginTop:1}}>{supNameMap[po.supplierId]||"-"}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+            {poTotal>0&&<span style={{fontSize:12,fontWeight:600,color:"var(--text)"}}>{"฿"+fmt(poTotal)}</span>}
+            <StatusBadge map={PO_STATUS} status={po.status}/>
+          </div>
+        </div>;})
+      }
+    </div>
+    )}
+
+    {sec("recent_so",<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
+      <div style={{fontWeight:600,fontSize:14,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+        <IB text="SO" color="var(--green)" bg="rgba(52,199,89,0.12)"/>
+        การขายล่าสุด
+      </div>
+      {recentSOs.length===0
+        ?<div style={{fontSize:12,color:"var(--dim)",textAlign:"center",padding:"1rem 0"}}>ยังไม่มีข้อมูล</div>
+        :recentSOs.map(so=>{const soTotal=so.items.reduce((s,i)=>s+i.qty*i.price,0)-(so.discountAmt||0);return<div key={so.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"0.5px solid var(--line)",gap:8}}>
+          <div style={{minWidth:0,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:13,fontWeight:500}}>{so.soNum}</span><span style={{fontSize:10,color:"var(--faint)"}}>{toBE(so.date)}</span></div>
+            <div style={{fontSize:11,color:"var(--dim)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{custNameMap[so.customerId]||"-"}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            <span style={{fontSize:12,fontWeight:600,color:"var(--green)"}}>{"฿"+fmt(soTotal)}</span>
+            <StatusBadge map={SO_STATUS} status={so.status}/>
+          </div>
+        </div>;})
+      }
+    </div>
+    )}
+
+    {sec("recent_log",<div style={{background:"var(--panel)",border:"1px solid var(--line)",borderRadius:12,padding:"1rem",boxShadow:"var(--shadow)"}}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
         <IB text="L" color="var(--dim)" bg="var(--hover)"/>
         <span>ประวัติสต็อกล่าสุด</span>
@@ -311,6 +346,9 @@ export default function DashPage({sh}){
           </div>;
         })
       }
-    </div>}
-  </div>;
+    </div>
+    )}
+    </div>
+    {showSettings&&<DashboardSettingsModal sh={sh} onClose={()=>setShowSettings(false)}/>}
+  </>;
 }
