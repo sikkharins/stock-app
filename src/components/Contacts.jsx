@@ -67,6 +67,9 @@ export default function ContactPage({sh,ft}){
   const[viewMode,setViewMode]=useState("grid");
   const[salesFilter,setSalesFilter]=useState("");
   const[attentionFilter,setAttentionFilter]=useState("");
+  const todayDate=useMemo(()=>new Date(),[]);
+  const salesByCust=useMemo(()=>salesByCustomerId(sales||[]),[sales]);
+
   const filtered=useMemo(()=>{
     const arr=(contacts||[]).filter(c=>{
       if(!c||c.type!==ft)return false;
@@ -123,9 +126,6 @@ export default function ContactPage({sh,ft}){
     setSavingContact(false);
   };
   const del=async id=>{const c=(contacts||[]).find(x=>x.id===id);if(!c)return;const staffWithAuth=(c.type==="supplier"&&Array.isArray(c.staff))?c.staff.filter(s=>s.authId):[];const extraWarn=staffWithAuth.length>0?"\n\nจะลบบัญชีผู้ใช้ที่ผูกอยู่ "+staffWithAuth.length+" คนด้วย":"";if(!confirm("ต้องการลบ "+(cN(c)||c.name||"รายการนี้")+" ?"+extraWarn))return;for(const s of staffWithAuth){try{await deleteUser(s.authId);}catch(e){console.warn("Failed to delete supplier auth:",s.username,e?.message);}}setContacts(p=>p.filter(x=>x.id!==id));};
-
-  const todayDate=useMemo(()=>new Date(),[]);
-  const salesByCust=useMemo(()=>salesByCustomerId(sales||[]),[sales]);
 
   const custStats=useMemo(()=>{
     if(!isC)return null;
