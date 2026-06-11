@@ -142,10 +142,18 @@ export default function POPage({sh}){
   const canApproveThis=po=>canApprovePO&&po.status==="pending_approval"&&(isAdmin||cu?.role==="SalesManager"||po.createdBy!==cu?.username);
 
   const AB={padding:"4px 10px",fontSize:11,borderRadius:6,cursor:"pointer",marginRight:4,fontFamily:"inherit"};
+  // Admin can edit PO ที่รับของแล้ว (stock NOT auto-adjusted — warning shown in form).
+  // Other roles still limited to draft + ownership/editor.
+  const canEditPO=po=>{
+    if(isSup)return false;
+    if(po.status==="draft"&&(po.createdBy===cu?.username||ed))return true;
+    if(isAdmin&&po.status==="received")return true;
+    return false;
+  };
   const rowActions=po=>{
     const a=[];
     a.push(<button key="v" onClick={()=>{setViewPO(po);oM("viewPO");}} style={{...AB,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)"}}>ดู</button>);
-    if(po.status==="draft"&&(po.createdBy===cu?.username||ed)&&!isSup)
+    if(canEditPO(po))
       a.push(<button key="edit" onClick={()=>openEditPO(po)} style={{...AB,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)"}}>แก้ไข</button>);
     if(po.status==="draft"&&(po.createdBy===cu?.username||ed)&&!isSup)
       a.push(<button key="sub" onClick={()=>submitForApproval(po)} style={{...AB,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)"}}>ส่งขออนุมัติ</button>);
@@ -240,6 +248,9 @@ export default function POPage({sh}){
       {!editPO&&<div style={{background:"rgba(255,149,0,0.14)",border:"1px solid var(--orange)",borderRadius:6,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--orange)"}}>
         {"PO จะบันทึกเป็น Draft — กด \"ส่งขออนุมัติ\" ในตารางเพื่อเริ่มขั้นตอนการอนุมัติ"}
       </div>}
+      {editPO&&editPO.status==="received"&&<div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:6,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--red)",fontWeight:500}}>
+        {"⚠ PO นี้รับของแล้ว — แก้ไขจะไม่ปรับสต็อกอัตโนมัติ ต้องปรับ stock log เองถ้าจำนวน/รายการเปลี่ยน"}
+      </div>}
       <MBtns onCancel={()=>{setEditPO(null);cM();}} onSave={editPO?updatePO:savePO} saveLabel={editPO?"บันทึก":"บันทึก Draft"}/>
     </Modal>}
 
@@ -292,7 +303,7 @@ export default function POPage({sh}){
       </div>}
 
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:4}}>
-        {viewPO.status==="draft"&&(viewPO.createdBy===cu?.username||ed)&&!isSup&&
+        {canEditPO(viewPO)&&
           <button onClick={()=>{cM();openEditPO(viewPO);}} style={{padding:"8px 18px",background:"var(--orange)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"แก้ไข"}</button>}
         <button onClick={()=>printDoc("po",viewPO,products,contacts)} style={{padding:"8px 18px",background:"var(--text)",color:"var(--bg)",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"พิมพ์ / PDF"}</button>
         {viewPO.status==="draft"&&(viewPO.createdBy===cu?.username||ed)&&!isSup&&
