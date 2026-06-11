@@ -165,6 +165,11 @@ interface Quote {
 export interface PromoTier {
   id: number | string;
   threshold: number;
+  rewardType?: "percent" | "fixed" | "product" | "special_price" | string;
+  rewardValue?: number;
+  rewardProductId?: number | string;
+  specialPrice?: number;     // ใช้คู่กับ rewardType "special_price" — override ราคา/หน่วย
+  scaleReward?: boolean;     // เมื่อ true (รางวัล product) → giftQty = floor(matchedQty / threshold)
 }
 
 export interface Promo {
@@ -173,6 +178,7 @@ export interface Promo {
   measureBy?: "qty" | string;
   brands?: string[];
   categoryIds?: (number | string)[];
+  productIds?: (number | string)[];  // qualifying pool โดยระบุ product ID (OR กับ brands + categoryIds)
   tiers?: PromoTier[];
 }
 
@@ -420,6 +426,27 @@ export const getNotifs = (
   return n;
 };
 
+// Promo qualifying check — productIds / brands / categoryIds ทำงานแบบ OR
+// (ตรงข้อใดข้อหนึ่งก็เข้าเงื่อนไข). ถ้าทั้ง 3 ว่าง → match ทุกสินค้า.
+export const productQualifiesForPromo = (
+  prod: Product | undefined | null,
+  promo: Promo | undefined | null
+): boolean => {
+  if (!prod || !promo) return false;
+  const hasBrands = (promo.brands || []).length > 0;
+  const hasCats = (promo.categoryIds || []).length > 0;
+  const hasProds = (promo.productIds || []).length > 0;
+  if (!hasBrands && !hasCats && !hasProds) return true;
+  if (hasProds && promo.productIds!.some((id) => +id === +prod.id)) return true;
+  if (hasBrands && promo.brands!.includes(prod.brand || "")) return true;
+  if (
+    hasCats &&
+    promo.categoryIds!.some((id) => +id === +((prod.categoryId as number) ?? 0))
+  )
+    return true;
+  return false;
+};
+
 // Promo helpers (accumulate mode) — sum ยอดสะสมของลูกค้าจาก SO ที่จัดส่ง/รอส่ง
 export const calcAccumulatedTotal = (
   customerId: number | string | undefined | null,
@@ -436,15 +463,7 @@ export const calcAccumulatedTotal = (
   return validSOs.reduce((sum, so) => {
     const matchItems = (so.items || []).filter((it) => {
       const prod = (products || []).find((p) => +p.id === +it.productId);
-      if (!prod) return false;
-      if ((promo.brands || []).length && !promo.brands!.includes(prod.brand || ""))
-        return false;
-      if (
-        (promo.categoryIds || []).length &&
-        !promo.categoryIds!.includes(prod.categoryId as number)
-      )
-        return false;
-      return true;
+      return productQualifiesForPromo(prod, promo);
     });
     return (
       sum +
@@ -469,15 +488,7 @@ export const calcCurrentMatchTotal = (
   const matchItems = (items || []).filter((it) => {
     if (!it.productId || !(+it.qty > 0)) return false;
     const prod = (products || []).find((p) => +p.id === +it.productId);
-    if (!prod) return false;
-    if ((promo.brands || []).length && !promo.brands!.includes(prod.brand || ""))
-      return false;
-    if (
-      (promo.categoryIds || []).length &&
-      !promo.categoryIds!.includes(prod.categoryId as number)
-    )
-      return false;
-    return true;
+    return productQualifiesForPromo(prod, promo);
   });
   return matchItems.reduce(
     (s, it) =>

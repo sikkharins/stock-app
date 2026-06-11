@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -53,25 +53,38 @@ function SOList({sh}){
     let rewardDiscPct=0, rewardDiscAmt=0;
     const extraItems=[];
     const appliedRewards=[];
+    const promoOverriddenIdx=new Set(); // indices ใน baseItems ที่ราคาถูก override โดย special_price
+
+    const applyReward=(t,c,source,walletId)=>{
+      if(t.rewardType==="percent"){rewardDiscPct+=t.rewardValue;}
+      else if(t.rewardType==="fixed"){rewardDiscAmt+=t.rewardValue;}
+      else if(t.rewardType==="product"&&t.rewardProductId){
+        const p=products.find(x=>x.id===+t.rewardProductId);
+        const scale=t.scaleReward!==false;
+        const giftQty=(scale&&c.matchedTotal&&t.threshold>0)?Math.max(1,Math.floor(+c.matchedTotal/+t.threshold)):1;
+        extraItems.push({productId:+t.rewardProductId,qty:giftQty,price:0,unitPrice:p?+p.price:0});
+      }
+      else if(t.rewardType==="special_price"&&+t.specialPrice>0&&c.promo){
+        const sp=+t.specialPrice;
+        baseItems.forEach((bi,idx)=>{
+          const pr=products.find(x=>x.id===+bi.productId);
+          if(!pr)return;
+          if(!productQualifiesForPromo(pr,c.promo))return;
+          if(+bi.price>sp){baseItems[idx]={...bi,price:sp};promoOverriddenIdx.add(idx);}
+        });
+      }
+      appliedRewards.push({promoId:c.promoId,tierId:t.id,source,...(walletId?{walletId}:{})});
+    };
 
     // 1. Pending claims (รับเลย)
-    pendingClaims.forEach(c=>{
-      const t=c.tier;
-      if(t.rewardType==="percent")rewardDiscPct+=t.rewardValue;
-      else if(t.rewardType==="fixed")rewardDiscAmt+=t.rewardValue;
-      else if(t.rewardType==="product"&&t.rewardProductId){const p=products.find(x=>x.id===+t.rewardProductId);extraItems.push({productId:+t.rewardProductId,qty:1,price:0,unitPrice:p?+p.price:0});}
-      appliedRewards.push({promoId:c.promoId,tierId:t.id,source:"claim"});
-    });
+    pendingClaims.forEach(c=>applyReward(c.tier,c,"claim"));
 
     // 2. Selected wallet items
     selectedWalletIds.forEach(wid=>{
       const w=(customer?.savedRewards||[]).find(r=>r.id===wid);
       if(!w)return;
-      const t=w.tier;
-      if(t.rewardType==="percent")rewardDiscPct+=t.rewardValue;
-      else if(t.rewardType==="fixed")rewardDiscAmt+=t.rewardValue;
-      else if(t.rewardType==="product"&&t.rewardProductId){const p=products.find(x=>x.id===+t.rewardProductId);extraItems.push({productId:+t.rewardProductId,qty:1,price:0,unitPrice:p?+p.price:0});}
-      appliedRewards.push({promoId:w.promoId,tierId:t.id,source:"wallet",walletId:wid});
+      // wallet entries persist promo snapshot for product matching (fallback ถ้าไม่มี = ไม่ override special_price)
+      applyReward(w.tier,{promoId:w.promoId,promo:w.promo,matchedTotal:w.matchedTotal},"wallet",wid);
     });
 
     const items=[...baseItems,...extraItems];
@@ -85,7 +98,7 @@ function SOList({sh}){
     const vatAmt=incVat?round2((sub-totalDisc)*7/107):0;
     const selRep=form.useVatRep&&form.vatRepId?curVatReps.find(r=>r.id===+form.vatRepId):null;
     const origPrices=items.map(i=>{const p=products.find(x=>x.id===i.productId);return p?+p.price:+i.price;});
-    const priceChanged=baseItems.some((i,idx)=>{const p=products.find(x=>x.id===i.productId);return p&&+i.price!==+p.price;});
+    const priceChanged=baseItems.some((i,idx)=>{if(promoOverriddenIdx.has(idx))return false;const p=products.find(x=>x.id===i.productId);return p&&+i.price!==+p.price;});
     const needsApproval=!hasApv&&(priceChanged||ep>0||ea>0);
     const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,extraDiscAmt:ea||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||"",legacyNum:form.legacyNum||"",eventId:form.eventId||"",eventPackPurchases:[...(form.eventPackPurchases||[])]};
 
@@ -110,7 +123,7 @@ function SOList({sh}){
         if(!newClaims[s.promoId].claimedTierIds.includes(s.tierId))newClaims[s.promoId].claimedTierIds=[...newClaims[s.promoId].claimedTierIds,s.tierId];
         newClaims[s.promoId].lastClaimedAt=todayStr();
         newClaims[s.promoId].lastClaimedSO=newSoNum;
-        newRewards.push({id:Date.now()+Math.random(),promoId:s.promoId,promoName:s.promoName,tier:s.tier,savedAt:todayStr(),savedFromSO:newSoNum});
+        newRewards.push({id:Date.now()+Math.random(),promoId:s.promoId,promoName:s.promoName,tier:s.tier,promo:s.promo||null,matchedTotal:s.matchedTotal||0,savedAt:todayStr(),savedFromSO:newSoNum});
       });
       // Remove redeemed wallet items
       const finalRewards=newRewards.filter(r=>!selectedWalletIds.includes(r.id));
@@ -217,6 +230,7 @@ function SOList({sh}){
           if(!t)return"";
           if(t.rewardType==="percent")return"ลด "+t.rewardValue+"%";
           if(t.rewardType==="fixed")return"ลด ฿"+fmt(t.rewardValue);
+          if(t.rewardType==="special_price")return"ราคาพิเศษ ฿"+fmt(t.specialPrice||0)+"/หน่วย";
           if(t.rewardType==="product"){const rp=products.find(x=>x.id===+t.rewardProductId);return"แถม "+(rp?pN(rp):"สินค้า")}
           return"";
         };
@@ -225,11 +239,7 @@ function SOList({sh}){
         // per_so matching
         const itemsWithProd=form.items.filter(it=>it.productId&&+it.qty>0).map(it=>({...it,prod:products.find(x=>x.id===+it.productId)})).filter(it=>it.prod);
         const matchedPerSo=perSoPromos.map(p=>{
-          const matching=itemsWithProd.filter(it=>{
-            if((p.brands||[]).length&&!p.brands.includes(it.prod.brand))return false;
-            if((p.categoryIds||[]).length&&!p.categoryIds.includes(it.prod.categoryId))return false;
-            return true;
-          });
+          const matching=itemsWithProd.filter(it=>productQualifiesForPromo(it.prod,p));
           if(!matching.length)return null;
           const totalVal=p.measureBy==="qty"?matching.reduce((s,it)=>s+(+it.qty||0),0):matching.reduce((s,it)=>s+(+it.qty||0)*(+it.price||0),0);
           const tiers=(p.tiers||[]).slice().sort((a,b)=>a.threshold-b.threshold);
@@ -259,13 +269,13 @@ function SOList({sh}){
         const totalCount=matchedPerSo.length+matchedAccum.length+(walletItems.length>0?1:0);
         const isPendingClaim=(promoId,tierId)=>pendingClaims.some(c=>c.promoId===promoId&&c.tierId===tierId);
         const isPendingSave=(promoId,tierId)=>pendingSaves.some(s=>s.promoId===promoId&&s.tierId===tierId);
-        const togglePendingClaim=(promo,tier)=>{
-          const key={promoId:promo.id,tierId:tier.id,promoName:promo.name,tier};
+        const togglePendingClaim=(promo,tier,matchedTotal)=>{
+          const key={promoId:promo.id,tierId:tier.id,promoName:promo.name,tier,promo,matchedTotal};
           if(isPendingClaim(promo.id,tier.id))setPendingClaims(p=>p.filter(c=>!(c.promoId===promo.id&&c.tierId===tier.id)));
           else{setPendingClaims(p=>[...p,key]);setPendingSaves(p=>p.filter(s=>!(s.promoId===promo.id&&s.tierId===tier.id)));}
         };
-        const togglePendingSave=(promo,tier)=>{
-          const key={promoId:promo.id,tierId:tier.id,promoName:promo.name,tier};
+        const togglePendingSave=(promo,tier,matchedTotal)=>{
+          const key={promoId:promo.id,tierId:tier.id,promoName:promo.name,tier,promo,matchedTotal};
           if(isPendingSave(promo.id,tier.id))setPendingSaves(p=>p.filter(s=>!(s.promoId===promo.id&&s.tierId===tier.id)));
           else{setPendingSaves(p=>[...p,key]);setPendingClaims(p=>p.filter(c=>!(c.promoId===promo.id&&c.tierId===tier.id)));}
         };
@@ -295,6 +305,11 @@ function SOList({sh}){
                 {m.bestTier&&savings>0&&<div style={{fontSize:11,color:"var(--green)",fontWeight:500,marginBottom:6}}>{"ประหยัด ฿"+fmt(savings)}</div>}
                 {m.nextTier&&<div style={{fontSize:11,color:"var(--dim)",marginBottom:6}}>{"ขั้นถัดไป: "+fmtVal(m.nextTier.threshold,m.promo)+" → "+rewardLbl(m.nextTier)+" (ขาดอีก "+fmtVal(m.nextTier.threshold-m.total,m.promo)+")"}</div>}
                 <div style={{height:4,background:"var(--hover)",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",background:m.bestTier?"var(--green)":"var(--orange)",width:pct+"%",transition:"width 0.3s"}}/></div>
+                {m.bestTier&&(m.bestTier.rewardType==="product"||m.bestTier.rewardType==="special_price")&&(()=>{
+                  const claimMarked=isPendingClaim(m.promo.id,m.bestTier.id);
+                  const scaleHint=m.bestTier.rewardType==="product"&&m.bestTier.scaleReward!==false&&m.bestTier.threshold>0?" × "+Math.floor(m.total/m.bestTier.threshold):"";
+                  return <button onClick={()=>togglePendingClaim(m.promo,m.bestTier,m.total)} style={{marginTop:8,width:"100%",padding:"6px 8px",fontSize:11,borderRadius:6,border:"1px solid "+(claimMarked?"var(--green)":"var(--line)"),background:claimMarked?"rgba(52,199,89,0.14)":"var(--panel)",color:claimMarked?"var(--green)":"var(--text)",fontWeight:claimMarked?600:400,cursor:"pointer",fontFamily:"inherit"}}>{claimMarked?"✓ จะใช้ในใบนี้"+scaleHint:"ใช้ในใบนี้"+scaleHint}</button>;
+                })()}
               </div>;
             })}
           </div>}
@@ -350,7 +365,7 @@ function SOList({sh}){
             </div>
           </div>}
 
-          <div style={{fontSize:11,color:"var(--dim)",marginTop:10,fontStyle:"italic"}}>{matchedPerSo.length?"โปรต่อใบ: ระบบไม่หักให้อัตโนมัติ — กรอกส่วนลดในช่องด้านล่างเอง • ":""}{matchedAccum.length||walletItems.length?"โปรสะสม/wallet: ระบบจะหักให้อัตโนมัติเมื่อบันทึก SO":""}</div>
+          <div style={{fontSize:11,color:"var(--dim)",marginTop:10,fontStyle:"italic"}}>{matchedPerSo.length?"โปรต่อใบ (% / ฿): กรอกส่วนลดในช่องด้านล่างเอง • โปรแถม/ราคาพิเศษ: กด ‘ใช้ในใบนี้’ ระบบจะหักให้อัตโนมัติ • ":""}{matchedAccum.length||walletItems.length?"โปรสะสม/wallet: ระบบจะหักให้อัตโนมัติเมื่อบันทึก SO":""}</div>
         </div>;
       })()}
       <div style={{background:"var(--bg)",borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:13}}>

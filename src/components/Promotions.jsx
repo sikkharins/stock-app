@@ -7,9 +7,9 @@ import CustomSelect from "./ui/CustomSelect.jsx";
 import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 
 const MEASURE_OPTS=[{value:"amount",label:"ยอดเงิน (บาท)"},{value:"qty",label:"จำนวนสินค้า (ชิ้น)"}];
-const REWARD_OPTS=[{value:"product",label:"แถมสินค้า"},{value:"percent",label:"ส่วนลด %"},{value:"fixed",label:"ส่วนลดยอดสุทธิ (บาท)"}];
-const emptyTier=()=>({id:Date.now()+Math.random(),threshold:"",rewardType:"percent",rewardValue:"",rewardProductId:""});
-const emptyForm=()=>({name:"",startDate:todayStr(),endDate:"",brands:[],categoryIds:[],measureBy:"amount",mode:"per_so",tiers:[emptyTier()],active:true});
+const REWARD_OPTS=[{value:"product",label:"แถมสินค้า"},{value:"special_price",label:"ราคาพิเศษ (override ราคา/หน่วย)"},{value:"percent",label:"ส่วนลด %"},{value:"fixed",label:"ส่วนลดยอดสุทธิ (บาท)"}];
+const emptyTier=()=>({id:Date.now()+Math.random(),threshold:"",rewardType:"percent",rewardValue:"",rewardProductId:"",specialPrice:"",scaleReward:true});
+const emptyForm=()=>({name:"",startDate:todayStr(),endDate:"",brands:[],categoryIds:[],productIds:[],measureBy:"amount",mode:"per_so",tiers:[emptyTier()],active:true});
 
 function statusOf(p){
   const today=todayStr();
@@ -42,7 +42,7 @@ export default function PromosPage({sh}){
 
   const openNew=()=>{setForm(emptyForm());setIsEdit(false);oM("promoForm");};
   const openEdit=p=>{
-    setForm({id:p.id,name:p.name,startDate:p.startDate||"",endDate:p.endDate||"",brands:p.brands||[],categoryIds:p.categoryIds||[],measureBy:p.measureBy||"amount",mode:p.mode||"per_so",tiers:(p.tiers||[]).map(t=>({...t})),active:p.active!==false});
+    setForm({id:p.id,name:p.name,startDate:p.startDate||"",endDate:p.endDate||"",brands:p.brands||[],categoryIds:p.categoryIds||[],productIds:p.productIds||[],measureBy:p.measureBy||"amount",mode:p.mode||"per_so",tiers:(p.tiers||[]).map(t=>({...t,specialPrice:t.specialPrice??"",scaleReward:t.scaleReward!==false})),active:p.active!==false});
     setIsEdit(true);oM("promoForm");
   };
   const askDel=id=>{setDelId(id);oM("promoDel");};
@@ -62,6 +62,14 @@ export default function PromosPage({sh}){
       return{...f,categoryIds:has?f.categoryIds.filter(x=>x!==id):[...f.categoryIds,id]};
     });
   };
+  const toggleProduct=id=>{
+    setForm(f=>{
+      const nid=+id;
+      const has=f.productIds.some(x=>+x===nid);
+      return{...f,productIds:has?f.productIds.filter(x=>+x!==nid):[...f.productIds,nid]};
+    });
+  };
+  const[productSearch,setProductSearch]=useState("");
 
   const addTier=()=>setForm(f=>({...f,tiers:[...f.tiers,emptyTier()]}));
   const removeTier=tid=>setForm(f=>({...f,tiers:f.tiers.filter(t=>t.id!==tid)}));
@@ -69,7 +77,12 @@ export default function PromosPage({sh}){
 
   const save=()=>{
     if(!form.name||!form.startDate||form.tiers.length===0)return;
-    const d={name:form.name,startDate:form.startDate,endDate:form.endDate||"",brands:form.brands,categoryIds:form.categoryIds,measureBy:form.measureBy,mode:form.mode||"per_so",tiers:form.tiers.map(t=>({id:t.id,threshold:+t.threshold||0,rewardType:t.rewardType,rewardValue:t.rewardType==="product"?0:+(t.rewardValue)||0,rewardProductId:t.rewardType==="product"?+t.rewardProductId||0:0})),active:form.active};
+    const d={name:form.name,startDate:form.startDate,endDate:form.endDate||"",brands:form.brands,categoryIds:form.categoryIds,productIds:(form.productIds||[]).map(x=>+x),measureBy:form.measureBy,mode:form.mode||"per_so",tiers:form.tiers.map(t=>{
+      const base={id:t.id,threshold:+t.threshold||0,rewardType:t.rewardType,rewardValue:(t.rewardType==="product"||t.rewardType==="special_price")?0:+(t.rewardValue)||0,rewardProductId:t.rewardType==="product"?+t.rewardProductId||0:0};
+      if(t.rewardType==="special_price")base.specialPrice=+t.specialPrice||0;
+      if(t.rewardType==="product")base.scaleReward=t.scaleReward!==false;
+      return base;
+    }),active:form.active};
     if(isEdit){setPromos(p=>p.map(x=>x.id===form.id?{...x,...d}:x));}
     else{setPromos(p=>[...p,{id:Date.now(),...d}]);}
     cM();
@@ -80,7 +93,8 @@ export default function PromosPage({sh}){
   const rewardLabel=(t)=>{
     if(t.rewardType==="percent")return "ลด "+t.rewardValue+"%";
     if(t.rewardType==="fixed")return "ลด ฿"+fmt(t.rewardValue);
-    if(t.rewardType==="product"){const pr=products.find(p=>p.id===t.rewardProductId);return "แถม "+(pr?pN(pr):"-");}
+    if(t.rewardType==="special_price")return "ราคาพิเศษ ฿"+fmt(t.specialPrice||0)+"/หน่วย";
+    if(t.rewardType==="product"){const pr=products.find(p=>p.id===t.rewardProductId);const scale=t.scaleReward!==false;return "แถม "+(pr?pN(pr):"-")+(scale?" (ทุก "+(t.threshold||"?")+" ชิ้น)":"");}
     return"-";
   };
 
@@ -116,6 +130,11 @@ export default function PromosPage({sh}){
           {(p.categoryIds||[]).length>0&&<div style={{marginBottom:6}}>
             <span style={{fontSize:11,color:"var(--faint)"}}>หมวด: </span>
             {p.categoryIds.map(id=><span key={id} style={{...chip,color:"var(--orange)",background:"rgba(255,149,0,0.14)"}}>{getCN(id)}</span>)}
+          </div>}
+          {(p.productIds||[]).length>0&&<div style={{marginBottom:6}}>
+            <span style={{fontSize:11,color:"var(--faint)"}}>สินค้าเจาะจง: </span>
+            {p.productIds.slice(0,4).map(pid=>{const pr=products.find(x=>x.id===+pid);return <span key={pid} style={{...chip,color:"var(--purple)",background:"rgba(175,82,222,0.14)"}}>{pr?pN(pr):"-"}</span>;})}
+            {p.productIds.length>4&&<span style={{...chip,color:"var(--purple)",background:"rgba(175,82,222,0.14)"}}>+{p.productIds.length-4}</span>}
           </div>}
 
           <div style={{fontSize:12,color:"var(--dim)",marginBottom:4,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
@@ -188,6 +207,35 @@ export default function PromosPage({sh}){
         </div>
 
         <div>
+          <div style={{fontSize:11.5,fontWeight:500,color:"var(--dim)",marginBottom:6}}>สินค้าเจาะจงที่เข้าร่วม <span style={{fontWeight:400,color:"var(--faint)"}}>(ว่าง = ไม่กรอง • รวมแบบ OR กับยี่ห้อ/หมวด)</span></div>
+          {form.productIds.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6,padding:6,background:"rgba(175,82,222,0.06)",borderRadius:6}}>
+            {form.productIds.map(pid=>{
+              const pr=products.find(x=>+x.id===+pid);
+              return <span key={pid} onClick={()=>toggleProduct(pid)} style={{...chip,cursor:"pointer",color:"var(--purple)",background:"rgba(175,82,222,0.14)",border:"1px solid var(--purple)",padding:"4px 10px",fontSize:12}}>{pr?pN(pr):"id:"+pid} ×</span>;
+            })}
+          </div>}
+          <input value={productSearch} onChange={e=>setProductSearch(e.target.value)} style={IB} placeholder="ค้นหาเพื่อเพิ่ม (ชื่อ / รหัส / ยี่ห้อ)"/>
+          {productSearch.trim()&&(()=>{
+            const q=productSearch.trim().toLowerCase();
+            const matched=products.filter(p=>{
+              const name=(pN(p)||"").toLowerCase();
+              const code=(p.code||"").toLowerCase();
+              const brand=(p.brand||"").toLowerCase();
+              return name.includes(q)||code.includes(q)||brand.includes(q);
+            }).slice(0,40);
+            if(!matched.length)return <div style={{fontSize:12,color:"var(--faint)",padding:8}}>ไม่พบสินค้า</div>;
+            return <div style={{maxHeight:200,overflowY:"auto",border:"1px solid var(--line)",borderRadius:8,marginTop:6}}>
+              {matched.map(p=>{
+                const sel=form.productIds.some(x=>+x===+p.id);
+                return <div key={p.id} onClick={()=>toggleProduct(p.id)} style={{padding:"7px 10px",fontSize:12,cursor:"pointer",borderBottom:"1px solid var(--line)",background:sel?"rgba(175,82,222,0.08)":"transparent",color:sel?"var(--purple)":"var(--text)",fontWeight:sel?500:400}}>
+                  {sel?"✓ ":""}{pN(p)} <span style={{color:"var(--faint)"}}>({p.code||"-"} • {p.brand})</span>
+                </div>;
+              })}
+            </div>;
+          })()}
+        </div>
+
+        <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <div style={{fontSize:11.5,fontWeight:500,color:"var(--dim)"}}>ขั้นรางวัล</div>
             <button onClick={addTier} style={{fontSize:12,color:"var(--blue)",background:"transparent",border:"none",cursor:"pointer"}}>+ เพิ่มขั้น</button>
@@ -208,8 +256,16 @@ export default function PromosPage({sh}){
             <div style={{marginTop:10}}>
               {t.rewardType==="percent"&&<Field label="ส่วนลด (%)"><input type="number" value={t.rewardValue} onChange={e=>setTier(t.id,"rewardValue",e.target.value)} style={IB} placeholder="เช่น 10"/></Field>}
               {t.rewardType==="fixed"&&<Field label="ส่วนลด (บาท)"><input type="number" value={t.rewardValue} onChange={e=>setTier(t.id,"rewardValue",e.target.value)} style={IB} placeholder="เช่น 500"/></Field>}
-              {t.rewardType==="product"&&<Field label="สินค้าแถม">
-                <CustomSelect searchable value={String(t.rewardProductId||"")} onChange={v=>setTier(t.id,"rewardProductId",v)} options={[{value:"",label:"— เลือกสินค้า —"},...products.map(p=>({value:String(p.id),label:pN(p)+" ("+p.brand+")",searchText:p.code||""}))]}/>              </Field>}
+              {t.rewardType==="special_price"&&<Field label="ราคาต่อหน่วย (บาท)"><input type="number" value={t.specialPrice} onChange={e=>setTier(t.id,"specialPrice",e.target.value)} style={IB} placeholder="เช่น 4300"/></Field>}
+              {t.rewardType==="product"&&<>
+                <Field label="สินค้าแถม">
+                  <CustomSelect searchable value={String(t.rewardProductId||"")} onChange={v=>setTier(t.id,"rewardProductId",v)} options={[{value:"",label:"— เลือกสินค้า —"},...products.map(p=>({value:String(p.id),label:pN(p)+" ("+p.brand+")",searchText:p.code||""}))]}/>
+                </Field>
+                <label style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"8px 10px",borderRadius:6,background:"var(--hover)",cursor:"pointer",fontSize:12}}>
+                  <input type="checkbox" checked={t.scaleReward!==false} onChange={e=>setTier(t.id,"scaleReward",e.target.checked)}/>
+                  <span>แถมตามสัดส่วน — ทุก {t.threshold||"N"} ชิ้นที่ซื้อ ได้แถม 1 (เช่น ซื้อ {t.threshold? +t.threshold*2 : "2N"} → แถม 2)</span>
+                </label>
+              </>}
             </div>
           </div>)}
         </div>
