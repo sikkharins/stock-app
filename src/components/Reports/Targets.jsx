@@ -2,7 +2,9 @@ import { useState, useMemo } from "react";
 import { fmt } from "../../utils/helpers.js";
 import { IB } from "../../utils/constants.js";
 import CustomSelect from "../ui/CustomSelect.jsx";
-import NeonGauge, { GAUGE_VARIANTS, colorAt, useEased } from "../ui/NeonGauge.jsx";
+import NeonGauge, { GAUGE_VARIANTS, colorAt, useEased, useRev, heatTier, heatCardStyle, HeatBadge } from "../ui/NeonGauge.jsx";
+import NeonSparkline from "../ui/NeonSparkline.jsx";
+import { dailyTotals, prevMonthKey, actualForMonth, yesterdayPct, projectETA } from "../../utils/gaugeData.ts";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const MONTHS_TH=["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
@@ -11,22 +13,58 @@ const TOP_N=6;
 const OTHERS_COLOR="rgba(160,160,170,0.55)";
 
 // Sales card — gauge + legend ลูกค้า (แยกเป็น component เพื่อใช้ useEased ได้)
-function SalesGaugeCard({t,actual,segments,variant,canE,onEdit,onDel}){
+function SalesGaugeCard({t,actual,segments,variant,canE,onEdit,onDel,sales,targets,contacts,today}){
   const over=actual>=t.target;
   const rawPct=t.target>0?actual/t.target*100:0;
-  const eased=useEased(Math.min(100,Math.max(0,rawPct)),true);
+  const{value:eased,handlers:revHandlers}=useRev(rawPct);
+  const tier=heatTier(rawPct,50,75);
   const legendColor=(i,isOther)=>{
     if(isOther)return OTHERS_COLOR;
     const slot=segments.length>1?(i/(segments.length-1)):0.5;
     return colorAt("reference",slot);
   };
-  return<div style={{background:"linear-gradient(180deg,var(--panel) 0%,var(--bg2,var(--panel)) 100%)",border:"0.5px solid var(--line)",borderRadius:14,padding:16,position:"relative",overflow:"hidden"}}>
-    {over&&<span style={{position:"absolute",top:12,right:12,fontSize:11,fontWeight:700,background:"rgba(86,240,162,0.12)",color:"#6cf0a8",borderRadius:6,padding:"2px 8px",zIndex:2,boxShadow:"0 0 12px rgba(86,240,162,0.35)"}}>ทำได้แล้ว!</span>}
-    <div style={{fontWeight:600,fontSize:15,marginBottom:2,paddingRight:80,letterSpacing:-0.2}}>{t.salesName}</div>
-    <div style={{fontSize:11,color:"var(--faint)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{mLabel(t.month)}</div>
-    <div style={{margin:"4px -4px 8px"}}>
-      <NeonGauge variant={variant} uid={"g-"+t.id+"-"+variant} value={eased} target={100} glow={96} theme="reference" sublabel="" showTarget={false}/>
+  // 4 ลูกเล่นเสริม
+  const extras=useMemo(()=>{
+    if(t.target<=0)return null;
+    const custSp={};contacts.forEach(c=>{if(c.type==="customer"&&c.salesPerson===t.salesName)custSp[c.id]=true;});
+    const pred=(so)=>!!custSp[so.customerId];
+    const daily=dailyTotals(sales,pred,t.month);
+    const eta=projectETA(actual,t.target,t.month,today);
+    const ydayP=yesterdayPct(sales,pred,t.target,today);
+    let ghostVal=null;
+    const prev=prevMonthKey(t.month);
+    const prevT=targets.find(x=>x.salesName===t.salesName&&x.month===prev);
+    if(prevT&&prevT.target>0){
+      const prevA=actualForMonth(sales,pred,prev);
+      ghostVal=prevA/prevT.target*100;
+    }
+    return{daily,eta,ydayP,ghostVal};
+  },[t,actual,sales,targets,contacts,today]);
+  const accent=colorAt("reference",Math.max(0,Math.min(1,rawPct/100)));
+  return<div style={{background:"linear-gradient(180deg,var(--panel) 0%,var(--bg2,var(--panel)) 100%)",border:"0.5px solid var(--line)",borderRadius:14,padding:16,position:"relative",overflow:"hidden",...heatCardStyle(tier)}}>
+    {over&&<span style={{position:"absolute",top:12,right:12,fontSize:11,fontWeight:700,background:"rgba(86,240,162,0.12)",color:"#6cf0a8",borderRadius:6,padding:"2px 8px",zIndex:4,boxShadow:"0 0 12px rgba(86,240,162,0.35)"}}>ทำได้แล้ว!</span>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6,marginBottom:2,paddingRight:over?80:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        <div style={{fontWeight:600,fontSize:15,letterSpacing:-0.2}}>{t.salesName}</div>
+        <HeatBadge tier={tier}/>
+      </div>
+      {extras&&Number.isFinite(extras.ydayP)&&extras.ydayP!==0&&!over&&<span title="ยอดเมื่อวาน คิดเป็น % ของเป้า" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:99,background:extras.ydayP>0?"rgba(52,199,89,0.10)":"rgba(255,99,146,0.10)",color:extras.ydayP>0?"var(--green)":"#ff6392"}}>
+        {extras.ydayP>0?"↑":"↓"}{(extras.ydayP>=0?"+":"")+extras.ydayP.toFixed(1)+"%"}
+      </span>}
     </div>
+    <div style={{fontSize:11,color:"var(--faint)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{mLabel(t.month)}</div>
+    <div {...revHandlers} title="กดค้างเพื่อเร่งคันเร่ง — ปล่อยจะกลับ 0%" style={{margin:"4px -4px 8px",...revHandlers.style}}>
+      <NeonGauge variant={variant} uid={"g-"+t.id+"-"+variant} value={eased} target={100} glow={96} theme="reference" sublabel="" showTarget={false} ghostValue={extras?.ghostVal} flames={true} heatT1={50} heatT2={75}/>
+    </div>
+    {extras&&<div style={{margin:"0 -4px 10px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",fontSize:10,color:"var(--faint)",textTransform:"uppercase",letterSpacing:0.8,marginBottom:2}}>
+        <span>ยอดขายรายวัน</span>
+        {extras.eta&&<span style={{color:extras.eta.kind==="hit"?"var(--green)":extras.eta.kind==="miss"?"#ff6392":"var(--dim)"}}>{extras.eta.text}</span>}
+      </div>
+      <div style={{height:32}}>
+        <NeonSparkline data={extras.daily} color={accent} height={32} uid={"sp-"+t.id}/>
+      </div>
+    </div>}
     {segments.length>0?<div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:12,fontSize:11.5}}>
       {segments.map((s,i)=>{
         const c=legendColor(i,s.isOther);
@@ -57,6 +95,7 @@ function SalesGaugeCard({t,actual,segments,variant,canE,onEdit,onDel}){
 export default function TargetsReport({targets,setTargets,sales,contacts,users,canE}){
   const now=new Date();
   const def=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  const todayStr=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const[selMonth,setSelMonth]=useState(def);
   const[adding,setAdding]=useState(false);
   const[form,setForm]=useState({salesName:"",target:""});
@@ -168,7 +207,7 @@ export default function TargetsReport({targets,setTargets,sales,contacts,users,c
           const rest=allCusts.slice(TOP_N);
           const restAmt=rest.reduce((s,x)=>s+x.amount,0);
           const segments=[...top,...(restAmt>0?[{customerId:"__others__",name:"อื่นๆ ("+rest.length+" ร้าน)",amount:restAmt,isOther:true}]:[])];
-          return<SalesGaugeCard key={t.id} t={t} actual={actual} segments={segments} variant={variant} canE={canE} onEdit={()=>openEdit(t)} onDel={()=>delTarget(t.id)}/>;
+          return<SalesGaugeCard key={t.id} t={t} actual={actual} segments={segments} variant={variant} canE={canE} onEdit={()=>openEdit(t)} onDel={()=>delTarget(t.id)} sales={sales} targets={targets} contacts={contacts} today={todayStr}/>;
         })}
         </div>
       </>

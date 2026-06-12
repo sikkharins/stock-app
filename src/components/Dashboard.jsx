@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import StatCard from "./ui/StatCard.jsx";
 import StockValueDonut from "./ui/StockValueDonut.jsx";
 import SalesAreaChart from "./ui/SalesAreaChart.jsx";
-import NeonGauge, { GAUGE_VARIANTS, useEased, colorAt } from "./ui/NeonGauge.jsx";
+import NeonGauge, { GAUGE_VARIANTS, useEased, useRev, colorAt, heatTier, heatCardStyle, HeatBadge } from "./ui/NeonGauge.jsx";
+import NeonSparkline from "./ui/NeonSparkline.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
 import DashboardSettingsModal from "./ui/DashboardSettingsModal.jsx";
 import { fmt, toBE } from "../utils/helpers.js";
 import { MOVE_TYPES, ALL_WIDGET_KEYS, DASH_SECTIONS, ALL_SECTION_KEYS } from "../utils/constants.js";
+import { dailyTotals, prevMonthKey, actualForMonth, yesterdayPct, projectETA } from "../utils/gaugeData.ts";
 
 const PO_STATUS={
   pending:   {label:"รอรับของ", bg:"rgba(255,149,0,0.14)", color:"var(--orange)"},
@@ -133,7 +135,46 @@ export default function DashPage({sh}){
   },[isSales,actualMonth,myTarget,overall,selectedSp,cu.salesName]);
 
   const gaugeRawPct=gaugeView&&gaugeView.target>0?gaugeView.actual/gaugeView.target*100:0;
-  const gaugeEased=useEased(Math.min(100,Math.max(0,gaugeRawPct)),true);
+  const{value:gaugeEased,holding:gaugeHolding,handlers:revHandlers}=useRev(gaugeRawPct);
+
+  // 4 ลูกเล่นเสริมเกจ — sparkline / ghost / ETA / day-delta
+  const gaugeExtras=useMemo(()=>{
+    if(!gaugeView||gaugeView.target<=0)return null;
+    const custSp={};contacts.forEach(c=>{if(c.type==="customer"&&c.salesPerson)custSp[c.id]=c.salesPerson;});
+    // predicate: SO ที่ตรงกับ view ปัจจุบัน
+    let pred;
+    if(isSales){pred=(so)=>custSp[so.customerId]===cu.salesName;}
+    else if(selectedSp==="__all__"){
+      const spSet=new Set((overall?.perSp||[]).map(p=>p.salesName));
+      pred=(so)=>{const s=custSp[so.customerId];return!!s&&spSet.has(s);};
+    } else {pred=(so)=>custSp[so.customerId]===selectedSp;}
+
+    const daily=dailyTotals(sales,pred,curMonth);
+    // ETA
+    const eta=projectETA(gaugeView.actual,gaugeView.target,curMonth,today);
+    // % เมื่อวาน
+    const ydayP=yesterdayPct(sales,pred,gaugeView.target,today);
+    // ghost: % เดือนก่อน
+    const prev=prevMonthKey(curMonth);
+    let ghostVal=null;
+    if(isSales||selectedSp!=="__all__"){
+      const spName=isSales?cu.salesName:selectedSp;
+      const prevT=targets.find(t=>t.salesName===spName&&t.month===prev);
+      if(prevT&&prevT.target>0){
+        const prevA=actualForMonth(sales,(so)=>custSp[so.customerId]===spName,prev);
+        ghostVal=prevA/prevT.target*100;
+      }
+    } else {
+      const prevTs=targets.filter(t=>t.month===prev);
+      const totT=prevTs.reduce((s,t)=>s+(+t.target||0),0);
+      if(totT>0){
+        const prevSpSet=new Set(prevTs.map(t=>t.salesName));
+        const prevA=actualForMonth(sales,(so)=>{const s=custSp[so.customerId];return!!s&&prevSpSet.has(s);},prev);
+        ghostVal=prevA/totT*100;
+      }
+    }
+    return{daily,eta,ydayP,ghostVal};
+  },[gaugeView,sales,targets,contacts,curMonth,today,isSales,selectedSp,overall,cu.salesName]);
 
   const pendingApprovalPO=pos.filter(po=>po.status==="pending_approval").length;
   const pendingDeliverySO=myS.filter(so=>so.status==="pending_delivery").length;
@@ -223,13 +264,17 @@ export default function DashPage({sh}){
     {sec("sales_target",gaugeView&&(()=>{
       const showPct=Math.round(gaugeRawPct);
       const hit=showPct>=100;
+      const tier=heatTier(gaugeRawPct,50,75);
       const spOpts=overall?[{value:"__all__",label:"ทั้งทีม (รวม)"},...overall.perSp.map(p=>({value:p.salesName,label:p.salesName}))]:[];
-      return<div style={{background:"linear-gradient(180deg,#0c1016 0%,#090c11 100%)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"16px 18px 8px",boxShadow:"var(--shadow)",position:"relative",overflow:"hidden"}}>
+      return<div style={{background:"linear-gradient(180deg,#0c1016 0%,#090c11 100%)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"16px 18px 8px",boxShadow:"var(--shadow)",position:"relative",overflow:"hidden",...heatCardStyle(tier)}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",marginBottom:4}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{width:10,height:10,borderRadius:"50%",background:"#5ed0ff",boxShadow:"0 0 14px 3px #5ed0ff"}}/>
             <div>
-              <div style={{fontSize:14,fontWeight:600,color:"#e7ecf2",letterSpacing:-0.2}}>{gaugeView.title}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{fontSize:14,fontWeight:600,color:"#e7ecf2",letterSpacing:-0.2}}>{gaugeView.title}</div>
+                <HeatBadge tier={tier}/>
+              </div>
               <div style={{fontSize:11,color:"#8893a1",textTransform:"uppercase",letterSpacing:1.2,marginTop:2}}>{gaugeView.who} · เดือนนี้</div>
             </div>
           </div>
@@ -237,6 +282,10 @@ export default function DashPage({sh}){
             {!isSales&&spOpts.length>0&&<div style={{minWidth:150}}>
               <CustomSelect value={selectedSp} onChange={v=>setSelectedSp(v)} options={spOpts}/>
             </div>}
+            {gaugeExtras&&Number.isFinite(gaugeExtras.ydayP)&&gaugeExtras.ydayP!==0&&<span title="ยอดเมื่อวาน คิดเป็น % ของเป้า" style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:600,padding:"5px 10px",borderRadius:99,border:"1px solid rgba(255,255,255,0.08)",background:gaugeExtras.ydayP>0?"rgba(86,240,162,0.08)":"rgba(255,99,146,0.08)",color:gaugeExtras.ydayP>0?"#6cf0a8":"#ff6392"}}>
+              {gaugeExtras.ydayP>0?"↑":"↓"} {(gaugeExtras.ydayP>=0?"+":"")+gaugeExtras.ydayP.toFixed(1)+"%"}
+              <span style={{fontWeight:400,opacity:0.7,marginLeft:2,fontSize:11}}>เมื่อวาน</span>
+            </span>}
             <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,padding:"5px 12px",borderRadius:99,border:"1px solid rgba(255,255,255,0.08)",background:hit?"rgba(86,240,162,0.08)":"rgba(255,209,102,0.08)",color:hit?"#6cf0a8":"#ffd166"}}>
               <span style={{width:7,height:7,borderRadius:"50%",background:hit?"#6cf0a8":"#ffd166",boxShadow:"0 0 10px "+(hit?"#6cf0a8":"#ffd166")}}/>
               {gaugeView.missingTarget?"ยังไม่ได้ตั้งเป้า":(hit?"On / above goal":((100-showPct)+" pts to goal"))}
@@ -249,9 +298,18 @@ export default function DashPage({sh}){
         {gaugeView.missingTarget
           ?<div style={{fontSize:13,color:"#8893a1",textAlign:"center",padding:"24px 0"}}>ยังไม่ได้ตั้งเป้าสำหรับ {gaugeView.who}</div>
           :<>
-            <div style={{margin:"-8px -8px 4px"}}>
-              <NeonGauge variant={gaugeVariant} uid={"dash-"+gaugeVariant+"-"+selectedSp} value={gaugeEased} target={100} glow={96} theme="reference" sublabel={gaugeView.sub} showTarget={false}/>
+            <div {...revHandlers} title="กดค้างเพื่อเร่งคันเร่ง — ปล่อยจะกลับ 0%" style={{margin:"-8px -8px 4px",...revHandlers.style}}>
+              <NeonGauge variant={gaugeVariant} uid={"dash-"+gaugeVariant+"-"+selectedSp} value={gaugeEased} target={100} glow={96} theme="reference" sublabel={gaugeView.sub} showTarget={false} ghostValue={gaugeExtras?.ghostVal} flames={true} heatT1={50} heatT2={75}/>
             </div>
+            {gaugeExtras&&<div style={{padding:"0 4px 6px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10.5,color:"#8893a1",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>
+                <span>ยอดขายรายวัน</span>
+                <span style={{color:gaugeExtras.eta?.kind==="hit"?"#6cf0a8":gaugeExtras.eta?.kind==="miss"?"#ff6392":"#8893a1"}}>{gaugeExtras.eta?gaugeExtras.eta.text:""}</span>
+              </div>
+              <div style={{height:44,marginBottom:4}}>
+                <NeonSparkline data={gaugeExtras.daily} color={colorAt("reference",Math.max(0,Math.min(1,gaugeRawPct/100)))} height={44} uid={"dash-"+selectedSp}/>
+              </div>
+            </div>}
             <div style={{display:"flex",justifyContent:"space-between",gap:16,padding:"10px 4px 6px",borderTop:"1px solid rgba(255,255,255,0.06)",fontSize:13}}>
               <div>
                 <div style={{fontSize:10.5,color:"#8893a1",textTransform:"uppercase",letterSpacing:1}}>ยอดจริง</div>
