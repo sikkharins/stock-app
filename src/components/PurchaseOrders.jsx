@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, round2 } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, round2, nextDocNum } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Badge from "./ui/Badge.jsx";
@@ -59,7 +59,7 @@ export default function POPage({sh}){
   const savePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
-    const yr=new Date().getFullYear();const mx=pos.reduce((m,p)=>{const mt=p.poNum.match(/^PO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const pn="PO-"+yr+"-"+String(mx+1).padStart(3,"0");
+    const pn=nextDocNum("PO",pos,"poNum");
     setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,status:"draft",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
     addA("สร้าง PO (Draft)",pn);cM();
   };
@@ -78,7 +78,7 @@ export default function POPage({sh}){
       setPOs(p=>p.map(x=>x.id!==po.id?x:{...x,status:"approved",approval:entry,approvalHistory:[...(x.approvalHistory||[]),{action:"approved",...entry}]}));
       addA("อนุมัติ PO",po.poNum);
       if(po.dropShip&&po.dropShipCustomerId){
-        const yr=new Date().getFullYear();const mx=sales.reduce((m,s)=>{const mt=s.soNum.match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const sn="SO-"+yr+"-"+String(mx+1).padStart(3,"0");
+        const sn=nextDocNum("SO",sales,"soNum");
         const soItems=po.items.map(i=>({productId:i.productId,qty:i.qty,price:i.sellPrice||(products.find(x=>x.id===i.productId)||{}).price||0}));
         const cust=contacts.find(c=>c.id===+po.dropShipCustomerId);const sub=soItems.reduce((s,i)=>s+i.qty*i.price,0);
         const defCredit=cust?.defaultCreditDays||45;const defVat=cust?.defaultVat!==false;const vatAmt=defVat?round2(sub*7/107):0;

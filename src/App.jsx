@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { ALL_TABS, TAB_LABELS, IB } from "./utils/constants.js";
-import { getNotifs, mkAudit, nowStr, todayStr, round2 } from "./utils/helpers.js";
+import { getNotifs, mkAudit, nowStr, todayStr, round2, nextDocNum } from "./utils/helpers.js";
 import { loadData, saveData, loadAllFromSupabase, saveKeyOptimistic, subscribeRealtime, unsubscribeRealtime } from "./utils/storage.js";
 import { mergeForKey } from "./utils/merge.js";
 import { signIn, signOut, getSession, getProfile, getAllProfiles, migrateUsers } from "./utils/auth.js";
@@ -566,9 +566,7 @@ export default function App(){
     })()}
 
     {canA("ai_bot")&&<Suspense fallback={null}><AISOBot sh={sh} onCreateSO={(data)=>{
-      const yr=new Date().getFullYear();
-      const mx=sales.reduce((m,s)=>{const mt=s.soNum.match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);
-      const sn="SO-"+yr+"-"+String(mx+1).padStart(3,"0");
+      const sn=nextDocNum("SO",sales,"soNum");
       const items=(data.items||[]).map(i=>({productId:+i.productId,qty:+i.qty,price:+i.price}));
       const sub=items.reduce((s,i)=>s+i.qty*i.price,0);
       const disc=data.payType==="cash"?round2(sub*(data.discPct||1)/100):0;
@@ -576,16 +574,12 @@ export default function App(){
       setSales(p=>[...p,{id:Date.now(),soNum:sn,status:"pending_delivery",fromQuote:"",customerId:+data.customerId,date:todayStr(),items,origPrices:items.map(i=>+i.price),includeVat:data.includeVat!==false,vatAmount:vatAmt,payType:data.payType||"cash",discountAmt:disc,discPct:data.payType==="cash"?(data.discPct||1):0,extraDiscPct:0,extraDiscAmt:0,creditDays:data.payType==="credit"?(data.creditDays||45):0,useVatRep:false,vatRepName:"",vatRepAddress:"",vatRepIdCard:"",note:"สร้างโดย AI Bot"}]);
       addA("สร้าง SO (AI Bot)",sn);
     }} onCreatePO={(data)=>{
-      const yr=new Date().getFullYear();
-      const mx=pos.reduce((m,p)=>{const mt=p.poNum.match(/^PO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);
-      const pn="PO-"+yr+"-"+String(mx+1).padStart(3,"0");
+      const pn=nextDocNum("PO",pos,"poNum");
       const items=(data.items||[]).map(i=>({productId:+i.productId,qty:+i.qty,cost:+i.cost}));
       setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+data.supplierId,date:todayStr(),deliveryDate:"",status:"draft",items,note:data.note||"สร้างโดย AI Bot",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:""}]);
       addA("สร้าง PO (AI Bot)",pn);
     }} onCreateQuote={(data)=>{
-      const yr=new Date().getFullYear();
-      const mx=quotes.reduce((m,q)=>{const mt=q.qtNum.match(/^QT-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);
-      const qn="QT-"+yr+"-"+String(mx+1).padStart(3,"0");
+      const qn=nextDocNum("QT",quotes,"qtNum");
       const items=(data.items||[]).map(i=>({productId:+i.productId,qty:+i.qty,price:+i.price}));
       const vd=new Date();vd.setDate(vd.getDate()+(data.validDays||30));
       setQuotes(p=>[...p,{id:Date.now(),qtNum:qn,status:"draft",convertedTo:"",customerId:+data.customerId,date:todayStr(),validUntil:vd.toISOString().slice(0,10),items,includeVat:data.includeVat!==false,payType:data.payType||"cash",discPct:data.payType==="cash"?(data.discPct||1):0,creditDays:data.payType==="credit"?(data.creditDays||45):0,note:"สร้างโดย AI Bot"}]);

@@ -256,6 +256,39 @@ export const toBE = (d: string | undefined | null): string => {
   return p[2] + "/" + p[1] + "/" + (+p[0] + 543);
 };
 
+// Next doc number in format "{prefix}-{yyyy}-{mm}-{xxx}", counter resets monthly.
+// On the first-ever transition month (no new-format records yet this year),
+// continues from the legacy "{prefix}-{yyyy}-{xxx}" max so numbers don't restart.
+export const nextDocNum = (
+  prefix: string,
+  items: Array<{ [k: string]: unknown }>,
+  field: string
+): string => {
+  const d = new Date();
+  const yr = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const reNew = new RegExp("^" + prefix + "-(\\d+)-(\\d+)-(\\d+)$");
+  const reOld = new RegExp("^" + prefix + "-(\\d+)-(\\d+)$");
+  let mxMonth = 0;
+  let mxLegacyYear = 0;
+  let hasNewThisYear = false;
+  for (const it of items) {
+    const v = ((it[field] as string) || "");
+    const mN = v.match(reNew);
+    if (mN) {
+      if (+mN[1] === yr) {
+        hasNewThisYear = true;
+        if (+mN[2] === +mm) mxMonth = Math.max(mxMonth, +mN[3]);
+      }
+      continue;
+    }
+    const mO = v.match(reOld);
+    if (mO && +mO[1] === yr) mxLegacyYear = Math.max(mxLegacyYear, +mO[2]);
+  }
+  const mx = hasNewThisYear ? mxMonth : Math.max(mxMonth, mxLegacyYear);
+  return prefix + "-" + yr + "-" + mm + "-" + String(mx + 1).padStart(3, "0");
+};
+
 // Legacy SO No. prefix — format "IV{YYYY}/{MM}" based on date string "YYYY-MM-DD"
 export const legacyPrefix = (dateStr?: string): string => {
   const s = dateStr || todayStr();

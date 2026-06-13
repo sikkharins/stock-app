@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo, nextDocNum } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -104,7 +104,7 @@ function SOList({sh}){
 
     // Update customer: claimedTierIds, savedRewards, savedFromSO
     let newSoNum="";
-    if(!soId){const yr=new Date().getFullYear();const mx=sales.reduce((m,s)=>{const mt=(s.soNum||"").match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);newSoNum="SO-"+yr+"-"+String(mx+1).padStart(3,"0");}
+    if(!soId){newSoNum=nextDocNum("SO",sales,"soNum");}
     else{const oldSO=sales.find(s=>s.id===soId);newSoNum=oldSO?.soNum||"";}
 
     if(customer&&(pendingClaims.length||pendingSaves.length||selectedWalletIds.length)){

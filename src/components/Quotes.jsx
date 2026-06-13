@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, AddDue, round2 } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, AddDue, round2, nextDocNum } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import SB from "./ui/SearchBar.jsx";
@@ -114,7 +114,7 @@ export default function QuotesPage({sh}){
       addA("แก้ไข QT", editQT.qtNum);
       setEditQT(null);
     } else {
-      const yr=new Date().getFullYear();const mxQ=quotes.reduce((m,q)=>{const mt=q.qtNum.match(/^QT-(\d+)-(\d+)$/);return mt&&+mt[1]===yr?Math.max(m,+mt[2]):m;},0);const qn="QT-"+yr+"-"+String(mxQ+1).padStart(3,"0");
+      const qn=nextDocNum("QT",quotes,"qtNum");
       setQuotes(p=>[...p,{id:Date.now(),qtNum:qn,status:"draft",convertedTo:"",...base}]);
       addA("สร้าง QT", qn);
     }
@@ -130,7 +130,7 @@ export default function QuotesPage({sh}){
   const deleteQT  = id => { setQuotes(p=>p.filter(q=>q.id!==id)); };
 
   const convertToSO = qt => {
-    const yr2=new Date().getFullYear();const mxS=sales.reduce((m,s)=>{const mt=s.soNum.match(/^SO-(\d+)-(\d+)$/);return mt&&+mt[1]===yr2?Math.max(m,+mt[2]):m;},0);const sn="SO-"+yr2+"-"+String(mxS+1).padStart(3,"0");
+    const sn=nextDocNum("SO",sales,"soNum");
     const sub = qt.items.reduce((s,i)=>s+i.qty*i.price,0);
     const disc = qt.payType==="cash" ? round2(sub*(qt.discPct||0)/100) : 0;
     const after = sub - disc;
