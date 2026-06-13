@@ -1,5 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { IB } from "../utils/constants.js";
+import { useMediaQuery } from "../utils/useMediaQuery.js";
+import { roadKmSync, prefetchRoadDistances } from "../utils/roadDistance.js";
 import {
   fmt,
   todayStr,
@@ -9,7 +11,6 @@ import {
   soRevenue,
   consolidatePickList,
   soItemsByCategory,
-  haversineKm,
   PROXIMITY_RADIUS_KM,
   MAX_HELPERS_PER_RUN,
   MAX_HELPER_POOL,
@@ -26,14 +27,6 @@ import DeliveryMap from "./DeliveryMap.jsx";
 // and revenue (worth the trip). Output: consolidated pick list (model × qty).
 // Modal hub stays here; sub-views are inline.
 
-const SCORE_COLORS = (s) =>
-  s >= 70 ? "var(--green)" : s >= 40 ? "var(--orange)" : "var(--red)";
-const SCORE_BG = (s) =>
-  s >= 70
-    ? "rgba(52,199,89,0.12)"
-    : s >= 40
-    ? "rgba(255,149,0,0.14)"
-    : "rgba(255,59,48,0.12)";
 
 export default function DeliveryPlanningPage({ sh }) {
   const {
@@ -59,6 +52,9 @@ export default function DeliveryPlanningPage({ sh }) {
   } = sh;
   const ed = canE("delivery_planning");
   const cd = canD("delivery_planning");
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [roadVer, setRoadVer] = useState(0);
 
   const activeTrucks = useMemo(
     () => (trucks || []).filter((t) => t.isActive !== false),
@@ -257,7 +253,10 @@ export default function DeliveryPlanningPage({ sh }) {
       }
       let minD = Infinity;
       for (const a of pickedAnchors) {
-        const d = haversineKm(r.cust.lat, r.cust.lng, a.lat, a.lng);
+        const d = roadKmSync(
+          { lat: r.cust.lat, lng: r.cust.lng },
+          { lat: a.lat, lng: a.lng }
+        );
         if (d < minD) minD = d;
       }
       return { ...r, distToPicked: minD };
@@ -278,12 +277,47 @@ export default function DeliveryPlanningPage({ sh }) {
     });
 
     return [...pickedRowsLocal, ...unpicked];
-  }, [pendingSOs, contacts, products, truckCapM3, zoneFilter, cN, picked]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSOs, contacts, products, truckCapM3, zoneFilter, cN, picked, roadVer]);
 
   const pickedRows = useMemo(
     () => ranked.filter((r) => picked.has(r.so.soNum)),
     [ranked, picked]
   );
+
+  // Prefetch road distances (OSRM) between picked anchors and remaining SOs.
+  // Sync render uses cached values or haversine×1.4 estimate; this effect upgrades
+  // the estimates to real road km in the background.
+  const pickedKey = useMemo(
+    () => Array.from(picked).sort().join(","),
+    [picked]
+  );
+  useEffect(() => {
+    if (picked.size === 0) return;
+    const withGeo = pendingSOs
+      .map((so) => {
+        const cust = (contacts || []).find((c) => c.id === so.customerId);
+        if (
+          !cust ||
+          typeof cust.lat !== "number" ||
+          typeof cust.lng !== "number"
+        )
+          return null;
+        return { soNum: so.soNum, lat: cust.lat, lng: cust.lng };
+      })
+      .filter(Boolean);
+    const anchors = withGeo.filter((x) => picked.has(x.soNum));
+    const targets = withGeo.filter((x) => !picked.has(x.soNum));
+    if (anchors.length === 0 || targets.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const updated = await prefetchRoadDistances(anchors, targets);
+      if (!cancelled && updated) setRoadVer((v) => v + 1);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pickedKey, pendingSOs, contacts, picked]);
   const pickedVolM3 = pickedRows.reduce((s, r) => s + r.volM3, 0);
   const pickedRevenue = pickedRows.reduce((s, r) => s + r.revenue, 0);
   const pickedCustomers = [...new Set(pickedRows.map((r) => r.custName))];
@@ -747,7 +781,7 @@ export default function DeliveryPlanningPage({ sh }) {
       </div>
 
       {/* Stats row */}
-      <div
+      {!isMobile && <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
@@ -772,14 +806,14 @@ export default function DeliveryPlanningPage({ sh }) {
           value={`฿${fmt(Math.round(pickedRevenue))}`}
           color="var(--green)"
         />
-      </div>
+      </div>}
 
       {/* Body: ranked SO list + summary */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0,2fr) minmax(280px,1fr)",
-          gap: 16,
+          gridTemplateColumns: isMobile ? "1fr" : "minmax(0,2fr) minmax(280px,1fr)",
+          gap: isMobile ? 10 : 16,
           alignItems: "start",
         }}
       >
@@ -885,7 +919,7 @@ export default function DeliveryPlanningPage({ sh }) {
                     onClick={() => toggle(r.so.soNum)}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "auto 1fr auto",
+                      gridTemplateColumns: "auto 1fr",
                       gap: 10,
                       alignItems: "center",
                       padding: "10px 12px",
@@ -1047,20 +1081,6 @@ export default function DeliveryPlanningPage({ sh }) {
                         </div>
                       )}
                     </div>
-                    <div
-                      style={{
-                        textAlign: "center",
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        background: SCORE_BG(r.score),
-                        color: SCORE_COLORS(r.score),
-                        fontWeight: 700,
-                        minWidth: 50,
-                      }}
-                    >
-                      <div style={{ fontSize: 18, lineHeight: 1 }}>{r.score}</div>
-                      <div style={{ fontSize: 10, opacity: 0.7 }}>คะแนน</div>
-                    </div>
                   </div>
                 );
               })}
@@ -1074,14 +1094,53 @@ export default function DeliveryPlanningPage({ sh }) {
             background: "var(--panel)",
             border: "1px solid var(--line)",
             borderRadius: 10,
-            padding: 14,
+            padding: isMobile ? 10 : 14,
             position: "sticky",
-            top: 16,
+            top: isMobile ? 0 : 16,
+            order: isMobile ? -1 : 0,
+            zIndex: isMobile ? 5 : "auto",
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>
-            สรุปรอบจัดส่ง — {truck?.name || "—"}
-          </div>
+          {isMobile ? (
+            <button
+              onClick={() => setSummaryOpen((o) => !o)}
+              style={{
+                display: "flex",
+                width: "100%",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                marginBottom: summaryOpen ? 10 : 0,
+                color: "var(--text)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>สรุปรอบ</span>
+                <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 700 }}>
+                  ฿{fmt(Math.round(pickedRevenue))}
+                </span>
+                <span style={{ fontSize: 12, color: overCapacity ? "var(--red)" : "var(--dim)" }}>
+                  {pickedVolM3.toFixed(2)}/{truckCapM3} m³
+                </span>
+                <span style={{ fontSize: 12, color: "var(--dim)" }}>
+                  {pickedRows.length}/{ranked.length} SO
+                </span>
+              </div>
+              <span style={{ fontSize: 14, color: "var(--dim)", transform: summaryOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
+                ▾
+              </span>
+            </button>
+          ) : (
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>
+              สรุปรอบจัดส่ง — {truck?.name || "—"}
+            </div>
+          )}
+          {(!isMobile || summaryOpen) && (<>
 
           {/* Volume gauge */}
           <div style={{ marginBottom: 12 }}>
@@ -1245,6 +1304,8 @@ export default function DeliveryPlanningPage({ sh }) {
               </div>
             </div>
           )}
+
+          </>)}
 
           <button
             onClick={() => oM("pickList")}

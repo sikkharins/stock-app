@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { fmt, haversineKm } from "../utils/helpers.js";
+import { fmt } from "../utils/helpers.js";
+import { roadKmSync } from "../utils/roadDistance.js";
 
 // Order picked rows by greedy nearest-neighbor starting from the highest-revenue
 // pick (proxy for "most important to drop first"). Produces a reasonable route
@@ -21,11 +22,9 @@ function sequencePicks(rows) {
     let bestI = 0;
     let bestD = Infinity;
     for (let i = 0; i < remaining.length; i++) {
-      const d = haversineKm(
-        last.cust.lat,
-        last.cust.lng,
-        remaining[i].cust.lat,
-        remaining[i].cust.lng
+      const d = roadKmSync(
+        { lat: last.cust.lat, lng: last.cust.lng },
+        { lat: remaining[i].cust.lat, lng: remaining[i].cust.lng }
       );
       if (d < bestD) {
         bestD = d;
