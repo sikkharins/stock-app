@@ -3,8 +3,7 @@ import { fmt } from "../../utils/helpers.js";
 import { IB } from "../../utils/constants.js";
 import CustomSelect from "../ui/CustomSelect.jsx";
 import NeonGauge, { GAUGE_VARIANTS, colorAt, useEased, useRev, heatTier, heatCardStyle, HeatBadge } from "../ui/NeonGauge.jsx";
-import NeonSparkline from "../ui/NeonSparkline.jsx";
-import { dailyTotals, prevMonthKey, actualForMonth, yesterdayPct, projectETA } from "../../utils/gaugeData.ts";
+import { prevMonthKey, actualForMonth, yesterdayPct, projectETA } from "../../utils/gaugeData.ts";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const MONTHS_TH=["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
@@ -28,7 +27,6 @@ function SalesGaugeCard({t,actual,segments,variant,canE,onEdit,onDel,sales,targe
     if(t.target<=0)return null;
     const custSp={};contacts.forEach(c=>{if(c.type==="customer"&&c.salesPerson===t.salesName)custSp[c.id]=true;});
     const pred=(so)=>!!custSp[so.customerId];
-    const daily=dailyTotals(sales,pred,t.month);
     const eta=projectETA(actual,t.target,t.month,today);
     const ydayP=yesterdayPct(sales,pred,t.target,today);
     let ghostVal=null;
@@ -38,7 +36,7 @@ function SalesGaugeCard({t,actual,segments,variant,canE,onEdit,onDel,sales,targe
       const prevA=actualForMonth(sales,pred,prev);
       ghostVal=prevA/prevT.target*100;
     }
-    return{daily,eta,ydayP,ghostVal};
+    return{eta,ydayP,ghostVal};
   },[t,actual,sales,targets,contacts,today]);
   const accent=colorAt("reference",Math.max(0,Math.min(1,rawPct/100)));
   return<div style={{background:"linear-gradient(180deg,var(--panel) 0%,var(--bg2,var(--panel)) 100%)",border:"0.5px solid var(--line)",borderRadius:14,padding:16,position:"relative",overflow:"hidden",...heatCardStyle(tier)}}>
@@ -56,14 +54,8 @@ function SalesGaugeCard({t,actual,segments,variant,canE,onEdit,onDel,sales,targe
     <div {...revHandlers} title="กดค้างเพื่อเร่งคันเร่ง — ปล่อยจะกลับ 0%" style={{margin:"4px -4px 8px",...revHandlers.style}}>
       <NeonGauge variant={variant} uid={"g-"+t.id+"-"+variant} value={eased} target={100} glow={96} theme="reference" sublabel="" showTarget={false} ghostValue={extras?.ghostVal} flames={true} heatT1={50} heatT2={75}/>
     </div>
-    {extras&&<div style={{margin:"0 -4px 10px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",fontSize:10,color:"var(--faint)",textTransform:"uppercase",letterSpacing:0.8,marginBottom:2}}>
-        <span>ยอดขายรายวัน</span>
-        {extras.eta&&<span style={{color:extras.eta.kind==="hit"?"var(--green)":extras.eta.kind==="miss"?"#ff6392":"var(--dim)"}}>{extras.eta.text}</span>}
-      </div>
-      <div style={{height:32}}>
-        <NeonSparkline data={extras.daily} color={accent} height={32} uid={"sp-"+t.id}/>
-      </div>
+    {extras?.eta&&<div style={{margin:"0 -4px 10px",textAlign:"right",fontSize:10.5,letterSpacing:0.6,textTransform:"uppercase",color:extras.eta.kind==="hit"?"var(--green)":extras.eta.kind==="miss"?"#ff6392":"var(--dim)"}}>
+      {extras.eta.text}
     </div>}
     {segments.length>0?<div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:12,fontSize:11.5}}>
       {segments.map((s,i)=>{

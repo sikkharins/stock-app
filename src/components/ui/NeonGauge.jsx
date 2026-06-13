@@ -68,7 +68,10 @@ function NeonDefs({uid,glow,theme}){
 }
 
 function CenterReadout({value,sublabel,color,glow,big}){
-  return<g style={{filter:"drop-shadow(0 0 "+(glow/100*14+2)+"px "+color+")"}}>
+  // scale ใหญ่ขึ้นตาม value (1.0 → 1.12 ที่ 100%) ให้รู้สึก "เครื่องเร่ง"
+  const norm=Math.min(1,Math.max(0,value/100));
+  const scale=1+norm*0.12;
+  return<g transform={"translate("+VB.cx+","+VB.cy+") scale("+scale.toFixed(3)+") translate("+(-VB.cx)+","+(-VB.cy)+")"} style={{filter:"drop-shadow(0 0 "+(glow/100*14+2)+"px "+color+")"}}>
     <text x={VB.cx} y={VB.cy-(big?26:18)} textAnchor="middle"
       fontSize={big?76:64} fontWeight="600" fill={color}
       fontFamily="inherit" letterSpacing="-1">
@@ -507,21 +510,40 @@ function FlameCanvas({value,theme,t1=50,t2=75,radius=180}){
 // useEased — spring physics (Hooke + damping): พุ่งเลย target → เด้งกลับ → settle.
 // stiff ดึงเข้า target, damp ลดความเร็ว (1-damp = friction factor).
 // ใช้ setTimeout เพื่อทำงานต่อใน tab background ได้ (เผื่อ admin เปิดทิ้งไว้)
-import { useState, useRef, useEffect, useMemo } from "react";
-export function useEased(target,enabled=true){
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+// slowness: 1 = ปกติ, 2 = ช้า 2 เท่า, 3 = ช้า 3 เท่า
+// opts:
+//   bounceAt: ค่าที่จะกลายเป็น "กำแพง" (เด้งกลับ + reverse velocity)
+//   nonLinear: stiff ลดลงเมื่อ pos สูง (ช่วงท้ายหนืดเหมือนรถ top gear)
+//   maxRef:   ค่า reference สำหรับ normalize position ใน non-linear curve
+//   onBounce: callback เรียกตอนชนกำแพง (สำหรับ haptic/sound)
+export function useEased(target,enabled=true,slowness=1,opts){
   const safeTarget=Number.isFinite(target)?target:0;
+  const{bounceAt=null,nonLinear=false,maxRef=100,onBounce}=opts||{};
   const[v,setV]=useState(enabled?0:safeTarget);
   const ref=useRef({pos:enabled?0:safeTarget,vel:0});
   const timer=useRef(0);
   useEffect(()=>{
     clearTimeout(timer.current);
-    const stiff=0.14, damp=0.30;
+    const sl=Math.max(0.1,slowness);
+    const baseStiff=0.14/(sl*sl);
+    const damp=0.30;
+    const settleVel=0.04/sl;
     const step=()=>{
       const{pos,vel}=ref.current;
-      const force=(safeTarget-pos)*stiff;
-      const newVel=(vel+force)*(1-damp);
-      const newPos=pos+newVel;
-      if(Math.abs(newVel)<0.04&&Math.abs(safeTarget-newPos)<0.08){
+      const dynStiff=nonLinear
+        ?baseStiff*(1-0.45*Math.min(1,Math.max(0,pos)/Math.max(1,maxRef)))
+        :baseStiff;
+      const force=(safeTarget-pos)*dynStiff;
+      let newVel=(vel+force)*(1-damp);
+      let newPos=pos+newVel;
+      // bounce off hard wall (redline)
+      if(bounceAt!=null&&newPos>bounceAt&&newVel>0){
+        newPos=bounceAt-(newPos-bounceAt)*0.35;
+        newVel=-newVel*0.55;
+        if(onBounce)onBounce();
+      }
+      if(Math.abs(newVel)<settleVel&&Math.abs(safeTarget-newPos)<0.08){
         ref.current={pos:safeTarget,vel:0};
         setV(safeTarget);
         return;
@@ -532,19 +554,105 @@ export function useEased(target,enabled=true){
     };
     timer.current=setTimeout(step,16);
     return()=>clearTimeout(timer.current);
-  },[safeTarget]);
+  },[safeTarget,slowness,bounceAt,nonLinear,maxRef,onBounce]);
   return v;
 }
 
-// useRev — "คันเร่ง" สำหรับ gauge: กดค้าง → spring ขึ้นไปแตะ maxRev (= % ที่ทำได้)
-// ปล่อย → spring ลงสู่ 0. คืน value (ค่าที่แสดง, clamp ≥0), holding, handlers (ติด div ครอบ)
-// อนุญาต overshoot ด้านบน (สนุก), clamp ด้านล่างไม่ให้ติดลบ
-export function useRev(maxRev){
+// useRev — "คันเร่ง" สำหรับ gauge ที่ feel เหมือนรถจริง:
+//   - turboLag: หน่วง ~120ms ก่อน throttle ตอบสนอง (เทอร์โบเดินเครื่อง)
+//   - Engine sputter: หลังปล่อย กระตุก random 1-5% ทุก 500ms นาน 3 วินาที แล้วดับสนิทไป 0
+//   - nonLinear: ช่วง 0-30% เร่งง่าย, 60-100% หนืดขึ้น (top gear push)
+//   - bounceAt: เด้งกำแพง redline + ส่ง haptic
+//   - haptic: navigator.vibrate ที่ milestone 50/75/100 + sustained pulse ที่ tier 2
+// pattern คงที่สำหรับ sputter — สลับ 0 กับ 3/2 ทุก step (รวม 3 วินาที = 6 × 500ms)
+const SPUTTER_PATTERN=[0,3,0,2,0,3];
+
+export function useRev(maxRev,slowness=3,opts){
+  const{turboLag=120,sputterStepMs=500,nonLinear=true,enableHaptic=true}=opts||{};
   const[holding,setHolding]=useState(false);
+  const[active,setActive]=useState(false);
+  // phase: "off" → "active" (กด) → "descending" (ปล่อย, spring ลงสู่ 0) → "sputtering" (เดิน pattern) → "off"
+  const[phase,setPhase]=useState("off");
+  const[sputterVal,setSputterVal]=useState(0);
+  const lagTimer=useRef(null);
   const safeMax=Math.min(100,Math.max(0,Number.isFinite(maxRev)?maxRev:0));
-  const target=holding?safeMax:0;
-  const raw=useEased(target,true);
-  const value=Math.max(0,raw);
+  // spring chases sputterVal ตอน sputtering — ได้ damp effect (สั่นแบบ engine)
+  const target=active?safeMax:(phase==="sputtering"?sputterVal:0);
+
+  const vibrate=useCallback((pattern)=>{
+    if(enableHaptic&&typeof navigator!=="undefined"&&navigator.vibrate){
+      try{navigator.vibrate(pattern);}catch(e){}
+    }
+  },[enableHaptic]);
+
+  const handleBounce=useCallback(()=>vibrate([18,28,18]),[vibrate]);
+
+  const raw=useEased(target,true,slowness,{
+    bounceAt:safeMax>=99?safeMax:null,
+    nonLinear,
+    maxRef:Math.max(1,safeMax),
+    onBounce:handleBounce,
+  });
+  const springValue=Math.max(0,raw);
+  // ใช้ spring value ตลอด — spring จะตาม sputter target สลับไปมาเอง (มี damp ทำให้สั่นนุ่ม ๆ)
+  const value=springValue;
+
+  // กด → phase="active" + รอ turboLag ms ก่อน throttle ตอบสนอง
+  // ปล่อย → phase="descending" (spring ลงสู่ 0 ปกติ)
+  useEffect(()=>{
+    if(holding){
+      setPhase("active");
+      lagTimer.current=setTimeout(()=>setActive(true),turboLag);
+      return()=>clearTimeout(lagTimer.current);
+    }
+    clearTimeout(lagTimer.current);
+    setActive(false);
+    setPhase("descending");
+  },[holding,turboLag]);
+
+  // descending: เมื่อ spring ลงถึงระดับ ~6% → เปลี่ยนเป็น sputtering
+  useEffect(()=>{
+    if(phase!=="descending")return;
+    if(springValue<6&&springValue>0.1)setPhase("sputtering");
+  },[phase,springValue]);
+
+  // engine sputter — เดิน pattern [0,3,0,2,0,3,0,2,0,3] ทีละ step ทุก sputterStepMs
+  // ใช้เวลาทั้งหมด = pattern.length × stepMs (10 × 500 = 5000ms) แล้วจบที่ "off"
+  useEffect(()=>{
+    if(phase!=="sputtering"){setSputterVal(0);return;}
+    let i=0;
+    setSputterVal(SPUTTER_PATTERN[0]);
+    const iv=setInterval(()=>{
+      i++;
+      if(i>=SPUTTER_PATTERN.length){clearInterval(iv);setPhase("off");return;}
+      setSputterVal(SPUTTER_PATTERN[i]);
+    },sputterStepMs);
+    return()=>clearInterval(iv);
+  },[phase,sputterStepMs]);
+
+  // milestone haptic
+  const lastValRef=useRef(value);
+  const firedRef=useRef(new Set());
+  useEffect(()=>{
+    [50,75,100].forEach(m=>{
+      if(value>=m&&lastValRef.current<m&&!firedRef.current.has(m)){
+        firedRef.current.add(m);
+        if(m===100)vibrate([30,40,30,40,60]);
+        else if(m===75)vibrate(28);
+        else vibrate(15);
+      }
+      if(value<m-10)firedRef.current.delete(m);
+    });
+    lastValRef.current=value;
+  },[value,vibrate]);
+
+  // sustained tier-2 haptic pulse (เครื่องสั่นรอบสูง) — อ่าน ref ใน setInterval ไม่ re-mount ถี่
+  useEffect(()=>{
+    if(!holding)return;
+    const iv=setInterval(()=>{if(lastValRef.current>=75)vibrate(6);},220);
+    return()=>clearInterval(iv);
+  },[holding,vibrate]);
+
   const stop=()=>setHolding(false);
   const handlers={
     onPointerDown:(e)=>{e.preventDefault();setHolding(true);},
@@ -553,7 +661,7 @@ export function useRev(maxRev){
     onPointerLeave:stop,
     style:{touchAction:"none",cursor:holding?"grabbing":"grab",userSelect:"none"},
   };
-  return{value,holding,handlers};
+  return{value,holding,active,handlers};
 }
 
 // useMilestone — track crossings ของ 50/75/100 → return flash state {kind, value, ts}
@@ -636,10 +744,37 @@ function PulseStyle({over,uid,color,glow}){
 export default function NeonGauge({variant="classic",uid,value,target=100,glow=80,theme="reference",sublabel,showTarget=true,ghostValue,flames=false,heatT1=50,heatT2=75}){
   const Comp=VARIANT_MAP[variant]||ClassicGauge;
   const gaugeEl=<Comp uid={uid||("g-"+(variant||"x"))} value={value} target={target} glow={glow} theme={theme} sublabel={sublabel} showTarget={showTarget} ghostValue={ghostValue}/>;
-  if(!flames)return gaugeEl;
+  const wrapperRef=useRef(null);
+  // screen jitter ที่ tier 2 — ใช้ RAF + DOM transform โดยตรง (ไม่ trigger React re-render)
+  useEffect(()=>{
+    const el=wrapperRef.current;
+    if(!el)return;
+    if(value<heatT2){el.style.transform="";return;}
+    let frame=0,raf=0;
+    const tick=()=>{
+      frame++;
+      const intensity=Math.min(2.2,(value-heatT2)/Math.max(1,100-heatT2)*2.2);
+      const x=(Math.sin(frame*0.46)*0.55+(Math.random()-0.5)*0.5)*intensity;
+      const y=(Math.cos(frame*0.39)*0.40+(Math.random()-0.5)*0.4)*intensity;
+      el.style.transform="translate("+x.toFixed(2)+"px,"+y.toFixed(2)+"px)";
+      raf=requestAnimationFrame(tick);
+    };
+    raf=requestAnimationFrame(tick);
+    return()=>{cancelAnimationFrame(raf);if(el)el.style.transform="";};
+  },[value,heatT2]);
+
+  if(!flames)return<div ref={wrapperRef} style={{willChange:"transform"}}>{gaugeEl}</div>;
+
   const radius=FLAME_RADIUS[variant]||178;
-  return<div style={{position:"relative",display:"block"}}>
+  const overT2=value>=heatT2;
+  const vignetteA=overT2?Math.min(0.55,(value-heatT2)/Math.max(1,100-heatT2)*0.55):0;
+  return<div ref={wrapperRef} style={{position:"relative",display:"block",willChange:"transform"}}>
     {gaugeEl}
     <FlameCanvas value={value} theme={theme} t1={heatT1} t2={heatT2} radius={radius}/>
+    {overT2&&<div style={{
+      position:"absolute",inset:0,pointerEvents:"none",zIndex:4,
+      background:"radial-gradient(ellipse 75% 65% at 50% 75%, transparent 28%, rgba(0,0,0,"+vignetteA+") 95%)",
+      mixBlendMode:"multiply",
+    }}/>}
   </div>;
 }

@@ -3,12 +3,11 @@ import StatCard from "./ui/StatCard.jsx";
 import StockValueDonut from "./ui/StockValueDonut.jsx";
 import SalesAreaChart from "./ui/SalesAreaChart.jsx";
 import NeonGauge, { GAUGE_VARIANTS, useEased, useRev, colorAt, heatTier, heatCardStyle, HeatBadge } from "./ui/NeonGauge.jsx";
-import NeonSparkline from "./ui/NeonSparkline.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
 import DashboardSettingsModal from "./ui/DashboardSettingsModal.jsx";
 import { fmt, toBE } from "../utils/helpers.js";
 import { MOVE_TYPES, ALL_WIDGET_KEYS, DASH_SECTIONS, ALL_SECTION_KEYS } from "../utils/constants.js";
-import { dailyTotals, prevMonthKey, actualForMonth, yesterdayPct, projectETA } from "../utils/gaugeData.ts";
+import { prevMonthKey, actualForMonth, yesterdayPct, projectETA } from "../utils/gaugeData.ts";
 
 const PO_STATUS={
   pending:   {label:"รอรับของ", bg:"rgba(255,149,0,0.14)", color:"var(--orange)"},
@@ -149,7 +148,6 @@ export default function DashPage({sh}){
       pred=(so)=>{const s=custSp[so.customerId];return!!s&&spSet.has(s);};
     } else {pred=(so)=>custSp[so.customerId]===selectedSp;}
 
-    const daily=dailyTotals(sales,pred,curMonth);
     // ETA
     const eta=projectETA(gaugeView.actual,gaugeView.target,curMonth,today);
     // % เมื่อวาน
@@ -173,7 +171,7 @@ export default function DashPage({sh}){
         ghostVal=prevA/totT*100;
       }
     }
-    return{daily,eta,ydayP,ghostVal};
+    return{eta,ydayP,ghostVal};
   },[gaugeView,sales,targets,contacts,curMonth,today,isSales,selectedSp,overall,cu.salesName]);
 
   const pendingApprovalPO=pos.filter(po=>po.status==="pending_approval").length;
@@ -301,14 +299,8 @@ export default function DashPage({sh}){
             <div {...revHandlers} title="กดค้างเพื่อเร่งคันเร่ง — ปล่อยจะกลับ 0%" style={{margin:"-8px -8px 4px",...revHandlers.style}}>
               <NeonGauge variant={gaugeVariant} uid={"dash-"+gaugeVariant+"-"+selectedSp} value={gaugeEased} target={100} glow={96} theme="reference" sublabel={gaugeView.sub} showTarget={false} ghostValue={gaugeExtras?.ghostVal} flames={true} heatT1={50} heatT2={75}/>
             </div>
-            {gaugeExtras&&<div style={{padding:"0 4px 6px"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10.5,color:"#8893a1",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>
-                <span>ยอดขายรายวัน</span>
-                <span style={{color:gaugeExtras.eta?.kind==="hit"?"#6cf0a8":gaugeExtras.eta?.kind==="miss"?"#ff6392":"#8893a1"}}>{gaugeExtras.eta?gaugeExtras.eta.text:""}</span>
-              </div>
-              <div style={{height:44,marginBottom:4}}>
-                <NeonSparkline data={gaugeExtras.daily} color={colorAt("reference",Math.max(0,Math.min(1,gaugeRawPct/100)))} height={44} uid={"dash-"+selectedSp}/>
-              </div>
+            {gaugeExtras?.eta&&<div style={{padding:"0 4px 8px",textAlign:"right",fontSize:11.5,color:gaugeExtras.eta.kind==="hit"?"#6cf0a8":gaugeExtras.eta.kind==="miss"?"#ff6392":"#8893a1",textTransform:"uppercase",letterSpacing:1}}>
+              {gaugeExtras.eta.text}
             </div>}
             <div style={{display:"flex",justifyContent:"space-between",gap:16,padding:"10px 4px 6px",borderTop:"1px solid rgba(255,255,255,0.06)",fontSize:13}}>
               <div>
