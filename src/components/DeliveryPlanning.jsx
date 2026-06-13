@@ -32,7 +32,7 @@ import DeliveryMap from "./DeliveryMap.jsx";
 // Single run row in the history modal. Behavior depends on status:
 //   out_for_delivery → expandable card with per-SO checkboxes + Confirm/Cancel.
 //   completed/cancelled → readonly summary.
-function RunCard({ run, status, onConfirm, onCancel, ed }) {
+function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
   const allSoNums = run.soNums || [];
   // Default-checked = SOs that ended up delivered (for completed runs) or all
   // (for runs about to be confirmed).
@@ -42,12 +42,18 @@ function RunCard({ run, status, onConfirm, onCancel, ed }) {
   }, [status, run.deliveredSoNums, allSoNums]);
   const [checked, setChecked] = useState(initialChecked);
   const [expanded, setExpanded] = useState(status === "out_for_delivery");
-  const [confirmAction, setConfirmAction] = useState(null); // "confirm" | "cancel" | null
+  const [confirmAction, setConfirmAction] = useState(null); // "confirm" | "cancel" | "delete" | null
+  const [editMode, setEditMode] = useState(false);
 
-  // Clear the inline confirmation prompt once this run leaves the loaded state.
+  // Clear inline state when status changes from loaded → final.
   useEffect(() => {
     if (status !== "out_for_delivery") setConfirmAction(null);
   }, [status]);
+
+  // When entering edit mode, reset checked from current saved state.
+  useEffect(() => {
+    if (editMode) setChecked(new Set(run.deliveredSoNums || allSoNums));
+  }, [editMode, run.deliveredSoNums, allSoNums]);
 
   const toggleSo = (sn) => {
     setChecked((prev) => {
@@ -147,14 +153,14 @@ function RunCard({ run, status, onConfirm, onCancel, ed }) {
                     alignItems: "center",
                     gap: 8,
                     padding: "6px 10px",
-                    background: wasSkipped ? "rgba(255,149,0,0.08)" : "var(--bg)",
-                    border: "1px solid " + (wasSkipped ? "var(--orange)" : "var(--line)"),
+                    background: wasSkipped && !editMode ? "rgba(255,149,0,0.08)" : "var(--bg)",
+                    border: "1px solid " + (wasSkipped && !editMode ? "var(--orange)" : "var(--line)"),
                     borderRadius: 6,
-                    cursor: isLoaded ? "pointer" : "default",
+                    cursor: isLoaded || editMode ? "pointer" : "default",
                     fontSize: 13,
                   }}
                 >
-                  {isLoaded ? (
+                  {isLoaded || editMode ? (
                     <input
                       type="checkbox"
                       checked={isChecked}
@@ -167,7 +173,7 @@ function RunCard({ run, status, onConfirm, onCancel, ed }) {
                   )}
                   <span style={{ fontWeight: 600, color: "var(--blue)" }}>{sn}</span>
                   <span style={{ color: "var(--dim)", flex: 1 }}>{custName}</span>
-                  {wasSkipped && (
+                  {wasSkipped && !editMode && (
                     <span style={{ fontSize: 11, color: "var(--orange)" }}>ไม่ได้ส่ง</span>
                   )}
                 </label>
@@ -282,6 +288,122 @@ function RunCard({ run, status, onConfirm, onCancel, ed }) {
                   style={{ padding: "4px 12px", borderRadius: 5, border: "none", background: "var(--red)", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 600 }}
                 >
                   ยืนยันยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Admin actions on finalized runs (completed/cancelled) */}
+          {!isLoaded && !confirmAction && !editMode && (ed || cd) && (
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              {ed && status === "completed" && (
+                <button
+                  onClick={() => setEditMode(true)}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 6,
+                    border: "1px solid var(--line)",
+                    background: "var(--bg2)",
+                    color: "var(--dim)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 11,
+                  }}
+                >
+                  แก้ไข
+                </button>
+              )}
+              {cd && (
+                <button
+                  onClick={() => setConfirmAction("delete")}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 6,
+                    border: "1px solid var(--line)",
+                    background: "var(--bg2)",
+                    color: "var(--red)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 11,
+                  }}
+                >
+                  ลบ
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Edit mode action bar (completed run, admin editing delivered/skipped) */}
+          {editMode && (
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setEditMode(false)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 7,
+                  border: "1px solid var(--line)",
+                  background: "var(--bg2)",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                }}
+              >
+                ยกเลิกแก้ไข
+              </button>
+              <button
+                onClick={() => {
+                  onConfirm(Array.from(checked));
+                  setEditMode(false);
+                }}
+                style={{
+                  padding: "6px 16px",
+                  borderRadius: 7,
+                  border: "none",
+                  background: "var(--blue)",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                บันทึก ({checked.size}/{allSoNums.length} ส่ง)
+              </button>
+            </div>
+          )}
+
+          {/* Delete confirmation */}
+          {confirmAction === "delete" && (
+            <div
+              style={{
+                background: "rgba(255,59,48,0.10)",
+                border: "1px solid var(--red)",
+                borderRadius: 7,
+                padding: "10px 12px",
+                fontSize: 12,
+                color: "var(--text)",
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                ลบรอบนี้? <span style={{ color: "var(--dim)" }}>(สถานะ SO ที่ส่งแล้วจะคงเดิม — ลบแค่บันทึก)</span>
+              </span>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid var(--line)", background: "var(--bg2)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}
+                >
+                  ไม่ใช่
+                </button>
+                <button
+                  onClick={onDelete}
+                  style={{ padding: "4px 12px", borderRadius: 5, border: "none", background: "var(--red)", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 600 }}
+                >
+                  ยืนยันลบ
                 </button>
               </div>
             </div>
@@ -447,11 +569,13 @@ export default function DeliveryPlanningPage({ sh }) {
     cM();
   };
 
-  // Mark a run as finished. `deliveredSoNums` = SOs that actually got delivered
-  // (the rest go back to pending_delivery so they can be re-planned next round).
+  // Mark/edit a run's delivery outcome. `deliveredSoNums` = SOs that actually
+  // got delivered (the rest go back to pending_delivery so they can be re-planned).
+  // Works for both out_for_delivery (first confirmation) and completed runs (admin
+  // edit fixing a mistake) — for the latter, SO statuses flip accordingly.
   const confirmRunDelivery = (runId, deliveredSoNums) => {
     const run = (deliveryRuns || []).find((r) => r.id === runId);
-    if (!run || run.status !== "out_for_delivery") return;
+    if (!run || run.status === "cancelled") return;
     const delivered = new Set(deliveredSoNums);
     const allInRun = run.soNums || [];
     const skipped = allInRun.filter((sn) => !delivered.has(sn));
@@ -469,7 +593,7 @@ export default function DeliveryPlanningPage({ sh }) {
           ? {
               ...r,
               status: "completed",
-              completedAt: Date.now(),
+              completedAt: r.completedAt || Date.now(),
               deliveredSoNums: Array.from(delivered),
               skippedSoNums: skipped,
             }
@@ -494,6 +618,12 @@ export default function DeliveryPlanningPage({ sh }) {
         r.id === runId ? { ...r, status: "cancelled" } : r
       )
     );
+  };
+
+  // Permanently remove a run record (audit log only — SO statuses unchanged).
+  // For mistaken/duplicate entries. Admin-only.
+  const deleteRun = (runId) => {
+    setDeliveryRuns((prev) => (prev || []).filter((r) => r.id !== runId));
   };
 
   const emptyTruck = {
@@ -2176,7 +2306,9 @@ export default function DeliveryPlanningPage({ sh }) {
                       status={status}
                       onConfirm={(deliveredSoNums) => confirmRunDelivery(r.id, deliveredSoNums)}
                       onCancel={() => cancelRun(r.id)}
+                      onDelete={() => deleteRun(r.id)}
                       ed={ed}
+                      cd={cd}
                     />
                   );
                 })}
