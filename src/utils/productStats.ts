@@ -62,7 +62,7 @@ export const reservedSeries = (
     const target = daysAgoISO(d, ref);
     let total = 0;
     for (const so of sales) {
-      if (so.status !== "pending_delivery") continue;
+      if (so.status !== "pending_delivery" && so.status !== "out_for_delivery") continue;
       if (dayKey(so.date) > target) continue;
       for (const it of so.items || []) total += it.qty || 0;
     }

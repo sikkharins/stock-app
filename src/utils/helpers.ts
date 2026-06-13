@@ -491,7 +491,7 @@ export const calcAccumulatedTotal = (
   const validSOs = (sales || []).filter(
     (s) =>
       +(s.customerId ?? 0) === +customerId &&
-      ["completed", "pending_delivery"].includes(s.status || "")
+      ["completed", "pending_delivery", "out_for_delivery"].includes(s.status || "")
   );
   return validSOs.reduce((sum, so) => {
     const matchItems = (so.items || []).filter((it) => {

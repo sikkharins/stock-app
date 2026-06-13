@@ -102,7 +102,7 @@ export function buildContext(products, contacts, sales, pN, cN, cu, pos, payment
     });
 
   const today = new Date().toISOString().slice(0, 10);
-  const arList = (sales || []).filter(so => so.status === "completed" || so.status === "pending_delivery").map(so => {
+  const arList = (sales || []).filter(so => so.status === "completed" || so.status === "pending_delivery" || so.status === "out_for_delivery").map(so => {
     const paid = (payments || []).filter(p => p.refId === so.soNum && p.type === "ar").reduce((s, p) => s + p.amount, 0);
     const total = (so.items || []).reduce((s, i) => s + i.qty * i.price, 0) - (so.discountAmt || 0);
     const remaining = total - paid;

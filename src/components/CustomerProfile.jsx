@@ -10,7 +10,7 @@ const QT_STATUS_LABEL = {draft:"ร่าง",sent:"ส่งแล้ว",appro
 const isQTExpired = qt => !["converted","cancelled"].includes(qt.status) && !!qt.validUntil && qt.validUntil < todayStr();
 
 function SOBadge({ status }) {
-  const map = { pending_delivery:["var(--blue-bg)","var(--blue)","รอส่ง"], completed:["rgba(52,199,89,0.12)","var(--green)","สำเร็จ"], cancelled:["rgba(255,59,48,0.12)","var(--red)","ยกเลิก"] };
+  const map = { pending_delivery:["var(--blue-bg)","var(--blue)","รอส่ง"], out_for_delivery:["rgba(255,149,0,0.14)","var(--orange)","เตรียมส่ง"], completed:["rgba(52,199,89,0.12)","var(--green)","สำเร็จ"], cancelled:["rgba(255,59,48,0.12)","var(--red)","ยกเลิก"] };
   const [bg,color,label] = map[status] || ["var(--hover)","var(--dim)",status];
   return <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:bg,color,fontWeight:500}}>{label}</span>;
 }

@@ -35,7 +35,7 @@ function SOList({sh}){
 
   const soTot=so=>(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
   const mySO=useMemo(()=>myCI?sales.filter(s=>myCI.includes(s.customerId)):sales,[sales,myCI]);
-  const stats=useMemo(()=>{const pend=mySO.filter(s=>s.status==="pending_delivery").length;const comp=mySO.filter(s=>s.status==="completed").length;const pendApv=mySO.filter(s=>s.status==="pending_special_approval").length;const totAmt=mySO.reduce((s,so)=>s+soTot(so)-(so.discountAmt||0),0);return{total:mySO.length,pend,comp,pendApv,totAmt};},[mySO]);
+  const stats=useMemo(()=>{const pend=mySO.filter(s=>s.status==="pending_delivery").length;const out=mySO.filter(s=>s.status==="out_for_delivery").length;const comp=mySO.filter(s=>s.status==="completed").length;const pendApv=mySO.filter(s=>s.status==="pending_special_approval").length;const totAmt=mySO.reduce((s,so)=>s+soTot(so)-(so.discountAmt||0),0);return{total:mySO.length,pend,out,comp,pendApv,totAmt};},[mySO]);
   const addItem=()=>setForm(f=>({...f,items:[...f.items,{productId:"",qty:1,price:0}]}));
   const rmItem=idx=>setForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
   const setIt=(idx,k,v)=>setForm(f=>{const its=[...f.items];its[idx]={...its[idx],[k]:v};if(k==="productId"){const p=products.find(x=>x.id===+v);if(p)its[idx].price=p.price;}return{...f,items:its};});
@@ -43,7 +43,7 @@ function SOList({sh}){
   const curCust=form.customerId?contacts.find(c=>c.id===+form.customerId):null;
   const curVatReps=(curCust&&curCust.vatReps)||[];
 
-  const getAvail=(pid,exId)=>{const pr=products.find(x=>x.id===+pid);if(!pr)return 0;const pq=sales.filter(so=>(so.status==="pending_delivery"||so.status==="pending_special_approval")&&so.id!==(exId||0)&&!so.dropShip).reduce((s,so)=>{const it=so.items.find(i=>i.productId===+pid);return s+(it?it.qty:0);},0);return Math.max(0,pr.stock-pq);};
+  const getAvail=(pid,exId)=>{const pr=products.find(x=>x.id===+pid);if(!pr)return 0;const pq=sales.filter(so=>(so.status==="pending_delivery"||so.status==="out_for_delivery"||so.status==="pending_special_approval")&&so.id!==(exId||0)&&!so.dropShip).reduce((s,so)=>{const it=so.items.find(i=>i.productId===+pid);return s+(it?it.qty:0);},0);return Math.max(0,pr.stock-pq);};
   const hasApv=canApv("sales");
   const doSave=(soId)=>{
     const baseItems=form.items.map(i=>{const p=products.find(x=>x.id===+i.productId);const parts=snapshotItemParts(p,+i.price);return parts?{productId:+i.productId,qty:+i.qty,price:+i.price,parts}:{productId:+i.productId,qty:+i.qty,price:+i.price};});
@@ -427,8 +427,8 @@ function SOList({sh}){
       {ed&&<Btn onClick={()=>{setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);resetPromoStates();oM("addSO");}}>{"+ สร้างใบขาย"}</Btn>}
     </div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-      {[["all","ทั้งหมด",stats.total],["pending_special_approval","รออนุมัติพิเศษ",stats.pendApv],["pending_delivery","รอจัดส่ง",stats.pend],["completed","ส่งแล้ว",stats.comp]].map(([k,lb,cnt])=>{
-        const active=fSt===k;const clr=k==="pending_delivery"?"var(--orange)":k==="completed"?"var(--green)":k==="pending_special_approval"?"var(--purple)":"var(--dim)";const bg=k==="pending_delivery"?"rgba(255,149,0,0.14)":k==="completed"?"rgba(52,199,89,0.12)":k==="pending_special_approval"?"rgba(175,82,222,0.12)":"var(--bg)";
+      {[["all","ทั้งหมด",stats.total],["pending_special_approval","รออนุมัติพิเศษ",stats.pendApv],["pending_delivery","รอจัดส่ง",stats.pend],["out_for_delivery","เตรียมส่ง",stats.out],["completed","ส่งแล้ว",stats.comp]].map(([k,lb,cnt])=>{
+        const active=fSt===k;const clr=k==="pending_delivery"?"var(--orange)":k==="out_for_delivery"?"var(--blue)":k==="completed"?"var(--green)":k==="pending_special_approval"?"var(--purple)":"var(--dim)";const bg=k==="pending_delivery"?"rgba(255,149,0,0.14)":k==="out_for_delivery"?"var(--blue-bg)":k==="completed"?"rgba(52,199,89,0.12)":k==="pending_special_approval"?"rgba(175,82,222,0.12)":"var(--bg)";
         return <button key={k} onClick={()=>setFSt(k)} style={{fontSize:12,padding:"5px 12px",borderRadius:99,border:"1.5px solid "+(active?clr:"var(--line)"),background:active?bg:"transparent",color:active?clr:"var(--dim)",cursor:"pointer",fontWeight:active?600:400}}>{lb} <span style={{opacity:.7}}>({cnt})</span></button>;
       })}
     </div>

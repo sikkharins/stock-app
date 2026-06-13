@@ -31,7 +31,7 @@ export default function ProdPage({sh}){
   // Derived data needed by filter/sort (reservedMap, salesByProd) must be
   // declared BEFORE `filtered`/`sorted` to avoid TDZ ReferenceError —
   // useMemo factories execute in source order during render.
-  const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
+  const reservedMap=useMemo(()=>{const m={};sales.filter(so=>so.status==="pending_delivery"||so.status==="out_for_delivery").forEach(so=>(so.items||[]).forEach(i=>{m[i.productId]=(m[i.productId]||0)+i.qty;}));return m;},[sales]);
   const salesByProd=useMemo(()=>salesCountByProduct(sales,new Date()),[sales]);
   const filtered=useMemo(()=>baseP.filter(pr=>{
     if(fBrand&&pr.brand!==fBrand)return false;
@@ -494,7 +494,7 @@ export default function ProdPage({sh}){
                 <td style={TD}>{so.qty+" "+pr.unit}</td>
                 <td style={TD}>{"฿"+fmt(so.price)}</td>
                 <td style={{...TD,fontWeight:600}}>{"฿"+fmt(so.qty*so.price)}</td>
-                <td style={TD}><span style={{fontSize:10,padding:"2px 8px",borderRadius:99,fontWeight:600,background:so.status==="completed"?"rgba(52,199,89,0.12)":so.status==="cancelled"?"rgba(255,59,48,0.12)":"rgba(255,149,0,0.12)",color:so.status==="completed"?"var(--green)":so.status==="cancelled"?"var(--red)":"var(--orange)"}}>{so.status==="completed"?"เสร็จ":so.status==="cancelled"?"ยกเลิก":so.status==="pending_delivery"?"รอส่ง":"รอ"}</span></td>
+                <td style={TD}><span style={{fontSize:10,padding:"2px 8px",borderRadius:99,fontWeight:600,background:so.status==="completed"?"rgba(52,199,89,0.12)":so.status==="cancelled"?"rgba(255,59,48,0.12)":"rgba(255,149,0,0.12)",color:so.status==="completed"?"var(--green)":so.status==="cancelled"?"var(--red)":"var(--orange)"}}>{so.status==="completed"?"เสร็จ":so.status==="cancelled"?"ยกเลิก":so.status==="pending_delivery"?"รอส่ง":so.status==="out_for_delivery"?"เตรียมส่ง":"รอ"}</span></td>
               </tr>)}</tbody>
             </table>
           </div>

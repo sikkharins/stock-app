@@ -31,7 +31,7 @@ export default function EventDetail({ event, sh, onClose }) {
   const computePackProgress = (custId, pack) => {
     const validSOs = (sales || []).filter(s =>
       s.customerId === custId &&
-      ["completed", "pending_delivery"].includes(s.status) &&
+      ["completed", "pending_delivery", "out_for_delivery"].includes(s.status) &&
       (!event.startDate || s.date >= event.startDate) &&
       (!event.endDate || s.date <= event.endDate)
     );

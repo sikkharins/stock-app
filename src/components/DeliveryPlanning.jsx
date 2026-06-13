@@ -29,6 +29,269 @@ import DeliveryMap from "./DeliveryMap.jsx";
 // Modal hub stays here; sub-views are inline.
 
 
+// Single run row in the history modal. Behavior depends on status:
+//   out_for_delivery → expandable card with per-SO checkboxes + Confirm/Cancel.
+//   completed/cancelled → readonly summary.
+function RunCard({ run, status, onConfirm, onCancel, ed }) {
+  const allSoNums = run.soNums || [];
+  // Default-checked = SOs that ended up delivered (for completed runs) or all
+  // (for runs about to be confirmed).
+  const initialChecked = useMemo(() => {
+    if (status === "out_for_delivery") return new Set(allSoNums);
+    return new Set(run.deliveredSoNums || allSoNums);
+  }, [status, run.deliveredSoNums, allSoNums]);
+  const [checked, setChecked] = useState(initialChecked);
+  const [expanded, setExpanded] = useState(status === "out_for_delivery");
+  const [confirmAction, setConfirmAction] = useState(null); // "confirm" | "cancel" | null
+
+  // Clear the inline confirmation prompt once this run leaves the loaded state.
+  useEffect(() => {
+    if (status !== "out_for_delivery") setConfirmAction(null);
+  }, [status]);
+
+  const toggleSo = (sn) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(sn)) next.delete(sn);
+      else next.add(sn);
+      return next;
+    });
+  };
+
+  const statusLabel =
+    status === "out_for_delivery"
+      ? { label: "เตรียมส่ง", color: "var(--orange)", bg: "rgba(255,149,0,0.14)" }
+      : status === "cancelled"
+      ? { label: "ยกเลิก", color: "var(--red)", bg: "rgba(255,59,48,0.10)" }
+      : { label: "ส่งเสร็จ", color: "var(--green)", bg: "rgba(52,199,89,0.12)" };
+
+  const delivered = (run.deliveredSoNums || []).length;
+  const skipped = (run.skippedSoNums || []).length;
+  const isLoaded = status === "out_for_delivery";
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 8,
+        background: status === "cancelled" ? "var(--hover)" : "var(--bg2)",
+        opacity: status === "cancelled" ? 0.7 : 1,
+      }}
+    >
+      <div
+        onClick={() => setExpanded((e) => !e)}
+        style={{
+          padding: "10px 14px",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          cursor: "pointer",
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            padding: "2px 9px",
+            borderRadius: 99,
+            background: statusLabel.bg,
+            color: statusLabel.color,
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        >
+          {statusLabel.label}
+        </span>
+        <strong style={{ fontSize: 14 }}>{toBE(run.date)}</strong>
+        <span style={{ color: "var(--dim)", fontSize: 13 }}>{run.truckName}</span>
+        {run.driverName && (
+          <span style={{ color: "var(--dim)", fontSize: 12 }}>· {run.driverName}</span>
+        )}
+        <span style={{ color: "var(--dim)", fontSize: 12 }}>· {allSoNums.length} SO</span>
+        {status === "completed" && skipped > 0 && (
+          <span style={{ color: "var(--orange)", fontSize: 12 }}>
+            · ส่ง {delivered}/{allSoNums.length} (ไม่ได้ส่ง {skipped})
+          </span>
+        )}
+        <span
+          style={{ marginLeft: "auto", fontWeight: 600, color: "var(--green)", fontSize: 13 }}
+        >
+          ฿{fmt(Math.round(run.revenue || 0))}
+        </span>
+        <span style={{ color: "var(--dim)", fontSize: 12 }}>
+          {(run.volumeM3 || 0).toFixed(2)} m³
+        </span>
+        <span style={{ fontSize: 14, color: "var(--dim)", transform: expanded ? "rotate(180deg)" : "none" }}>
+          ▾
+        </span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "10px 14px 14px", borderTop: "1px solid var(--line)" }}>
+          {run.driverNote && (
+            <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>
+              📝 {run.driverNote}
+            </div>
+          )}
+
+          {/* SO list */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
+            {allSoNums.map((sn, i) => {
+              const custName = (run.customerNames || [])[i] || "";
+              const isChecked = checked.has(sn);
+              const wasSkipped = status === "completed" && (run.skippedSoNums || []).includes(sn);
+              return (
+                <label
+                  key={sn}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 10px",
+                    background: wasSkipped ? "rgba(255,149,0,0.08)" : "var(--bg)",
+                    border: "1px solid " + (wasSkipped ? "var(--orange)" : "var(--line)"),
+                    borderRadius: 6,
+                    cursor: isLoaded ? "pointer" : "default",
+                    fontSize: 13,
+                  }}
+                >
+                  {isLoaded ? (
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleSo(sn)}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 14, color: wasSkipped ? "var(--orange)" : "var(--green)" }}>
+                      {wasSkipped ? "✕" : "✓"}
+                    </span>
+                  )}
+                  <span style={{ fontWeight: 600, color: "var(--blue)" }}>{sn}</span>
+                  <span style={{ color: "var(--dim)", flex: 1 }}>{custName}</span>
+                  {wasSkipped && (
+                    <span style={{ fontSize: 11, color: "var(--orange)" }}>ไม่ได้ส่ง</span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+
+          {/* Actions — only for loaded runs */}
+          {isLoaded && ed && !confirmAction && (
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setConfirmAction("cancel")}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 7,
+                  border: "1px solid var(--red)",
+                  background: "rgba(255,59,48,0.10)",
+                  color: "var(--red)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                }}
+              >
+                ✕ ยกเลิกรอบ
+              </button>
+              <button
+                onClick={() => setConfirmAction("confirm")}
+                style={{
+                  padding: "6px 16px",
+                  borderRadius: 7,
+                  border: "none",
+                  background: "var(--green)",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                ✓ ยืนยันส่งเสร็จ ({checked.size}/{allSoNums.length})
+              </button>
+            </div>
+          )}
+
+          {/* 2-step confirmation prompt */}
+          {confirmAction === "confirm" && (
+            <div
+              style={{
+                background: "rgba(52,199,89,0.10)",
+                border: "1px solid var(--green)",
+                borderRadius: 7,
+                padding: "10px 12px",
+                fontSize: 12,
+                color: "var(--text)",
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                ยืนยัน: ส่ง <strong>{checked.size}</strong> SO,{" "}
+                {allSoNums.length - checked.size > 0 && (
+                  <>คืน <strong>{allSoNums.length - checked.size}</strong> SO กลับ "รอจัดส่ง"</>
+                )}
+                ?
+              </span>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid var(--line)", background: "var(--bg2)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={() => onConfirm(Array.from(checked))}
+                  style={{ padding: "4px 12px", borderRadius: 5, border: "none", background: "var(--green)", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 600 }}
+                >
+                  ยืนยัน
+                </button>
+              </div>
+            </div>
+          )}
+
+          {confirmAction === "cancel" && (
+            <div
+              style={{
+                background: "rgba(255,59,48,0.10)",
+                border: "1px solid var(--red)",
+                borderRadius: 7,
+                padding: "10px 12px",
+                fontSize: 12,
+                color: "var(--text)",
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                ยกเลิกรอบนี้? SO ทั้ง <strong>{allSoNums.length}</strong> ใบจะกลับไป "รอจัดส่ง"
+              </span>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid var(--line)", background: "var(--bg2)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}
+                >
+                  ไม่ใช่
+                </button>
+                <button
+                  onClick={onCancel}
+                  style={{ padding: "4px 12px", borderRadius: 5, border: "none", background: "var(--red)", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 600 }}
+                >
+                  ยืนยันยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DeliveryPlanningPage({ sh }) {
   const {
     cN,
@@ -165,18 +428,72 @@ export default function DeliveryPlanningPage({ sh }) {
       driverNote: driverNote.trim(),
       createdAt: Date.now(),
       createdBy: cu?.username || "",
+      status: "out_for_delivery",
+      completedAt: null,
+      deliveredSoNums: [],
+      skippedSoNums: [],
     };
     setDeliveryRuns((prev) => [run, ...(prev || [])]);
-    // Move picked SOs from pending_delivery → completed
+    // Move picked SOs from pending_delivery → out_for_delivery (loaded onto truck,
+    // not yet delivered). They'll be marked completed once the driver confirms.
     setSales((prev) =>
       (prev || []).map((s) =>
-        pickedSoNums.includes(s.soNum) ? { ...s, status: "completed" } : s
+        pickedSoNums.includes(s.soNum) ? { ...s, status: "out_for_delivery" } : s
       )
     );
     setPicked(new Set());
     setDriverNote("");
     setRunHelperIds([]);
     cM();
+  };
+
+  // Mark a run as finished. `deliveredSoNums` = SOs that actually got delivered
+  // (the rest go back to pending_delivery so they can be re-planned next round).
+  const confirmRunDelivery = (runId, deliveredSoNums) => {
+    const run = (deliveryRuns || []).find((r) => r.id === runId);
+    if (!run || run.status !== "out_for_delivery") return;
+    const delivered = new Set(deliveredSoNums);
+    const allInRun = run.soNums || [];
+    const skipped = allInRun.filter((sn) => !delivered.has(sn));
+    setSales((prev) =>
+      (prev || []).map((s) => {
+        if (!allInRun.includes(s.soNum)) return s;
+        return delivered.has(s.soNum)
+          ? { ...s, status: "completed" }
+          : { ...s, status: "pending_delivery" };
+      })
+    );
+    setDeliveryRuns((prev) =>
+      (prev || []).map((r) =>
+        r.id === runId
+          ? {
+              ...r,
+              status: "completed",
+              completedAt: Date.now(),
+              deliveredSoNums: Array.from(delivered),
+              skippedSoNums: skipped,
+            }
+          : r
+      )
+    );
+  };
+
+  // Cancel a loaded run before it goes out — return SOs to pending_delivery and
+  // mark the run record cancelled (kept for audit, not deleted).
+  const cancelRun = (runId) => {
+    const run = (deliveryRuns || []).find((r) => r.id === runId);
+    if (!run || run.status !== "out_for_delivery") return;
+    const allInRun = run.soNums || [];
+    setSales((prev) =>
+      (prev || []).map((s) =>
+        allInRun.includes(s.soNum) ? { ...s, status: "pending_delivery" } : s
+      )
+    );
+    setDeliveryRuns((prev) =>
+      (prev || []).map((r) =>
+        r.id === runId ? { ...r, status: "cancelled" } : r
+      )
+    );
   };
 
   const emptyTruck = {
@@ -1792,7 +2109,8 @@ export default function DeliveryPlanningPage({ sh }) {
             }}
           >
             เมื่อบันทึก SO ทั้ง {pickedRows.length} ใบจะเปลี่ยนสถานะเป็น
-            "ส่งเสร็จ" และหายจากรายการรอจัดส่ง
+            "เตรียมส่ง" (ของขึ้นรถแล้ว) · ยังยกเลิกได้จากหน้า "ประวัติรอบ"
+            · ยืนยันส่งเสร็จหลังคนขับกลับมา
           </div>
           <div
             style={{
@@ -1840,162 +2158,28 @@ export default function DeliveryPlanningPage({ sh }) {
       {modal === "runHistory" && (
         <Modal title="ประวัติรอบจัดส่ง" onClose={cM} wide>
           {(deliveryRuns || []).length === 0 ? (
-            <div
-              style={{
-                padding: "40px 0",
-                textAlign: "center",
-                color: "var(--faint)",
-                fontSize: 13,
-              }}
-            >
+            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--faint)", fontSize: 13 }}>
               ยังไม่มีประวัติรอบจัดส่ง
             </div>
           ) : (
-            <div
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: 8,
-                overflow: "hidden",
-                maxHeight: 500,
-                overflowY: "auto",
-              }}
-            >
-              <table
-                style={{
-                  width: "100%",
-                  fontSize: 13,
-                  borderCollapse: "collapse",
-                }}
-              >
-                <thead style={{ position: "sticky", top: 0 }}>
-                  <tr
-                    style={{
-                      background: "var(--bg)",
-                      borderBottom: "1px solid var(--line)",
-                    }}
-                  >
-                    {["วันที่", "รถ", "ผู้ส่ง", "SO", "ปลายทาง", "ปริมาตร", "ยอดรวม", "หมายเหตุ"].map(
-                      (h, i) => (
-                        <th
-                          key={i}
-                          style={{
-                            padding: "8px 12px",
-                            textAlign: i >= 3 && i <= 6 ? "right" : "left",
-                            fontWeight: 500,
-                            color: "var(--dim)",
-                            fontSize: 12,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {h}
-                        </th>
-                      )
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(deliveryRuns || [])
-                    .slice()
-                    .sort((a, b) => b.createdAt - a.createdAt)
-                    .map((r) => (
-                      <tr
-                        key={r.id}
-                        style={{ borderBottom: "1px solid var(--line)" }}
-                      >
-                        <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
-                          {toBE(r.date)}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontWeight: 500 }}>
-                          {r.truckName}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 12px",
-                            fontSize: 12,
-                            color: "var(--text)",
-                            minWidth: 140,
-                          }}
-                        >
-                          {r.driverName ? (
-                            <>
-                              <span style={{ color: "var(--dim)", fontSize: 11 }}>
-                                คนขับ:{" "}
-                              </span>
-                              {r.driverName}
-                            </>
-                          ) : (
-                            <span style={{ color: "var(--faint)" }}>—</span>
-                          )}
-                          {(r.helperNames || []).length > 0 && (
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: "var(--dim)",
-                                marginTop: 2,
-                              }}
-                            >
-                              <span style={{ color: "var(--faint)" }}>พนง:</span>{" "}
-                              {r.helperNames.join(", ")}
-                            </div>
-                          )}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 12px",
-                            textAlign: "right",
-                            fontWeight: 600,
-                          }}
-                          title={(r.soNums || []).join(", ")}
-                        >
-                          {(r.soNums || []).length}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 12px",
-                            textAlign: "right",
-                            color: "var(--dim)",
-                          }}
-                          title={(r.customerNames || []).join(", ")}
-                        >
-                          {(r.customerNames || []).length}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 12px",
-                            textAlign: "right",
-                            color: "var(--dim)",
-                          }}
-                        >
-                          {(r.volumeM3 || 0).toFixed(2)} m³
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 12px",
-                            textAlign: "right",
-                            fontWeight: 600,
-                            color: "var(--green)",
-                          }}
-                        >
-                          ฿{fmt(Math.round(r.revenue || 0))}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 12px",
-                            fontSize: 11,
-                            color: "var(--dim)",
-                            maxWidth: 180,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={r.driverNote || ""}
-                        >
-                          {r.driverNote || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 600, overflowY: "auto" }}>
+              {(deliveryRuns || [])
+                .slice()
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .map((r) => {
+                  // Legacy runs (created before status field) → treat as completed.
+                  const status = r.status || "completed";
+                  return (
+                    <RunCard
+                      key={r.id}
+                      run={r}
+                      status={status}
+                      onConfirm={(deliveredSoNums) => confirmRunDelivery(r.id, deliveredSoNums)}
+                      onCancel={() => cancelRun(r.id)}
+                      ed={ed}
+                    />
+                  );
+                })}
             </div>
           )}
         </Modal>
