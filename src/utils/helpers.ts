@@ -841,23 +841,26 @@ export const soItemsByCategory = (
   );
 };
 
-// Parse Google Maps URL (or plain "lat,lng") → {lat, lng} | null
+// Parse Google Maps URL (or plain "lat,lng") → {lat, lng} | null.
+// Priority matters: !3d!4d is the place pin (authoritative); ?q= is a shared
+// pin; @lat,lng is only the viewport center and is often offset from the
+// actual shop. We try precise sources first and fall back to viewport last.
 export const parseGmapsUrl = (
   input: string | undefined | null
 ): { lat: number; lng: number } | null => {
   if (!input) return null;
   const s = input.trim();
-  // /maps/@LAT,LNG,ZOOM
-  let m = s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  // Place pin (most accurate): /data=...!3dLAT!4dLNG
+  let m = s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
   if (m) return { lat: +m[1], lng: +m[2] };
-  // ?q=LAT,LNG  or  &q=LAT,LNG
+  // Shared pin: ?q=LAT,LNG or &q=LAT,LNG
   m = s.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (m) return { lat: +m[1], lng: +m[2] };
-  // embed format: !3dLAT!4dLNG
-  m = s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-  if (m) return { lat: +m[1], lng: +m[2] };
-  // plain "LAT, LNG"
+  // Plain "LAT, LNG"
   m = s.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  // Viewport center (least accurate — only camera position): /@LAT,LNG,ZOOM
+  m = s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (m) return { lat: +m[1], lng: +m[2] };
   return null;
 };

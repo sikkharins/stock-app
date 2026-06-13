@@ -6,6 +6,7 @@ import {
   fmt,
   todayStr,
   toBE,
+  nowStr,
   scoreSO,
   soVolumeM3,
   soRevenue,
@@ -75,8 +76,7 @@ export default function DeliveryPlanningPage({ sh }) {
   const [driverNote, setDriverNote] = useState("");
   const [warnMsg, setWarnMsg] = useState(null);
   const [runHelperIds, setRunHelperIds] = useState([]);
-  const [pdfPreview, setPdfPreview] = useState(null); // { url, blob } | null
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [previewFormat, setPreviewFormat] = useState("a4"); // "a4" | "80mm"
 
   // Helper-pool CRUD form
   const emptyHelper = { id: null, name: "", phone: "", isActive: true };
@@ -435,97 +435,90 @@ export default function DeliveryPlanningPage({ sh }) {
     setTrucks((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const csvExport = () => {
-    const rows = [
-      ["รหัส", "ยี่ห้อ", "หมวด", "หมวดย่อย", "สินค้า", "จำนวน", "ลูกค้า"],
-      ...pickList.map((e) => [
-        String(e.productId),
-        e.brand,
-        e.catName,
-        e.subName,
-        e.name,
-        String(e.totalQty),
-        (e.customers || []).join(" / "),
-      ]),
-    ];
-    const csv = rows
-      .map((r) => r.map((c) => `"${(c || "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pick-list-${date}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  // Build the 80mm / 3" thermal-printer HTML. Used both for the inline preview
+  // iframe in the Pick List modal and for the hidden iframe that triggers print.
+  const thermalHtml = useMemo(() => {
+    if (pickList.length === 0) return "";
+    const esc = (s) =>
+      String(s || "").replace(/[&<>"']/g, (c) =>
+        c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"
+      );
+    const totalQty = pickList.reduce((s, e) => s + e.totalQty, 0);
+    const rows = pickList
+      .map((e) =>
+        '<div class="row">' +
+        '<div class="row-top">' +
+        '<span class="brand">' + esc(e.brand || "—") + "</span>" +
+        '<span class="qty">×' + e.totalQty + "</span>" +
+        "</div>" +
+        '<div class="cat">' + esc(e.catName) + "</div>" +
+        '<div class="name">' + esc(e.name) + "</div>" +
+        "</div>"
+      )
+      .join("");
+    const headerLine =
+      esc(truck?.name || "—") +
+      (truck?.driverName ? " · " + esc(truck.driverName) : "");
+    return (
+      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Pick List</title>" +
+      "<style>" +
+      "@page{size:80mm auto;margin:2mm}" +
+      "*{box-sizing:border-box}" +
+      "html,body{margin:0;padding:0;background:#fff;color:#000;" +
+      "font-family:'Sarabun','Tahoma',sans-serif;font-size:13px;line-height:1.35}" +
+      "body{width:76mm;padding:2mm}" +
+      ".hdr{text-align:center;font-weight:700;font-size:16px;margin-bottom:2px}" +
+      ".sub{text-align:center;font-size:11px;margin-bottom:1px}" +
+      ".tot{text-align:center;font-size:12px;font-weight:600;margin:4px 0}" +
+      ".sep{border-top:1px dashed #000;margin:4px 0}" +
+      ".row{padding:4px 0;border-bottom:1px dashed #999}" +
+      ".row:last-child{border-bottom:none}" +
+      ".row-top{display:flex;align-items:baseline;gap:4px}" +
+      ".brand{font-weight:600;flex:1;min-width:0;font-size:12px;word-break:break-word}" +
+      ".qty{font-weight:800;font-size:22px;margin-left:auto}" +
+      ".cat{font-size:10px;color:#444}" +
+      ".name{font-weight:600;font-size:14px;word-break:break-word}" +
+      ".foot{text-align:center;font-size:10px;margin-top:6px;color:#555}" +
+      "@media print{html,body{width:80mm}}" +
+      "</style></head><body>" +
+      "<div class='hdr'>PICK LIST</div>" +
+      "<div class='sub'>" + esc(toBE(date)) + "</div>" +
+      "<div class='sub'>" + headerLine + "</div>" +
+      "<div class='tot'>" + totalQty + " ชิ้น · " + pickList.length + " รายการ · " + pickedRows.length + " SO</div>" +
+      "<div class='sep'></div>" +
+      rows +
+      "<div class='sep'></div>" +
+      "<div class='foot'>พิมพ์ " + esc(nowStr()) + "</div>" +
+      "</body></html>"
+    );
+  }, [pickList, pickedRows.length, truck, date]);
 
-  // Build the offscreen wrapper that html2pdf renders into. Reused by preview + save.
-  const buildPdfWrap = () => {
-    const el = document.getElementById("pick-list-printable");
-    if (!el) return null;
-    const wrap = document.createElement("div");
-    wrap.style.padding = "16px 20px";
-    wrap.style.background = "#fff";
-    wrap.style.color = "#000";
-    wrap.innerHTML = `
-      <div style="font-size:18px;font-weight:600;margin-bottom:4px">Pick List — ${toBE(date)}</div>
-      <div style="font-size:12px;color:#666;margin-bottom:12px">
-        ${truck?.name || ""}
-        ${truck?.driverName ? ` · คนขับ: ${truck.driverName}` : ""}
-        · รวม ${pickList.reduce((s, e) => s + e.totalQty, 0)} ชิ้น
-        · ${pickList.length} รายการ
-        · ${pickedRows.length} SO
-      </div>
-      ${el.outerHTML}
-    `;
-    return wrap;
-  };
-
-  const pdfOptions = {
-    margin: 8,
-    filename: `pick-list-${date}.pdf`,
-    image: { type: "jpeg", quality: 0.95 },
-    html2canvas: { scale: 2, backgroundColor: "#ffffff" },
-    jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
-  };
-
-  // Generate the PDF as a Blob URL and show it inside an iframe preview modal.
-  // User then chooses Save or Print explicitly — instead of an immediate download.
-  const pdfExport = async () => {
-    const wrap = buildPdfWrap();
-    if (!wrap) return;
-    setPdfLoading(true);
-    try {
-      const { default: html2pdf } = await import("html2pdf.js");
-      const blob = await html2pdf()
-        .set(pdfOptions)
-        .from(wrap)
-        .output("blob");
-      // Revoke any previous preview URL before replacing
-      if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
-      const url = URL.createObjectURL(blob);
-      setPdfPreview({ url, blob });
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
-  const closePdfPreview = () => {
-    if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
-    setPdfPreview(null);
-  };
-
-  const printPdfPreview = () => {
-    const ifr = document.getElementById("pdf-preview-iframe");
-    if (!ifr || !ifr.contentWindow) return;
-    try {
-      ifr.contentWindow.focus();
-      ifr.contentWindow.print();
-    } catch {
-      // Fallback: open in new tab; browser's built-in viewer has print.
-      if (pdfPreview?.url) window.open(pdfPreview.url, "_blank");
-    }
+  // Print the thermal HTML by mounting it in a hidden iframe and calling print().
+  const printThermal = () => {
+    if (!thermalHtml) return;
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const cleanup = () => {
+      setTimeout(() => {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 1000);
+    };
+    iframe.onload = () => {
+      try {
+        const w = iframe.contentWindow;
+        w.focus();
+        w.print();
+      } finally {
+        cleanup();
+      }
+    };
+    iframe.srcdoc = thermalHtml;
   };
 
   // --- Render ---
@@ -1379,8 +1372,58 @@ export default function DeliveryPlanningPage({ sh }) {
             <span>{pickList.length} รายการ</span>
             <span>{pickedRows.length} SO</span>
           </div>
+
+          {/* Format switcher */}
+          <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)", width: "fit-content" }}>
+            {[
+              ["a4", "A4"],
+              ["80mm", '80mm (3")'],
+            ].map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setPreviewFormat(k)}
+                style={{
+                  padding: "6px 14px",
+                  border: "none",
+                  background: previewFormat === k ? "var(--blue)" : "var(--bg2)",
+                  color: previewFormat === k ? "#fff" : "var(--dim)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  fontWeight: previewFormat === k ? 600 : 400,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {previewFormat === "80mm" ? (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                borderRadius: 8,
+                background: "var(--hover)",
+                padding: 12,
+                marginBottom: 12,
+                display: "flex",
+                justifyContent: "center",
+              }}
+            >
+              <iframe
+                title="80mm preview"
+                srcDoc={thermalHtml}
+                style={{
+                  width: 302,
+                  height: 600,
+                  border: "1px solid var(--line)",
+                  background: "#fff",
+                  borderRadius: 4,
+                }}
+              />
+            </div>
+          ) : (
           <div
-            id="pick-list-printable"
             style={{
               border: "1px solid var(--line)",
               borderRadius: 8,
@@ -1465,50 +1508,22 @@ export default function DeliveryPlanningPage({ sh }) {
               </tbody>
             </table>
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
             <button
-              onClick={() => window.print()}
+              onClick={() => previewFormat === "80mm" ? printThermal() : window.print()}
               style={{
-                padding: "8px 16px",
+                padding: "8px 18px",
                 borderRadius: 7,
-                border: "1px solid var(--line)",
-                background: "var(--bg2)",
-                color: "var(--text)",
+                border: "1px solid var(--blue)",
+                background: "var(--blue)",
+                color: "#fff",
                 cursor: "pointer",
                 fontFamily: "inherit",
+                fontWeight: 600,
               }}
             >
-              พิมพ์
-            </button>
-            <button
-              onClick={pdfExport}
-              disabled={pdfLoading}
-              style={{
-                padding: "8px 16px",
-                borderRadius: 7,
-                border: "1px solid var(--line)",
-                background: "var(--bg2)",
-                color: pdfLoading ? "var(--dim)" : "var(--text)",
-                cursor: pdfLoading ? "wait" : "pointer",
-                fontFamily: "inherit",
-                opacity: pdfLoading ? 0.7 : 1,
-              }}
-            >
-              {pdfLoading ? "กำลังสร้าง PDF..." : "PDF"}
-            </button>
-            <button
-              onClick={csvExport}
-              style={{
-                padding: "8px 16px",
-                borderRadius: 7,
-                border: "1px solid var(--line)",
-                background: "var(--bg2)",
-                color: "var(--text)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              CSV
+              พิมพ์ {previewFormat === "80mm" ? '80mm' : 'A4'}
             </button>
             <button
               onClick={cM}
@@ -2164,109 +2179,6 @@ export default function DeliveryPlanningPage({ sh }) {
           </div>
           <MBtns onCancel={cM} onSave={saveHelper} />
         </Modal>
-      )}
-
-      {pdfPreview && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.65)",
-            zIndex: 200,
-            display: "flex",
-            alignItems: "stretch",
-            justifyContent: "center",
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--panel)",
-              borderRadius: 12,
-              border: "1px solid var(--line)",
-              width: "min(1100px, 100%)",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                padding: "12px 16px",
-                borderBottom: "1px solid var(--line)",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>
-                ดูตัวอย่าง PDF — Pick List
-              </div>
-              <button
-                onClick={() => {
-                  const a = document.createElement("a");
-                  a.href = pdfPreview.url;
-                  a.download = `pick-list-${date}.pdf`;
-                  a.click();
-                }}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 7,
-                  border: "1px solid var(--line)",
-                  background: "var(--bg2)",
-                  color: "var(--text)",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 13,
-                }}
-              >
-                บันทึก
-              </button>
-              <button
-                onClick={printPdfPreview}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 7,
-                  border: "1px solid var(--line)",
-                  background: "var(--bg2)",
-                  color: "var(--text)",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 13,
-                }}
-              >
-                พิมพ์
-              </button>
-              <button
-                onClick={closePdfPreview}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 7,
-                  border: "none",
-                  background: "var(--blue)",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 13,
-                  fontWeight: 500,
-                }}
-              >
-                ปิด
-              </button>
-            </div>
-            <iframe
-              id="pdf-preview-iframe"
-              src={pdfPreview.url}
-              title="PDF preview"
-              style={{
-                flex: 1,
-                width: "100%",
-                border: "none",
-                background: "#fff",
-              }}
-            />
-          </div>
-        </div>
       )}
 
       {warnMsg && (

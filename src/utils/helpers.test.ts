@@ -577,6 +577,18 @@ describe("parseGmapsUrl", () => {
     expect(parseGmapsUrl("")).toBeNull();
     expect(parseGmapsUrl(null)).toBeNull();
   });
+
+  test("prefers !3d/!4d place pin over @viewport center", () => {
+    // Real-world: @ is the camera center (offset), !3d!4d is the actual shop pin
+    const url =
+      "https://www.google.com/maps/place/Shop/@13.7563,100.5018,17z/data=!4m6!3m5!1s0x0!8m2!3d13.7521!4d100.5034!16s";
+    expect(parseGmapsUrl(url)).toEqual({ lat: 13.7521, lng: 100.5034 });
+  });
+
+  test("prefers ?q= shared pin over @viewport center", () => {
+    const url = "https://www.google.com/maps/@13.7563,100.5018,17z/?q=13.7521,100.5034";
+    expect(parseGmapsUrl(url)).toEqual({ lat: 13.7521, lng: 100.5034 });
+  });
 });
 
 describe("soItemsByCategory", () => {
