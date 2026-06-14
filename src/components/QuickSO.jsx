@@ -266,9 +266,10 @@ export default function QuickSO({ sh, onClose }) {
                 <span style={{ color: av <= 0 ? "var(--red)" : "var(--green)", fontWeight: 600 }}>{av <= 0 ? "หมด" : "พร้อม " + av}</span>
                 <span> · ฿{fmt(p.price)}</span>{p.code ? <span style={{ color: "var(--faint)" }}> · {p.code}</span> : null}
               </div>
+              <button onClick={() => addQty(p.id, -1)} style={{ ...stepBtn, height: 32, border: "1px solid var(--red)", color: "var(--red)" }}>−1</button>
               <input type="number" min="0" value={q || ""} onChange={e => setQty(p.id, e.target.value)} placeholder="0" style={{ ...IB, width: 46, height: 32, padding: "0 4px", textAlign: "center", borderColor: over ? "var(--red)" : (q > 0 ? "var(--blue)" : "var(--line)") }} />
-              <button onClick={() => addQty(p.id, 1)} style={{ ...stepBtn, height: 32 }}>+1</button>
-              <button onClick={() => addQty(p.id, 5)} style={{ ...stepBtn, height: 32 }}>+5</button>
+              <button onClick={() => addQty(p.id, 1)} style={{ ...stepBtn, height: 32, border: "1px solid var(--green)", color: "var(--green)" }}>+1</button>
+              <button onClick={() => addQty(p.id, 5)} style={{ ...stepBtn, height: 32, border: "1px solid var(--green)", color: "var(--green)" }}>+5</button>
             </div>
             {over && <div style={{ fontSize: 11, color: "var(--red)", marginTop: 4 }}>{"เกินสต็อก (ขาด " + (q - av) + ")"}</div>}
           </div>;
