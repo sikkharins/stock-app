@@ -43,14 +43,14 @@ export default function POPage({sh}){
     return ms&&mst;
   }),[basePOs,search,contacts,statusFilter,cN]);
 
-  const ef={supplierId:"",date:todayStr(),deliveryDate:"",creditDays:0,items:[{productId:"",qty:1,cost:0}],note:"",dropShip:false,dropShipCustomerId:""};
+  const ef={supplierId:"",date:todayStr(),deliveryDate:"",creditDays:0,items:[{productId:"",qty:1,cost:0}],note:"",refNo:"",dropShip:false,dropShipCustomerId:""};
   const[form,setForm]=useState(ef);
   useEffect(()=>{if(sh.quickCreate==="addPO"&&ed&&!isSup){setForm(ef);oM("addPO");sh.clearQuickCreate();}},[sh.quickCreate]);
   const[viewPO,setViewPO]=useState(null);
   const[appModal,setAppModal]=useState(null);
   const[appComment,setAppComment]=useState("");
   const[confirmCancel,setConfirmCancel]=useState(null);const[editPO,setEditPO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);const[confirmDelPO,setConfirmDelPO]=useState(null);
-  const[shipModal,setShipModal]=useState(null);const[shipForm,setShipForm]=useState([]);const[confirmClose,setConfirmClose]=useState(null);
+  const[shipModal,setShipModal]=useState(null);const[shipForm,setShipForm]=useState([]);const[confirmClose,setConfirmClose]=useState(null);const[shipMode,setShipMode]=useState("dropship");
 
   const poTot=po=>(po.items||[]).reduce((s,i)=>s+i.qty*i.cost,0);
   const stats=useMemo(()=>{const pa=basePOs.filter(p=>p.status==="pending_approval").length;const recv=basePOs.filter(p=>p.status==="received").length;const totAmt=basePOs.reduce((s,po)=>s+poTot(po),0);return{total:basePOs.length,pa,recv,totAmt};},[basePOs]);
@@ -62,7 +62,7 @@ export default function POPage({sh}){
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
     const pn=nextDocNum("PO",pos,"poNum");
-    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,status:"draft",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
+    setPOs(p=>[...p,{id:Date.now(),poNum:pn,supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,status:"draft",items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",refNo:form.refNo||"",createdBy:cu?.username||"",approval:null,approvalHistory:[],rejectionReason:"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null,linkedSO:""}]);
     addA("สร้าง PO (Draft)",pn);cM();
   };
 
@@ -100,13 +100,36 @@ export default function POPage({sh}){
   };
 
   // All SO numbers linked to a PO — legacy single linkedSO + new per-shipment SOs.
-  const linkedSONums=po=>[...(po.linkedSO?[po.linkedSO]:[]),...((po.shipments||[]).map(s=>s.soNum))];
+  const linkedSONums=po=>[...(po.linkedSO?[po.linkedSO]:[]),...((po.shipments||[]).map(s=>s.soNum).filter(Boolean))];
 
   // Open "บันทึกการส่ง" — prefill each line with its remaining (un-shipped) qty.
   const openRecordShip=po=>{
     const roll=shipmentTotals(po);
     setShipForm(po.items.map(it=>{const r=roll.find(x=>x.productId===+it.productId);return{productId:+it.productId,qty:r?r.remaining:0};}));
-    setShipModal(po);oM("recordShip");
+    setShipMode("dropship");setShipModal(po);oM("recordShip");
+  };
+
+  // Open "รับบางส่วน" for a normal PO — prefill each line with remaining qty.
+  const openReceivePartial=po=>{
+    const roll=shipmentTotals(po);
+    setShipForm(po.items.map(it=>{const r=roll.find(x=>x.productId===+it.productId);return{productId:+it.productId,qty:r?r.remaining:0};}));
+    setShipMode("receive");setShipModal(po);oM("recordShip");
+  };
+
+  // Receive one partial batch of a normal PO into stock: add the entered qty to
+  // stock, record a delivered receipt (no SO), and recompute PO status.
+  const receivePartial=()=>{
+    const po=shipModal;if(!po)return;
+    const recv=shipForm.filter(s=>+s.qty>0).map(s=>({productId:+s.productId,qty:+s.qty}));
+    if(!recv.length){setWarnMsg("กรุณาระบุจำนวนที่รับอย่างน้อย 1 รายการ");return;}
+    const roll=shipmentTotals(po);
+    for(const r of recv){const rr=roll.find(x=>x.productId===r.productId);if(rr&&r.qty>rr.remaining){setWarnMsg("จำนวนที่รับเกินยอดคงเหลือของบางรายการ");return;}}
+    for(const r of recv){const pr=products.find(p=>p.id===r.productId);if(pr)addLog(mkLog(pr.id,"in",r.qty,pr.stock,pr.stock+r.qty,po.poNum,"รับของ PO (บางส่วน)",cu.username));}
+    setProducts(pp=>pp.map(pr=>{const r=recv.find(x=>x.productId===pr.id);return r?{...pr,stock:pr.stock+r.qty}:pr;}));
+    const receipt={id:Date.now(),date:todayStr(),by:cu?.username||"",items:recv,delivered:true};
+    setPOs(p=>p.map(x=>{if(x.id!==po.id)return x;const shipments=[...(x.shipments||[]),receipt];return{...x,shipments,status:poStatusFromShipments({...x,shipments})};}));
+    addA("รับของ PO (บางส่วน)",po.poNum);
+    setShipModal(null);cM();
   };
 
   // Record one partial shipment: create a right-sized SO, append the shipment,
@@ -159,13 +182,13 @@ export default function POPage({sh}){
   };
 
   const openEditPO=po=>{
-    setForm({supplierId:String(po.supplierId),date:po.date,deliveryDate:po.deliveryDate||"",creditDays:po.creditDays||0,items:po.items.map(i=>({productId:String(i.productId),qty:i.qty,cost:i.cost})),note:po.note||"",dropShip:!!po.dropShip,dropShipCustomerId:po.dropShipCustomerId?String(po.dropShipCustomerId):""});
+    setForm({supplierId:String(po.supplierId),date:po.date,deliveryDate:po.deliveryDate||"",creditDays:po.creditDays||0,items:po.items.map(i=>({productId:String(i.productId),qty:i.qty,cost:i.cost})),note:po.note||"",refNo:po.refNo||"",dropShip:!!po.dropShip,dropShipCustomerId:po.dropShipCustomerId?String(po.dropShipCustomerId):""});
     setEditPO(po);oM("editPO");
   };
   const updatePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
-    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
+    const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",refNo:form.refNo||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
     setPOs(p=>p.map(x=>x.id===editPO.id?{...x,...base}:x));
     addA("แก้ไข PO",editPO.poNum);setEditPO(null);cM();
   };
@@ -194,6 +217,14 @@ export default function POPage({sh}){
     }
     if((po.status==="approved"||po.status==="pending")&&ed&&!isSup&&!po.dropShip)
       a.push(<button key="rec" onClick={()=>openApproval(po,"receive")} style={{...AB,border:"1px solid var(--green)",background:"rgba(52,199,89,0.12)",color:"var(--green)"}}>รับของ</button>);
+    // Normal PO: receive partial batches (backorder) + close early when supplier won't ship the rest.
+    if(!po.dropShip&&ed&&!isSup&&(po.status==="approved"||po.status==="partial")){
+      const remain=shipmentTotals(po).reduce((s,r)=>s+r.remaining,0);
+      if(remain>0)
+        a.push(<button key="recv-part" onClick={()=>openReceivePartial(po)} style={{...AB,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)"}}>รับบางส่วน</button>);
+      if(po.status==="partial"&&remain>0)
+        a.push(<button key="close" onClick={()=>setConfirmClose(po)} style={{...AB,border:"1px solid var(--dim)",background:"var(--hover)",color:"var(--dim)"}}>ปิดรับ</button>);
+    }
     // Legacy drop-ship (auto-SO already created): keep the old static badge.
     if(po.dropShip&&po.linkedSO&&po.status==="approved")
       a.push(<span key="ds" style={{...AB,border:"1px solid var(--blue)",background:"rgba(10,132,255,0.08)",color:"var(--blue)",cursor:"default"}}>{"รอจัดส่ง SO"}</span>);
@@ -247,6 +278,7 @@ export default function POPage({sh}){
               {wasRejected&&<span style={{marginLeft:6,fontSize:10,color:"var(--red)",background:"rgba(255,59,48,0.12)",borderRadius:4,padding:"1px 5px"}}>ถูกปฏิเสธ</span>}
               {po.dropShip&&<span style={{marginLeft:6,fontSize:10,color:"var(--blue)",background:"rgba(10,132,255,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500}}>{"ส่งนอกสถานที่"}</span>}
               {linkedSONums(po).map(sn=><span key={sn} onClick={e=>{e.stopPropagation();sh.handleTab("sales");sh.setSearch(sn);}} style={{marginLeft:4,fontSize:10,color:"var(--green)",background:"rgba(52,199,89,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500,cursor:"pointer"}}>{"→ "+sn}</span>)}
+              {po.refNo&&<div style={{fontSize:11,color:"var(--dim)",marginTop:2,fontWeight:400}}>{"อ้างอิง: "+po.refNo}</div>}
             </td>
             <td style={{padding:"8px 6px"}}>{sup?cN(sup):"-"}</td>
             <td style={{padding:"8px 6px",color:"var(--dim)"}}>{toBE(po.date)}</td>
@@ -267,6 +299,7 @@ export default function POPage({sh}){
         <Field label="วันที่"><ThaiDateInput value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
         <Field label="วันกำหนดส่ง"><ThaiDateInput value={form.deliveryDate||""} onChange={e=>setForm(f=>({...f,deliveryDate:e.target.value}))}/></Field>
         <Field label="เครดิต (วันจ่าย)"><select value={form.creditDays||0} onChange={e=>setForm(f=>({...f,creditDays:+e.target.value}))} style={{width:"100%",boxSizing:"border-box",background:"var(--bg2)",border:"1px solid var(--line)",borderRadius:7,padding:"7px 12px",fontSize:13,color:"var(--text)",fontFamily:"inherit"}}><option value={0}>จ่ายทันที</option><option value={30}>30 วัน</option><option value={45}>45 วัน</option><option value={60}>60 วัน</option><option value={90}>90 วัน</option></select></Field>
+        <Field label="อ้างอิง"><input value={form.refNo||""} onChange={e=>setForm(f=>({...f,refNo:e.target.value}))} placeholder="เลขบิล / ใบส่งของ (ถ้ามี)" style={IB}/></Field>
         <div style={{gridColumn:"1/-1"}}>
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(form.dropShip?"var(--blue)":"var(--line)"),background:form.dropShip?"rgba(10,132,255,0.08)":"var(--hover)"}}>
             <input type="checkbox" checked={!!form.dropShip} onChange={e=>setForm(f=>({...f,dropShip:e.target.checked,dropShipCustomerId:e.target.checked?f.dropShipCustomerId:""}))}/>
@@ -300,6 +333,7 @@ export default function POPage({sh}){
         <div>
           <div style={{fontWeight:600,fontSize:14}}>{(()=>{const s=contacts.find(c=>c.id===viewPO.supplierId);return s?cN(s):"-";})()}</div>
           <div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{"วันที่: "+toBE(viewPO.date)+" · สร้างโดย: "+(viewPO.createdBy||"-")}</div>
+          {viewPO.refNo&&<div style={{fontSize:12,color:"var(--dim)",marginTop:2}}>{"อ้างอิง: "+viewPO.refNo}</div>}
           {viewPO.deliveryDate&&<div style={{fontSize:12,color:"var(--blue)",marginTop:2}}>{"กำหนดส่ง: "+toBE(viewPO.deliveryDate)}</div>}
         </div>
         <Badge status={viewPO.status}/>
@@ -311,14 +345,14 @@ export default function POPage({sh}){
       </div>}
 
       {viewPO.shipments&&viewPO.shipments.length>0&&<div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
-        <div style={{fontWeight:600,fontSize:13,marginBottom:6}}>{"การส่ง (ส่งบางส่วน)"}</div>
+        <div style={{fontWeight:600,fontSize:13,marginBottom:6}}>{viewPO.dropShip?"การส่ง (ส่งบางส่วน)":"การรับของ (รับบางส่วน)"}</div>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginBottom:8}}>
-          <thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{["สินค้า","สั่ง","ส่งแล้ว","รับแล้ว","คงเหลือ"].map(h=><th key={h} style={{padding:"4px 6px",textAlign:"left",fontWeight:500,color:"var(--dim)"}}>{h}</th>)}</tr></thead>
-          <tbody>{shipmentTotals(viewPO).map(r=>{const pr=products.find(x=>+x.id===r.productId);return <tr key={r.productId} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"4px 6px"}}>{pr?pN(pr):r.productId}</td><td style={{padding:"4px 6px"}}>{r.ordered}</td><td style={{padding:"4px 6px"}}>{r.committed}</td><td style={{padding:"4px 6px",color:"var(--green)"}}>{r.received}</td><td style={{padding:"4px 6px",color:r.remaining>0?"var(--orange)":"var(--dim)"}}>{r.remaining}</td></tr>;})}</tbody>
+          <thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{(viewPO.dropShip?["สินค้า","สั่ง","ส่งแล้ว","รับแล้ว","คงเหลือ"]:["สินค้า","สั่ง","รับแล้ว","คงเหลือ"]).map(h=><th key={h} style={{padding:"4px 6px",textAlign:"left",fontWeight:500,color:"var(--dim)"}}>{h}</th>)}</tr></thead>
+          <tbody>{shipmentTotals(viewPO).map(r=>{const pr=products.find(x=>+x.id===r.productId);return <tr key={r.productId} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"4px 6px"}}>{pr?pN(pr):r.productId}</td><td style={{padding:"4px 6px"}}>{r.ordered}</td>{viewPO.dropShip&&<td style={{padding:"4px 6px"}}>{r.committed}</td>}<td style={{padding:"4px 6px",color:"var(--green)"}}>{r.received}</td><td style={{padding:"4px 6px",color:r.remaining>0?"var(--orange)":"var(--dim)"}}>{r.remaining}</td></tr>;})}</tbody>
         </table>
         {viewPO.shipments.map((s,i)=><div key={s.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"5px 0",borderTop:i>0?"0.5px solid var(--line)":"none"}}>
-          <span>{"รอบ "+(i+1)+" · "+toBE(s.date)+" · "}<span onClick={()=>{cM();sh.handleTab("sales");sh.setSearch(s.soNum);}} style={{color:"var(--green)",fontWeight:600,cursor:"pointer",textDecoration:"underline"}}>{s.soNum}</span>{" · "+(s.items||[]).reduce((a,it)=>a+it.qty,0)+" ชิ้น"}</span>
-          <span style={{fontSize:10,padding:"1px 8px",borderRadius:99,background:s.delivered?"rgba(52,199,89,0.12)":"var(--blue-bg)",color:s.delivered?"var(--green)":"var(--blue)",fontWeight:500}}>{s.delivered?"จัดส่งแล้ว":"รอจัดส่ง"}</span>
+          <span>{"รอบ "+(i+1)+" · "+toBE(s.date)+" · "}{s.soNum?<span onClick={()=>{cM();sh.handleTab("sales");sh.setSearch(s.soNum);}} style={{color:"var(--green)",fontWeight:600,cursor:"pointer",textDecoration:"underline"}}>{s.soNum}</span>:<span style={{color:"var(--dim)"}}>{"รับเข้าสต็อก"}</span>}{" · "+(s.items||[]).reduce((a,it)=>a+it.qty,0)+" ชิ้น"}</span>
+          <span style={{fontSize:10,padding:"1px 8px",borderRadius:99,background:s.delivered?"rgba(52,199,89,0.12)":"var(--blue-bg)",color:s.delivered?"var(--green)":"var(--blue)",fontWeight:500}}>{s.delivered?(viewPO.dropShip?"จัดส่งแล้ว":"รับแล้ว"):"รอจัดส่ง"}</span>
         </div>)}
       </div>}
 
@@ -369,6 +403,8 @@ export default function POPage({sh}){
         </>}
         {(viewPO.status==="approved"||viewPO.status==="pending")&&ed&&!isSup&&!viewPO.dropShip&&
           <button onClick={()=>{setViewPO(null);openApproval(viewPO,"receive");}} style={{padding:"8px 18px",background:"var(--blue)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"รับของ"}</button>}
+        {!viewPO.dropShip&&ed&&!isSup&&(viewPO.status==="approved"||viewPO.status==="partial")&&shipmentTotals(viewPO).reduce((s,r)=>s+r.remaining,0)>0&&
+          <button onClick={()=>{const po=viewPO;setViewPO(null);openReceivePartial(po);}} style={{padding:"8px 18px",background:"var(--green)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"รับบางส่วน"}</button>}
         {viewPO.dropShip&&!viewPO.linkedSO&&ed&&!isSup&&(viewPO.status==="approved"||viewPO.status==="partial")&&shipmentTotals(viewPO).reduce((s,r)=>s+r.remaining,0)>0&&
           <button onClick={()=>{const po=viewPO;setViewPO(null);openRecordShip(po);}} style={{padding:"8px 18px",background:"var(--green)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"บันทึกการส่ง"}</button>}
       </div>
@@ -418,22 +454,22 @@ export default function POPage({sh}){
       </>}
     </Modal>}
 
-    {modal==="recordShip"&&shipModal&&<Modal title={"บันทึกการส่ง — "+shipModal.poNum} onClose={()=>{setShipModal(null);cM();}}>
-      <div style={{fontSize:12,color:"var(--dim)",marginBottom:10}}>{"ใส่จำนวนที่ส่งจริงรอบนี้ (ค่าเริ่มต้น = คงเหลือ) — ระบบจะสร้าง SO ตามจำนวนนี้ ส่วนที่เหลือค้างไว้รอรอบถัดไป"}</div>
+    {modal==="recordShip"&&shipModal&&<Modal title={(shipMode==="receive"?"รับของบางส่วน — ":"บันทึกการส่ง — ")+shipModal.poNum} onClose={()=>{setShipModal(null);cM();}}>
+      <div style={{fontSize:12,color:"var(--dim)",marginBottom:10}}>{shipMode==="receive"?"ใส่จำนวนที่รับจริงรอบนี้ (ค่าเริ่มต้น = คงเหลือ) — สต็อกจะเพิ่มทันที ส่วนที่เหลือค้างไว้รอรอบถัดไป":"ใส่จำนวนที่ส่งจริงรอบนี้ (ค่าเริ่มต้น = คงเหลือ) — ระบบจะสร้าง SO ตามจำนวนนี้ ส่วนที่เหลือค้างไว้รอรอบถัดไป"}</div>
       {(()=>{const roll=shipmentTotals(shipModal);return shipModal.items.map((it,idx)=>{const pr=products.find(x=>+x.id===+it.productId);const r=roll.find(x=>x.productId===+it.productId);const remain=r?r.remaining:0;const sf=shipForm.find(x=>x.productId===+it.productId);return <div key={idx} style={{marginBottom:8,padding:"8px 12px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:13,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pr?(pr.brand+" — "+pN(pr)):it.productId}</div>
-            <div style={{fontSize:11,color:"var(--dim)",marginTop:2}}>{"สั่ง "+it.qty+" · ส่งแล้ว "+(r?r.committed:0)+" · คงเหลือ "+remain}</div>
+            <div style={{fontSize:11,color:"var(--dim)",marginTop:2}}>{"สั่ง "+it.qty+" · "+(shipMode==="receive"?"รับแล้ว ":"ส่งแล้ว ")+(r?r.committed:0)+" · คงเหลือ "+remain}</div>
           </div>
           <input type="number" min="0" max={remain} value={sf?sf.qty:0} onChange={e=>{const v=e.target.value;setShipForm(f=>f.map(x=>x.productId===+it.productId?{...x,qty:v}:x));}} style={{...IB,width:80,flex:"none"}}/>
         </div>
       </div>;});})()}
-      <MBtns onCancel={()=>{setShipModal(null);cM();}} onSave={recordShipment} saveLabel="สร้าง SO + บันทึกการส่ง"/>
+      <MBtns onCancel={()=>{setShipModal(null);cM();}} onSave={shipMode==="receive"?receivePartial:recordShipment} saveLabel={shipMode==="receive"?"ยืนยันรับของ":"สร้าง SO + บันทึกการส่ง"}/>
     </Modal>}
 
     {confirmClose&&<Modal title="ปิดรับ PO" onClose={()=>setConfirmClose(null)}>
-      <div style={{background:"rgba(255,149,0,0.12)",border:"1px solid var(--orange)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--orange)"}}>{"ปิดรับ "+confirmClose.poNum+" โดยไม่รอส่วนที่เหลือ? PO จะถูกตั้งเป็น “รับแล้ว” ตามจำนวนที่ส่งจริง"}</div>
+      <div style={{background:"rgba(255,149,0,0.12)",border:"1px solid var(--orange)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--orange)"}}>{"ปิดรับ "+confirmClose.poNum+" โดยไม่รอส่วนที่เหลือ? PO จะถูกตั้งเป็น “รับแล้ว” ตามจำนวนที่รับจริง"}</div>
       <MBtns onCancel={()=>setConfirmClose(null)} onSave={()=>closePartialPO(confirmClose)} saveLabel="ปิดรับ"/>
     </Modal>}
 
