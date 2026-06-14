@@ -13,6 +13,7 @@ import ProductPicker from "./ui/ProductPicker.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
 import ThaiDateInput from "./ui/ThaiDateInput.jsx";
 import QuotesPage from "./Quotes.jsx";
+import QuickSO from "./QuickSO.jsx";
 
 function SOList({sh}){
   const{pN,cN,canC,canApv,canD,sales,setSales,pos,setPOs,products,setProducts,contacts,setContacts,search,setSearch,modal,oM,cM,addLog,cu,addA,quotes,payments,setPayments,setBankTxns,setCheques,promos=[],events=[]}=sh;
@@ -24,7 +25,7 @@ function SOList({sh}){
   const[form,setForm]=useState(ef);const[viewSO,setViewSO]=useState(null);const[confirmSO,setConfirmSO]=useState(null);const[delSO,setDelSO]=useState(null);const[editSO,setEditSO]=useState(null);const[viewProfile,setViewProfile]=useState(null);const[fSt,setFSt]=useState("all");const[approveSO,setApproveSO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);
 
   const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId))return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
-  const[incVat,setIncVat]=useState(true);const[payType,setPayType]=useState("cash");const[discPct,setDiscPct]=useState(1);const[creditDays,setCreditDays]=useState(45);const[extraDiscPct,setExtraDiscPct]=useState("");const[extraDiscAmt,setExtraDiscAmt]=useState("");const[formErrors,setFormErrors]=useState([]);
+  const[incVat,setIncVat]=useState(true);const[payType,setPayType]=useState("cash");const[discPct,setDiscPct]=useState(1);const[creditDays,setCreditDays]=useState(45);const[extraDiscPct,setExtraDiscPct]=useState("");const[extraDiscAmt,setExtraDiscAmt]=useState("");const[formErrors,setFormErrors]=useState([]);const[showQuick,setShowQuick]=useState(false);
   // Promo accumulate: pendingClaims = รับเลย, pendingSaves = เก็บไว้, selectedWalletIds = ใช้รางวัลจาก wallet
   const[pendingClaims,setPendingClaims]=useState([]); // [{promoId, tierId, promoName, tier}]
   const[pendingSaves,setPendingSaves]=useState([]);   // [{promoId, tierId, promoName, tier}]
@@ -32,6 +33,7 @@ function SOList({sh}){
 
   const resetPromoStates=()=>{setPendingClaims([]);setPendingSaves([]);setSelectedWalletIds([]);};
   useEffect(()=>{if(sh.quickCreate==="addSO"&&ed){setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);resetPromoStates();oM("addSO");sh.clearQuickCreate();}},[sh.quickCreate]);
+  useEffect(()=>{if(sh.quickCreate==="quickSO"&&ed){setShowQuick(true);sh.clearQuickCreate();}},[sh.quickCreate]);
 
   const soTot=so=>(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
   const mySO=useMemo(()=>myCI?sales.filter(s=>myCI.includes(s.customerId)):sales,[sales,myCI]);
@@ -424,7 +426,10 @@ function SOList({sh}){
     </div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
       <SB value={search} onChange={setSearch} placeholder="ค้นหา SO..."/>
-      {ed&&<Btn onClick={()=>{setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);resetPromoStates();oM("addSO");}}>{"+ สร้างใบขาย"}</Btn>}
+      {ed&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn onClick={()=>setShowQuick(true)}>{"⚡ สร้างเร็ว"}</Btn>
+        <Btn onClick={()=>{setFormErrors([]);setForm(ef);setIncVat(true);setPayType("cash");setDiscPct(1);setCreditDays(45);resetPromoStates();oM("addSO");}}>{"+ สร้างใบขาย"}</Btn>
+      </div>}
     </div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
       {[["all","ทั้งหมด",stats.total],["pending_special_approval","รออนุมัติพิเศษ",stats.pendApv],["pending_delivery","รอจัดส่ง",stats.pend],["out_for_delivery","เตรียมส่ง",stats.out],["completed","ส่งแล้ว",stats.comp]].map(([k,lb,cnt])=>{
@@ -633,6 +638,7 @@ function SOList({sh}){
       <MBtns onCancel={()=>setApproveSO(null)} onSave={()=>{setSales(p=>p.map(s=>s.id===so.id?{...s,status:"pending_delivery"}:s));addA("อนุมัติพิเศษ SO",so.soNum);setApproveSO(null);}} saveLabel="อนุมัติ"/>
     </Modal>;})()}
     {viewProfile&&<CustomerProfile customer={contacts.find(c=>c.id===viewProfile.id)||viewProfile} sales={sales} quotes={quotes} payments={payments} products={products} pN={pN} promos={promos||[]} setContacts={setContacts} canEdit={canC("sales")} onClose={()=>setViewProfile(null)}/>}
+    {showQuick&&<QuickSO sh={sh} onClose={()=>setShowQuick(false)}/>}
   </div>;
 }
 

@@ -525,6 +525,7 @@ export default function App(){
     {(()=>{
       const baseActs=[
         canC("sales")&&{key:"addSO",label:"สร้างใบขาย",icon:"SO",tab:"sales",mk:"addSO"},
+        canC("sales")&&{key:"quickSO",label:"สร้างเร็ว",icon:"⚡",tab:"sales",mk:"quickSO"},
         canC("products")&&{key:"product",label:"เพิ่มสินค้า",icon:"+",tab:"products",mk:"product"},
         canC("purchase")&&!isSup&&{key:"addPO",label:"สร้าง PO",icon:"PO",tab:"purchase",mk:"addPO"},
         canC("quotes")&&{key:"addQT",label:"ใบเสนอราคา",icon:"QT",tab:"quotes",mk:"addQT"},

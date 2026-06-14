@@ -50,6 +50,7 @@ export interface Product {
   subcategoryId?: number | string;
   stock?: number;
   minStock?: number;
+  price?: number;
   sizeClass?: SizeClass;
   cubicM?: number;
   // Physical dimensions in centimeters — for AI bin-packing optimizer
@@ -642,6 +643,334 @@ export const snapshotItemParts = (
     name: p.name,
     price: round2(safePrice * (+p.priceRatio || 0)),
   }));
+};
+
+// --- Quick SO builder -------------------------------------------------------
+// Pure construction of a Sales Order object identical in shape to Sales.doSave
+// (src/components/Sales.jsx), so the Quick SO wizard produces SOs that are
+// interchangeable with the full form: same fields → same stock reservation,
+// doc numbering, and special-approval rule. Supports claim-now rewards + wallet
+// redemption (the "brief promo" subset). "Save reward to wallet for later"
+// intentionally stays in the full form only.
+
+export interface SelectedReward {
+  promoId: number | string;
+  tierId: number | string;
+  tier: PromoTier;
+  promo?: Promo | null;
+  source: "claim" | "wallet";
+  walletId?: number | string;
+  matchedTotal?: number;
+}
+
+export interface SavedReward {
+  id: number | string;
+  promoId: number | string;
+  promoName?: string;
+  tier: PromoTier;
+  promo?: Promo | null;
+  matchedTotal?: number;
+  savedAt?: string;
+  savedFromSO?: string;
+}
+
+export interface VatRep {
+  id: number | string;
+  name: string;
+  address?: string;
+  idCard?: string;
+}
+
+export interface SaleCustomer {
+  id: number | string;
+  vatReps?: VatRep[];
+  savedRewards?: SavedReward[];
+  promoClaims?: Record<
+    string | number,
+    {
+      claimedTierIds?: (number | string)[];
+      lastClaimedAt?: string;
+      lastClaimedSO?: string;
+    }
+  >;
+}
+
+export interface BuildSOInput {
+  customerId: number | string;
+  date: string;
+  items: { productId: number | string; qty: number | string; price: number | string }[];
+  payType: string;
+  discPct?: number;
+  creditDays?: number;
+  includeVat?: boolean;
+  extraDiscPct?: number | string;
+  extraDiscAmt?: number | string;
+  note?: string;
+  legacyNum?: string;
+  useVatRep?: boolean;
+  vatRepId?: number | string;
+  eventId?: number | string;
+  eventPackPurchases?: unknown[];
+  selectedRewards?: SelectedReward[];
+}
+
+export interface BuildSOCtx {
+  sales: Sale[];
+  products: Product[];
+  contacts: SaleCustomer[];
+  hasApv?: boolean;
+}
+
+export interface BuiltSaleItem {
+  productId: number;
+  qty: number;
+  price: number;
+  parts?: SaleItemPart[];
+  unitPrice?: number;
+}
+
+export interface AppliedReward {
+  promoId: number | string;
+  tierId: number | string;
+  source: string;
+  walletId?: number | string;
+}
+
+export interface BuiltSale {
+  id: number;
+  soNum: string;
+  status: string;
+  fromQuote: string;
+  customerId: number;
+  date: string;
+  items: BuiltSaleItem[];
+  origPrices: number[];
+  includeVat: boolean;
+  vatAmount: number;
+  payType: string;
+  discountAmt: number;
+  discPct: number;
+  extraDiscPct: number;
+  extraDiscAmt: number;
+  rewardDiscPct: number;
+  rewardDiscAmt: number;
+  appliedRewards: AppliedReward[];
+  creditDays: number;
+  useVatRep: boolean;
+  vatRepName: string;
+  vatRepAddress: string;
+  vatRepIdCard: string;
+  note: string;
+  legacyNum: string;
+  eventId: number | string;
+  eventPackPurchases: unknown[];
+}
+
+export interface BuildSOResult {
+  so: BuiltSale;
+  customerPatch: SaleCustomer | null;
+  logLabel: string;
+}
+
+export const buildSalesOrder = (
+  input: BuildSOInput,
+  ctx: BuildSOCtx
+): BuildSOResult => {
+  const { sales, products, hasApv } = ctx;
+  const findProduct = (id: number | string) =>
+    products.find((p) => +p.id === +id);
+
+  const baseItems: BuiltSaleItem[] = input.items.map((i) => {
+    const p = findProduct(i.productId);
+    const parts = snapshotItemParts(p, +i.price);
+    return parts
+      ? { productId: +i.productId, qty: +i.qty, price: +i.price, parts }
+      : { productId: +i.productId, qty: +i.qty, price: +i.price };
+  });
+
+  const customer =
+    ctx.contacts.find((c) => +c.id === +input.customerId) || null;
+
+  let rewardDiscPct = 0;
+  let rewardDiscAmt = 0;
+  const extraItems: BuiltSaleItem[] = [];
+  const appliedRewards: AppliedReward[] = [];
+  const promoOverriddenIdx = new Set<number>();
+
+  const applyReward = (
+    t: PromoTier,
+    src: { promoId: number | string; promo?: Promo | null; matchedTotal?: number },
+    source: string,
+    walletId?: number | string
+  ) => {
+    if (t.rewardType === "percent") {
+      rewardDiscPct += +(t.rewardValue || 0);
+    } else if (t.rewardType === "fixed") {
+      rewardDiscAmt += +(t.rewardValue || 0);
+    } else if (t.rewardType === "product" && t.rewardProductId) {
+      const p = findProduct(t.rewardProductId);
+      const scale = t.scaleReward !== false;
+      const giftQty =
+        scale && src.matchedTotal && t.threshold > 0
+          ? Math.max(1, Math.floor(+src.matchedTotal / +t.threshold))
+          : 1;
+      extraItems.push({
+        productId: +t.rewardProductId,
+        qty: giftQty,
+        price: 0,
+        unitPrice: p ? +(p.price || 0) : 0,
+      });
+    } else if (
+      t.rewardType === "special_price" &&
+      +(t.specialPrice || 0) > 0 &&
+      src.promo
+    ) {
+      const sp = +(t.specialPrice || 0);
+      baseItems.forEach((bi, idx) => {
+        const pr = findProduct(bi.productId);
+        if (!pr) return;
+        if (!productQualifiesForPromo(pr, src.promo)) return;
+        if (+bi.price > sp) {
+          baseItems[idx] = { ...bi, price: sp };
+          promoOverriddenIdx.add(idx);
+        }
+      });
+    }
+    appliedRewards.push({
+      promoId: src.promoId,
+      tierId: t.id,
+      source,
+      ...(walletId != null ? { walletId } : {}),
+    });
+  };
+
+  const selected = input.selectedRewards || [];
+  // claim-now first, then wallet — mirrors Sales.doSave ordering
+  selected
+    .filter((r) => r.source === "claim")
+    .forEach((r) =>
+      applyReward(
+        r.tier,
+        { promoId: r.promoId, promo: r.promo, matchedTotal: r.matchedTotal },
+        "claim"
+      )
+    );
+  selected
+    .filter((r) => r.source === "wallet")
+    .forEach((r) =>
+      applyReward(
+        r.tier,
+        { promoId: r.promoId, promo: r.promo, matchedTotal: r.matchedTotal },
+        "wallet",
+        r.walletId
+      )
+    );
+
+  const items = [...baseItems, ...extraItems];
+  const sub = items.reduce((s, i) => s + i.qty * i.price, 0);
+  const cash = input.payType === "cash";
+  const discPctVal = +(input.discPct || 0);
+  const disc = cash ? round2((sub * discPctVal) / 100) : 0;
+  const ep = +(input.extraDiscPct || 0);
+  const ea = +(input.extraDiscAmt || 0);
+  const extraDisc = (ep > 0 ? round2((sub * ep) / 100) : 0) + ea;
+  const baseSubForReward = baseItems.reduce((s, i) => s + i.qty * i.price, 0);
+  const rewardDiscFromPct =
+    rewardDiscPct > 0 ? round2((baseSubForReward * rewardDiscPct) / 100) : 0;
+  const totalRewardDisc = rewardDiscFromPct + rewardDiscAmt;
+  const totalDisc = disc + extraDisc + totalRewardDisc;
+  const incVat = input.includeVat !== false;
+  const vatAmt = incVat ? round2(((sub - totalDisc) * 7) / 107) : 0;
+
+  const vatReps = customer?.vatReps || [];
+  const selRep =
+    input.useVatRep && input.vatRepId != null
+      ? vatReps.find((r) => +r.id === +(input.vatRepId as number | string))
+      : null;
+
+  const origPrices = items.map((i) => {
+    const p = findProduct(i.productId);
+    return p ? +(p.price || 0) : +i.price;
+  });
+  const priceChanged = baseItems.some((i, idx) => {
+    if (promoOverriddenIdx.has(idx)) return false;
+    const p = findProduct(i.productId);
+    return !!p && +i.price !== +(p.price || 0);
+  });
+  const needsApproval = !hasApv && (priceChanged || ep > 0 || ea > 0);
+
+  const soNum = nextDocNum(
+    "SO",
+    sales as unknown as Array<{ [k: string]: unknown }>,
+    "soNum"
+  );
+  const status = needsApproval ? "pending_special_approval" : "pending_delivery";
+
+  const so: BuiltSale = {
+    id: Date.now(),
+    soNum,
+    status,
+    fromQuote: "",
+    customerId: +input.customerId,
+    date: input.date,
+    items,
+    origPrices,
+    includeVat: incVat,
+    vatAmount: vatAmt,
+    payType: input.payType,
+    discountAmt: totalDisc,
+    discPct: cash ? discPctVal : 0,
+    extraDiscPct: ep || 0,
+    extraDiscAmt: ea || 0,
+    rewardDiscPct,
+    rewardDiscAmt: totalRewardDisc,
+    appliedRewards,
+    creditDays: input.payType === "credit" ? +(input.creditDays || 0) : 0,
+    useVatRep: !!input.useVatRep,
+    vatRepName: selRep ? selRep.name : "",
+    vatRepAddress: selRep ? selRep.address || "" : "",
+    vatRepIdCard: selRep ? selRep.idCard || "" : "",
+    note: input.note || "",
+    legacyNum: input.legacyNum || "",
+    eventId: input.eventId || "",
+    eventPackPurchases: [...(input.eventPackPurchases || [])],
+  };
+
+  // Customer promo bookkeeping: mark claimed tiers + remove redeemed wallet
+  // items. No "save to wallet" branch in quick mode (full form only).
+  let customerPatch: SaleCustomer | null = null;
+  const claims = selected.filter((r) => r.source === "claim");
+  const usedWalletIds = selected
+    .filter((r) => r.source === "wallet" && r.walletId != null)
+    .map((r) => r.walletId as number | string);
+  if (customer && (claims.length || usedWalletIds.length)) {
+    const newClaims: NonNullable<SaleCustomer["promoClaims"]> = {
+      ...(customer.promoClaims || {}),
+    };
+    claims.forEach((c) => {
+      const entry = newClaims[c.promoId] || { claimedTierIds: [] };
+      const tierIds = entry.claimedTierIds || [];
+      newClaims[c.promoId] = {
+        ...entry,
+        claimedTierIds: tierIds.includes(c.tierId)
+          ? tierIds
+          : [...tierIds, c.tierId],
+        lastClaimedAt: todayStr(),
+        lastClaimedSO: soNum,
+      };
+    });
+    const finalRewards = (customer.savedRewards || []).filter(
+      (r) => !usedWalletIds.includes(r.id)
+    );
+    customerPatch = {
+      ...customer,
+      promoClaims: newClaims,
+      savedRewards: finalRewards,
+    };
+  }
+
+  const logLabel = "สร้าง SO" + (needsApproval ? " (รออนุมัติ)" : "");
+  return { so, customerPatch, logLabel };
 };
 
 export interface ExpandedPart {

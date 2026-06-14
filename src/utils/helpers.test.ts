@@ -21,12 +21,15 @@ import {
   expandItemParts,
   DEFAULT_SPLIT_PARTS,
   CLASS_M3,
+  buildSalesOrder,
   type Promo,
   type Sale,
   type Product,
   type SaleItem,
   type Contact,
   type Category,
+  type SelectedReward,
+  type SaleCustomer,
 } from "./helpers.js";
 
 describe("round2", () => {
@@ -34,6 +37,248 @@ describe("round2", () => {
     expect(round2(1.234)).toBe(1.23);
     expect(round2(1.235)).toBe(1.24);
     expect(round2("1.005")).toBe(1.01); // EPSILON guard
+  });
+});
+
+describe("buildSalesOrder (parity with Sales.doSave)", () => {
+  const products: Product[] = [
+    { id: 1, brand: "X", name: "A", price: 100, stock: 50 },
+    { id: 2, brand: "Y", name: "B", price: 200, stock: 50 },
+    { id: 3, brand: "Z", name: "Gift", price: 50, stock: 50 },
+  ];
+  const baseCtx = {
+    sales: [] as Sale[],
+    products,
+    contacts: [] as SaleCustomer[],
+    hasApv: true,
+  };
+
+  test("basic cash SO: discount, VAT, items, doc number", () => {
+    const { so } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [
+          { productId: 1, qty: 2, price: 100 },
+          { productId: 2, qty: 1, price: 200 },
+        ],
+        payType: "cash",
+        discPct: 1,
+        includeVat: true,
+      },
+      baseCtx
+    );
+    expect(so.status).toBe("pending_delivery");
+    expect(so.items).toHaveLength(2);
+    expect(so.discountAmt).toBe(4); // 1% of 400
+    expect(so.vatAmount).toBe(25.91); // (400-4)*7/107
+    expect(so.origPrices).toEqual([100, 200]);
+    expect(so.customerId).toBe(5);
+    expect(so.soNum).toMatch(/^SO-\d{4}-\d{2}-\d{3}$/);
+  });
+
+  test("VAT off → vatAmount 0", () => {
+    const { so } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [{ productId: 1, qty: 1, price: 100 }],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+      },
+      baseCtx
+    );
+    expect(so.vatAmount).toBe(0);
+  });
+
+  test("price lowered by non-approver → pending_special_approval", () => {
+    const { so } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [{ productId: 1, qty: 1, price: 90 }],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+      },
+      { ...baseCtx, hasApv: false }
+    );
+    expect(so.status).toBe("pending_special_approval");
+  });
+
+  test("price lowered by approver → pending_delivery", () => {
+    const { so } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [{ productId: 1, qty: 1, price: 90 }],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+      },
+      { ...baseCtx, hasApv: true }
+    );
+    expect(so.status).toBe("pending_delivery");
+  });
+
+  test("per_so percent reward (claim) applies discount + marks claim", () => {
+    const reward: SelectedReward = {
+      promoId: 10,
+      tierId: 101,
+      tier: { id: 101, threshold: 0, rewardType: "percent", rewardValue: 5 },
+      source: "claim",
+      promo: { id: 10 },
+      matchedTotal: 400,
+    };
+    const { so, customerPatch } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [
+          { productId: 1, qty: 2, price: 100 },
+          { productId: 2, qty: 1, price: 200 },
+        ],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+        selectedRewards: [reward],
+      },
+      { ...baseCtx, contacts: [{ id: 5 }], hasApv: false }
+    );
+    expect(so.rewardDiscPct).toBe(5);
+    expect(so.rewardDiscAmt).toBe(20); // 5% of 400 base
+    expect(so.discountAmt).toBe(20);
+    expect(so.status).toBe("pending_delivery"); // rewards alone don't need approval
+    expect(so.appliedRewards).toEqual([
+      { promoId: 10, tierId: 101, source: "claim" },
+    ]);
+    expect(customerPatch?.promoClaims?.[10]?.claimedTierIds).toContain(101);
+  });
+
+  test("fixed reward (claim) → rewardDiscAmt", () => {
+    const reward: SelectedReward = {
+      promoId: 10,
+      tierId: 102,
+      tier: { id: 102, threshold: 0, rewardType: "fixed", rewardValue: 30 },
+      source: "claim",
+      promo: { id: 10 },
+    };
+    const { so } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [{ productId: 1, qty: 1, price: 100 }],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+        selectedRewards: [reward],
+      },
+      { ...baseCtx, contacts: [{ id: 5 }] }
+    );
+    expect(so.rewardDiscAmt).toBe(30);
+    expect(so.discountAmt).toBe(30);
+  });
+
+  test("gift product reward scales by matchedTotal/threshold", () => {
+    const reward: SelectedReward = {
+      promoId: 11,
+      tierId: 111,
+      tier: {
+        id: 111,
+        threshold: 100,
+        rewardType: "product",
+        rewardProductId: 3,
+        scaleReward: true,
+      },
+      source: "claim",
+      promo: { id: 11 },
+      matchedTotal: 250,
+    };
+    const { so } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [{ productId: 1, qty: 2, price: 100 }],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+        selectedRewards: [reward],
+      },
+      { ...baseCtx, contacts: [{ id: 5 }] }
+    );
+    expect(so.items).toHaveLength(2);
+    const gift = so.items[1];
+    expect(gift.productId).toBe(3);
+    expect(gift.qty).toBe(2); // floor(250/100)
+    expect(gift.price).toBe(0);
+    expect(gift.unitPrice).toBe(50);
+  });
+
+  test("special_price override lowers matching item without triggering approval", () => {
+    const reward: SelectedReward = {
+      promoId: 12,
+      tierId: 121,
+      tier: { id: 121, threshold: 0, rewardType: "special_price", specialPrice: 80 },
+      source: "claim",
+      promo: { id: 12, brands: ["X"] },
+    };
+    const { so } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [{ productId: 1, qty: 1, price: 100 }],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+        selectedRewards: [reward],
+      },
+      { ...baseCtx, contacts: [{ id: 5 }], hasApv: false }
+    );
+    expect(so.items[0].price).toBe(80);
+    expect(so.status).toBe("pending_delivery"); // override is not a manual price change
+  });
+
+  test("wallet redemption applies reward and removes wallet entry", () => {
+    const customer: SaleCustomer = {
+      id: 5,
+      savedRewards: [
+        {
+          id: "w1",
+          promoId: 10,
+          tier: { id: 101, threshold: 0, rewardType: "percent", rewardValue: 10 },
+          promo: null,
+        },
+      ],
+    };
+    const reward: SelectedReward = {
+      promoId: 10,
+      tierId: 101,
+      tier: { id: 101, threshold: 0, rewardType: "percent", rewardValue: 10 },
+      source: "wallet",
+      walletId: "w1",
+      promo: null,
+    };
+    const { so, customerPatch } = buildSalesOrder(
+      {
+        customerId: 5,
+        date: "2026-06-14",
+        items: [{ productId: 1, qty: 1, price: 100 }],
+        payType: "cash",
+        discPct: 0,
+        includeVat: false,
+        selectedRewards: [reward],
+      },
+      { ...baseCtx, contacts: [customer] }
+    );
+    expect(so.rewardDiscPct).toBe(10);
+    expect(so.appliedRewards[0]).toEqual({
+      promoId: 10,
+      tierId: 101,
+      source: "wallet",
+      walletId: "w1",
+    });
+    expect(customerPatch?.savedRewards).toHaveLength(0);
   });
 });
 
