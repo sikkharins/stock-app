@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { IB } from "../../utils/constants.js";
-import { fmt, todayStr, toBE } from "../../utils/helpers.js";
+import { fmt, todayStr, toBE, shipmentTotals } from "../../utils/helpers.js";
 import { Modal, MBtns } from "../ui/Modal.jsx";
 import StatCard from "../ui/StatCard.jsx";
 import Field from "../ui/Field.jsx";
@@ -44,7 +44,10 @@ export default function ARAP({sh, sub, setSub, arList, autoTag, cN, search, setS
   const[bapMethod,setBapMethod]=useState("โอนเงินออก");const[bapAccId,setBapAccId]=useState(bankAccs[0]?.id||1);const[bapDate,setBapDate]=useState(todayStr());const[bapNote,setBapNote]=useState("");
 
   // apList — ARAP-only, compute internally
-  const apList=useMemo(()=>pos.filter(po=>po.status==="received").map(po=>{const sup=contacts.find(c=>c.id===po.supplierId);const total=po.items.reduce((s,i)=>s+i.qty*i.cost,0);const paid=payments.filter(p=>p.refId===po.poNum&&p.type==="ap").reduce((s,p)=>s+(+p.amount||0),0);const rem=total-paid;return{...po,supName:sup?cN(sup):"-",total,paid,cnDeduct:0,remaining:rem,status2:paid===0?"unpaid":rem<=0?"paid":"partial"};}),[pos,contacts,payments,cN]);
+  // AP includes fully-received POs AND partially-shipped drop-ship POs. The
+  // amount owed reflects the qty actually received (delivered shipments) × cost;
+  // legacy received POs without `shipments` bill the full ordered qty as before.
+  const apList=useMemo(()=>pos.filter(po=>po.status==="received"||po.status==="partial").map(po=>{const sup=contacts.find(c=>c.id===po.supplierId);const total=(po.shipments&&po.shipments.length)?shipmentTotals(po).reduce((s,r)=>{const line=po.items.find(i=>+i.productId===r.productId);return s+r.received*(line?line.cost:0);},0):po.items.reduce((s,i)=>s+i.qty*i.cost,0);const paid=payments.filter(p=>p.refId===po.poNum&&p.type==="ap").reduce((s,p)=>s+(+p.amount||0),0);const rem=total-paid;return{...po,supName:sup?cN(sup):"-",total,paid,cnDeduct:0,remaining:rem,status2:paid===0?"unpaid":rem<=0?"paid":"partial"};}).filter(po=>po.status==="received"||po.total>0),[pos,contacts,payments,cN]);
 
   const list=sub==="ap"?apList:arList;
   const filtered=list.filter(i=>fSt==="all"||i.status2===fSt).filter(i=>{if(!search)return true;const q=search.toLowerCase();return(i.soNum||i.poNum||"").toLowerCase().includes(q)||(i.custName||i.supName||"").toLowerCase().includes(q);}).sort((a,b)=>{if((a.overdue||false)!==(b.overdue||false))return a.overdue?-1:1;if(a.status2!==b.status2){const ord={unpaid:0,partial:1,cn_credit:2,paid:3};return(ord[a.status2]??9)-(ord[b.status2]??9);}return(b.date||"").localeCompare(a.date||"");});

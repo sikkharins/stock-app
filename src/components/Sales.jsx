@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo, nextDocNum } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo, nextDocNum, poStatusFromShipments } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -140,7 +140,7 @@ function SOList({sh}){
   const[reviewMode,setReviewMode]=useState(null);
   const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;const isDropship=!!editSO?.dropShip;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(!isDropship&&+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);setReviewMode({soId});};
   const confirmAndSave=()=>{if(!reviewMode)return;const id=reviewMode.soId;setReviewMode(null);doSave(id);};
-  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO&&cu?.role!=="Admin"){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.linkedPO){setPOs(p=>p.map(x=>x.linkedSO===so.soNum?{...x,linkedSO:""}:x));}if(so.status==="completed"){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");if(soPays.length){setPayments(prev=>prev.filter(p=>!(p.refId===so.soNum&&p.type==="ar")));setBankTxns(prev=>prev.filter(t=>!soPays.some(p=>t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="in")));setCheques(prev=>prev.filter(c=>!soPays.some(p=>p.method==="เช็ค"&&p.chequeNo&&c.chequeNo===p.chequeNo&&c.refId===p.refId)));}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
+  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO&&cu?.role!=="Admin"){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.linkedPO){setPOs(p=>p.map(x=>{if(x.poNum!==so.linkedPO)return x;const hadShip=(x.shipments||[]).some(sh=>sh.soNum===so.soNum);const linkedSO=x.linkedSO===so.soNum?"":x.linkedSO;const shipments=(x.shipments||[]).filter(sh=>sh.soNum!==so.soNum);const base={...x,linkedSO,shipments};return hadShip?{...base,status:poStatusFromShipments(base)}:base;}));}if(so.status==="completed"&&!so.linkedPO){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");if(soPays.length){setPayments(prev=>prev.filter(p=>!(p.refId===so.soNum&&p.type==="ar")));setBankTxns(prev=>prev.filter(t=>!soPays.some(p=>t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="in")));setCheques(prev=>prev.filter(c=>!soPays.some(p=>p.method==="เช็ค"&&p.chequeNo&&c.chequeNo===p.chequeNo&&c.refId===p.refId)));}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
   const deliveringRef=useRef(new Set());
   const confirmDelivery=id=>{
     if(deliveringRef.current.has(id))return;
@@ -148,8 +148,13 @@ function SOList({sh}){
     deliveringRef.current.add(id);
     if(so.dropShip&&so.linkedPO){
       for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){addLog(mkLog(pr.id,"in",it.qty,pr.stock,pr.stock+it.qty,so.linkedPO,"รับของ PO (ส่งนอกสถานที่)",cu.username));addLog(mkLog(pr.id,"out",it.qty,pr.stock+it.qty,pr.stock,so.soNum,"จัดส่ง (ส่งนอกสถานที่)",cu.username));}}
-      setPOs(p=>p.map(x=>x.poNum===so.linkedPO?{...x,status:"received"}:x));
-      addA("จัดส่ง SO (ส่งนอกสถานที่)",so.soNum);addA("รับของ PO อัตโนมัติ",so.linkedPO);
+      setPOs(p=>p.map(x=>{
+        if(x.poNum!==so.linkedPO)return x;
+        if(!x.shipments||!x.shipments.length)return{...x,status:"received"}; // legacy single-SO drop-ship
+        const shipments=x.shipments.map(sh=>sh.soNum===so.soNum?{...sh,delivered:true}:sh);
+        return{...x,shipments,status:poStatusFromShipments({...x,shipments})};
+      }));
+      addA("จัดส่ง SO (ส่งนอกสถานที่)",so.soNum);addA("อัปเดตสถานะ PO",so.linkedPO);
     }else{
       for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr)addLog(mkLog(pr.id,"out",it.qty,pr.stock,Math.max(0,pr.stock-it.qty),so.soNum,"จัดส่ง",cu.username));}
       setProducts(pp=>pp.map(pr=>{const it=so.items.find(i=>i.productId===pr.id);return it?{...pr,stock:Math.max(0,pr.stock-it.qty)}:pr;}));addA("จัดส่ง SO",so.soNum);

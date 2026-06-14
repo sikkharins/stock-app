@@ -973,6 +973,190 @@ export const buildSalesOrder = (
   return { so, customerPatch, logLabel };
 };
 
+// ───────────────── Drop-ship partial shipment / backorder ─────────────────
+// A drop-ship PO can now be shipped in multiple partial rounds. Each round
+// records a `shipment` and spawns a right-sized SO; the PO stays open until
+// every ordered unit is both shipped and delivered. Pure helpers below drive
+// the per-line roll-up, the PO status, and the per-round SO.
+
+export interface POShipmentItem {
+  productId: number | string;
+  qty: number;
+}
+
+export interface POShipment {
+  id?: number;
+  date?: string;
+  by?: string;
+  soNum: string;
+  items: POShipmentItem[];
+  delivered?: boolean;
+}
+
+export interface DropshipPOItem {
+  productId: number | string;
+  qty: number | string;
+  cost?: number;
+  sellPrice?: number;
+}
+
+export interface DropshipPO {
+  poNum?: string;
+  status?: string;
+  linkedSO?: string;
+  dropShipCustomerId?: number | string | null;
+  items: DropshipPOItem[];
+  shipments?: POShipment[];
+}
+
+export interface POLineRollup {
+  productId: number;
+  ordered: number;
+  committed: number;
+  received: number;
+  remaining: number;
+}
+
+// Per-product roll-up across a PO's shipments.
+//   committed = Σ qty of every shipment (drives "remaining" + blocks double entry)
+//   received  = Σ qty of shipments already delivered (drives status + AP)
+export const shipmentTotals = (po: DropshipPO): POLineRollup[] => {
+  const shipments = po.shipments || [];
+  const qtyIn = (keep: (s: POShipment) => boolean, pid: number) =>
+    shipments
+      .filter(keep)
+      .reduce(
+        (sum, s) =>
+          sum +
+          (s.items || [])
+            .filter((it) => +it.productId === pid)
+            .reduce((a, it) => a + (+it.qty || 0), 0),
+        0
+      );
+  return (po.items || []).map((line) => {
+    const pid = +line.productId;
+    const ordered = +line.qty || 0;
+    const committed = qtyIn(() => true, pid);
+    const received = qtyIn((s) => !!s.delivered, pid);
+    return {
+      productId: pid,
+      ordered,
+      committed,
+      received,
+      remaining: Math.max(0, ordered - committed),
+    };
+  });
+};
+
+// Drop-ship PO status derived from its shipments:
+//   no shipments → "approved" (awaiting first shipment)
+//   fully committed AND every shipment delivered → "received"
+//   otherwise → "partial"
+export const poStatusFromShipments = (po: DropshipPO): string => {
+  const shipments = po.shipments || [];
+  if (shipments.length === 0) return "approved";
+  const roll = shipmentTotals(po);
+  const fullyCommitted = roll.every((r) => r.committed >= r.ordered);
+  const allDelivered = shipments.every((s) => !!s.delivered);
+  return fullyCommitted && allDelivered ? "received" : "partial";
+};
+
+export interface BuildDropshipSOContact {
+  id: number | string;
+  defaultCreditDays?: number;
+  defaultVat?: boolean;
+}
+
+export interface BuildDropshipSOCtx {
+  sales: Array<{ [k: string]: unknown }>;
+  products: Product[];
+  contacts: BuildDropshipSOContact[];
+}
+
+export interface DropshipShipmentSO {
+  id: number;
+  soNum: string;
+  customerId: number;
+  date: string;
+  status: string;
+  items: { productId: number; qty: number; price: number }[];
+  origPrices: number[];
+  includeVat: boolean;
+  vatAmount: number;
+  payType: string;
+  discountAmt: number;
+  discPct: number;
+  extraDiscPct: number;
+  extraDiscAmt: number;
+  creditDays: number;
+  useVatRep: boolean;
+  vatRepName: string;
+  vatRepAddress: string;
+  vatRepIdCard: string;
+  note: string;
+  fromQuote: string;
+  linkedPO: string;
+  dropShip: boolean;
+}
+
+// Build a right-sized pending_delivery SO for one drop-ship shipment round.
+// Mirrors the original auto-SO shape but uses the actually-shipped qty per line
+// (skipping 0-qty lines) and tags the round number in the note.
+export const buildDropshipShipmentSO = (
+  po: DropshipPO,
+  shipped: POShipmentItem[],
+  ctx: BuildDropshipSOCtx,
+  roundNo: number
+): DropshipShipmentSO => {
+  const findProduct = (id: number | string) =>
+    ctx.products.find((p) => +p.id === +id);
+  const soItems = shipped
+    .filter((s) => (+s.qty || 0) > 0)
+    .map((s) => {
+      const line = (po.items || []).find((i) => +i.productId === +s.productId);
+      const product = findProduct(s.productId);
+      const price = (line && line.sellPrice) || (product && product.price) || 0;
+      return { productId: +s.productId, qty: +s.qty, price: +price };
+    });
+  const cust = ctx.contacts.find(
+    (c) => +c.id === +(po.dropShipCustomerId as number)
+  );
+  const sub = soItems.reduce((s, i) => s + i.qty * i.price, 0);
+  const defCredit = cust?.defaultCreditDays || 45;
+  const defVat = cust?.defaultVat !== false;
+  const vatAmt = defVat ? round2((sub * 7) / 107) : 0;
+  return {
+    id: Date.now(),
+    soNum: nextDocNum("SO", ctx.sales, "soNum"),
+    customerId: +(po.dropShipCustomerId as number),
+    date: todayStr(),
+    status: "pending_delivery",
+    items: soItems,
+    origPrices: soItems.map((i) => +i.price),
+    includeVat: defVat,
+    vatAmount: vatAmt,
+    payType: "credit",
+    discountAmt: 0,
+    discPct: 0,
+    extraDiscPct: 0,
+    extraDiscAmt: 0,
+    creditDays: defCredit,
+    useVatRep: false,
+    vatRepName: "",
+    vatRepAddress: "",
+    vatRepIdCard: "",
+    note:
+      "สร้างจาก " +
+      (po.poNum || "") +
+      " (ส่งนอกสถานที่ — รอบที่ " +
+      roundNo +
+      ")",
+    fromQuote: "",
+    linkedPO: po.poNum || "",
+    dropShip: true,
+  };
+};
+
 export interface ExpandedPart {
   productId: number | string;
   partKey: string;            // "" for non-split

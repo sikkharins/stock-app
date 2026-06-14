@@ -22,6 +22,9 @@ import {
   DEFAULT_SPLIT_PARTS,
   CLASS_M3,
   buildSalesOrder,
+  shipmentTotals,
+  poStatusFromShipments,
+  buildDropshipShipmentSO,
   type Promo,
   type Sale,
   type Product,
@@ -1101,5 +1104,163 @@ describe("consolidatePickList — split items", () => {
     expect(list).toHaveLength(3);
     expect(list.find((e) => e.partKey === "")?.totalQty).toBe(2);
     expect(list.find((e) => e.partKey === "hot")?.totalQty).toBe(1);
+  });
+});
+
+describe("shipmentTotals", () => {
+  const po = (shipments: unknown[]) => ({
+    poNum: "PO-1",
+    items: [
+      { productId: 1, qty: 10, cost: 50, sellPrice: 100 },
+      { productId: 2, qty: 4, cost: 20, sellPrice: 40 },
+    ],
+    shipments,
+  });
+
+  test("no shipments → committed/received 0, remaining = ordered", () => {
+    const t = shipmentTotals(po([]) as never);
+    expect(t.find((r) => r.productId === 1)).toMatchObject({
+      ordered: 10,
+      committed: 0,
+      received: 0,
+      remaining: 10,
+    });
+    expect(t.find((r) => r.productId === 2)).toMatchObject({
+      ordered: 4,
+      remaining: 4,
+    });
+  });
+
+  test("delivered partial shipment counts as committed AND received", () => {
+    const t = shipmentTotals(
+      po([
+        { id: 1, soNum: "SO-1", delivered: true, items: [{ productId: 1, qty: 7 }] },
+      ]) as never
+    );
+    expect(t.find((r) => r.productId === 1)).toMatchObject({
+      committed: 7,
+      received: 7,
+      remaining: 3,
+    });
+  });
+
+  test("undelivered shipment is committed but not received", () => {
+    const t = shipmentTotals(
+      po([
+        { id: 1, soNum: "SO-1", delivered: false, items: [{ productId: 1, qty: 7 }] },
+      ]) as never
+    );
+    expect(t.find((r) => r.productId === 1)).toMatchObject({
+      committed: 7,
+      received: 0,
+      remaining: 3,
+    });
+  });
+
+  test("sums across multiple shipments", () => {
+    const t = shipmentTotals(
+      po([
+        { id: 1, soNum: "SO-1", delivered: true, items: [{ productId: 1, qty: 7 }] },
+        { id: 2, soNum: "SO-2", delivered: false, items: [{ productId: 1, qty: 3 }] },
+      ]) as never
+    );
+    expect(t.find((r) => r.productId === 1)).toMatchObject({
+      ordered: 10,
+      committed: 10,
+      received: 7,
+      remaining: 0,
+    });
+  });
+});
+
+describe("poStatusFromShipments", () => {
+  const mk = (shipments: unknown[]) => ({
+    items: [{ productId: 1, qty: 10, cost: 50, sellPrice: 100 }],
+    shipments,
+  });
+
+  test("no shipments → approved", () => {
+    expect(poStatusFromShipments(mk([]) as never)).toBe("approved");
+  });
+
+  test("partial when shipped < ordered even if delivered", () => {
+    expect(
+      poStatusFromShipments(
+        mk([
+          { id: 1, soNum: "SO-1", delivered: true, items: [{ productId: 1, qty: 7 }] },
+        ]) as never
+      )
+    ).toBe("partial");
+  });
+
+  test("partial when fully shipped but a shipment not yet delivered", () => {
+    expect(
+      poStatusFromShipments(
+        mk([
+          { id: 1, soNum: "SO-1", delivered: false, items: [{ productId: 1, qty: 10 }] },
+        ]) as never
+      )
+    ).toBe("partial");
+  });
+
+  test("received when fully shipped and all delivered", () => {
+    expect(
+      poStatusFromShipments(
+        mk([
+          { id: 1, soNum: "SO-1", delivered: true, items: [{ productId: 1, qty: 7 }] },
+          { id: 2, soNum: "SO-2", delivered: true, items: [{ productId: 1, qty: 3 }] },
+        ]) as never
+      )
+    ).toBe("received");
+  });
+});
+
+describe("buildDropshipShipmentSO", () => {
+  const products: Product[] = [
+    { id: 1, brand: "X", name: "A", price: 100, stock: 0 },
+    { id: 2, brand: "Y", name: "B", price: 40, stock: 0 },
+  ];
+
+  test("right-sized SO: qty from shipped, price from sellPrice, skips 0-qty, round note", () => {
+    const so = buildDropshipShipmentSO(
+      {
+        poNum: "PO-2026-06-001",
+        dropShipCustomerId: 9,
+        items: [
+          { productId: 1, qty: 10, cost: 50, sellPrice: 120 },
+          { productId: 2, qty: 4, cost: 20, sellPrice: 40 },
+        ],
+      },
+      [
+        { productId: 1, qty: 7 },
+        { productId: 2, qty: 0 },
+      ],
+      { sales: [], products, contacts: [{ id: 9, defaultCreditDays: 30, defaultVat: true }] },
+      1
+    );
+    expect(so.items).toHaveLength(1);
+    expect(so.items[0]).toMatchObject({ productId: 1, qty: 7, price: 120 });
+    expect(so.status).toBe("pending_delivery");
+    expect(so.dropShip).toBe(true);
+    expect(so.linkedPO).toBe("PO-2026-06-001");
+    expect(so.customerId).toBe(9);
+    expect(so.payType).toBe("credit");
+    expect(so.creditDays).toBe(30);
+    expect(so.vatAmount).toBe(round2((7 * 120 * 7) / 107));
+    expect(so.note).toContain("รอบที่ 1");
+    expect(so.soNum).toMatch(/^SO-\d{4}-\d{2}-\d{3}$/);
+  });
+
+  test("falls back to product price when sellPrice missing; vat off + default credit when customer prefers", () => {
+    const so = buildDropshipShipmentSO(
+      { poNum: "PO-X", dropShipCustomerId: 9, items: [{ productId: 1, qty: 5 }] },
+      [{ productId: 1, qty: 5 }],
+      { sales: [], products, contacts: [{ id: 9, defaultVat: false }] },
+      2
+    );
+    expect(so.items[0].price).toBe(100);
+    expect(so.includeVat).toBe(false);
+    expect(so.vatAmount).toBe(0);
+    expect(so.creditDays).toBe(45);
   });
 });
