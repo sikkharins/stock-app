@@ -5,12 +5,17 @@ import {
   findClaimableTiers, buildSalesOrder,
 } from "../utils/helpers.js";
 import { DISC_OPTS, CREDIT_OPTS, IB } from "../utils/constants.js";
+import BrandChipRow from "./ui/BrandChipRow.tsx";
+
+// สี swatch สำหรับชื่อเล่นร้าน (ต่อเซลแต่ละคน) — "" = ค่าปกติ
+const NAME_SWATCHES = ["", "#e24b4a", "#e08600", "#1d9e75", "#378add", "#7f77dd", "#d4537e"];
+const BG_SWATCHES = ["", "rgba(226,75,74,0.20)", "rgba(245,158,11,0.22)", "rgba(34,197,94,0.20)", "rgba(59,130,246,0.20)", "rgba(168,85,247,0.20)", "rgba(236,72,153,0.20)"];
 
 // Quick SO — โหมดสร้างใบขายเร็วบนมือถือ (stepper 3 ขั้น). แยกจากฟอร์มเต็มใน Sales.jsx
 // ขั้น 1 ลูกค้า (เรียงยอดซื้อ, ค้นหาล่าง) → 2 สินค้า (POS, +1/+5, ค้นหาล่าง) → 3 ชำระ+โปรย่อ+ยืนยัน
 // บันทึกผ่าน buildSalesOrder เพื่อให้ SO เหมือนฟอร์มเดิมเป๊ะ (สต็อกจอง/เลขเอกสาร/อนุมัติพิเศษ)
 export default function QuickSO({ sh, onClose }) {
-  const { pN, cN, canC, canApv, sales, setSales, products, contacts, setContacts, addA, cu, promos = [], events = [] } = sh;
+  const { pN, cN, canC, canApv, sales, setSales, products, contacts, setContacts, addA, cu, cats = [], promos = [], events = [] } = sh;
   const hasApv = canApv ? canApv("sales") : false;
   const isSU = cu?.role === "SalesManager" ? "" : cu?.salesName || "";
 
@@ -32,8 +37,11 @@ export default function QuickSO({ sh, onClose }) {
   const [selectedRewards, setSelectedRewards] = useState([]);
   const [custSearch, setCustSearch] = useState("");
   const [prodSearch, setProdSearch] = useState("");
+  const [fBrand, setFBrand] = useState("");
+  const [fCat, setFCat] = useState("");
   const [showAdv, setShowAdv] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [labelDraft, setLabelDraft] = useState(null); // {custId,nick,nameColor,bgColor} | null
 
   const date = todayStr();
 
@@ -59,6 +67,14 @@ export default function QuickSO({ sh, onClose }) {
     .sort((a, b) => (prodSold[b.id] || 0) - (prodSold[a.id] || 0)),
     [products, prodSold]);
 
+  // ── ยี่ห้อ + หมวด: นับจำนวน + ยอดขาย แล้วเรียงตามยอดขาย (มาก→น้อย) ──
+  const brandCounts = useMemo(() => { const m = {}; for (const p of prodList) if (p.brand) m[p.brand] = (m[p.brand] || 0) + 1; return m; }, [prodList]);
+  const brandSales = useMemo(() => { const m = {}; for (const p of products) if (p.brand) m[p.brand] = (m[p.brand] || 0) + (prodSold[p.id] || 0); return m; }, [products, prodSold]);
+  const brandsSorted = useMemo(() => Object.keys(brandCounts).sort((a, b) => (brandSales[b] || 0) - (brandSales[a] || 0)), [brandCounts, brandSales]);
+  const catCounts = useMemo(() => { const m = {}; for (const p of prodList) if (p.categoryId != null) m[p.categoryId] = (m[p.categoryId] || 0) + 1; return m; }, [prodList]);
+  const catSales = useMemo(() => { const m = {}; for (const p of products) if (p.categoryId != null) m[p.categoryId] = (m[p.categoryId] || 0) + (prodSold[p.id] || 0); return m; }, [products, prodSold]);
+  const catsSorted = useMemo(() => (cats || []).filter(c => (catCounts[c.id] || 0) > 0).sort((a, b) => (catSales[b.id] || 0) - (catSales[a.id] || 0)), [cats, catCounts, catSales]);
+
   const getAvail = (pid) => {
     const pr = products.find(x => x.id === +pid);
     if (!pr) return 0;
@@ -74,6 +90,23 @@ export default function QuickSO({ sh, onClose }) {
     [prodList, qtys, prices]);
   const curCust = customerId ? contacts.find(c => c.id === +customerId) : null;
   const curVatReps = (curCust && curCust.vatReps) || [];
+
+  // ── ชื่อเล่น/สีร้าน ต่อเซลแต่ละคน (เก็บใน contact.soNicks[username]) ──
+  const uKey = cu?.username || cu?.id || "_";
+  const labelOf = (c) => (c.soNicks && c.soNicks[uKey]) || {};
+  const openLabelEditor = (c) => { const lb = labelOf(c); setLabelDraft({ custId: c.id, nick: lb.nick || "", nameColor: lb.nameColor || "", bgColor: lb.bgColor || "" }); };
+  const saveLabel = () => {
+    if (!labelDraft) return;
+    const { custId, nick, nameColor, bgColor } = labelDraft;
+    setContacts(prev => prev.map(c => c.id === custId ? { ...c, soNicks: { ...(c.soNicks || {}), [uKey]: { nick: (nick || "").trim(), nameColor, bgColor } } } : c));
+    setLabelDraft(null);
+  };
+  const clearLabel = () => {
+    if (!labelDraft) return;
+    const custId = labelDraft.custId;
+    setContacts(prev => prev.map(c => { if (c.id !== custId || !c.soNicks) return c; const nn = { ...c.soNicks }; delete nn[uKey]; return { ...c, soNicks: nn }; }));
+    setLabelDraft(null);
+  };
 
   const addQty = (pid, n) => setQtys(q => ({ ...q, [pid]: Math.max(0, (q[pid] || 0) + n) }));
   const setQty = (pid, v) => { const n = Math.max(0, Math.floor(+v || 0)); setQtys(q => ({ ...q, [pid]: n })); };
@@ -171,33 +204,31 @@ export default function QuickSO({ sh, onClose }) {
   const pill = (n) => ({ flex: 1, textAlign: "center", fontSize: 12, padding: "6px 0", borderRadius: 999, cursor: "pointer", border: "none", fontFamily: "inherit", background: step === n ? "var(--blue)" : "var(--bg2)", color: step === n ? "#fff" : "var(--dim)" });
   const listArea = { flex: 1, overflowY: "auto", padding: "4px 12px" };
   const bottomBar = { flexShrink: 0, borderTop: "0.5px solid var(--line)", padding: "10px 12px" };
-  const rowBtn = (active) => ({ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 10, marginBottom: 6, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (active ? "var(--blue)" : "var(--line)"), background: active ? "var(--blue-bg)" : "var(--panel)", color: "var(--text)" });
   const stepBtn = { height: 28, padding: "0 9px", fontSize: 12, borderRadius: 7, border: "1px solid var(--line)", background: "var(--bg2)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit" };
   const primaryBtn = (on) => ({ height: 42, padding: "0 16px", border: "none", borderRadius: 9, fontSize: 14, fontWeight: 600, fontFamily: "inherit", cursor: on ? "pointer" : "not-allowed", background: on ? "var(--blue)" : "var(--hover2)", color: on ? "#fff" : "var(--dim)", opacity: on ? 1 : 0.7 });
-  const searchWrap = { position: "relative", marginTop: 8 };
-  const searchInput = { ...IB, height: 40, paddingLeft: 14 };
 
   // ── ขั้น 1: ลูกค้า ──
   const panelCustomer = () => {
     const s = custSearch.toLowerCase();
-    const list = s ? custs.filter(c => (cN(c) || "").toLowerCase().includes(s)) : custs;
+    const list = s ? custs.filter(c => (cN(c) || "").toLowerCase().includes(s) || (labelOf(c).nick || "").toLowerCase().includes(s)) : custs;
     return <div style={{ flex: "0 0 33.3333%", height: "100%", display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <div style={{ fontSize: 11, color: "var(--faint)", padding: "2px 14px 4px" }}>เรียงตามยอดซื้อ · ตำแหน่งคงที่</div>
-      <div style={listArea}>
-        {list.length === 0 && <div style={{ padding: "16px 4px", color: "var(--dim)", fontSize: 13 }}>ไม่พบลูกค้า</div>}
-        {list.map(c => {
-          const cond = c.defaultPayType === "credit" ? ("เครดิต " + (c.defaultCreditDays || 45)) : "เงินสด";
-          return <button key={c.id} onClick={() => selectCustomer(c)} style={rowBtn(String(c.id) === customerId)}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>{cN(c)}</div>
-              <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 1 }}>{cond}{c.defaultDiscount ? " · ลด " + c.defaultDiscount + "%" : ""}</div>
-            </div>
-            <span style={{ fontSize: 11, color: "var(--faint)", flexShrink: 0 }}>{"฿" + fmt(Math.round(custRevenue[c.id] || 0))}</span>
-          </button>;
-        })}
+      <div style={{ padding: "6px 12px 4px" }}>
+        <div style={{ position: "relative" }}><input value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="ค้นหาลูกค้า" style={{ ...IB, height: 40, paddingLeft: 14 }} /></div>
       </div>
-      <div style={bottomBar}>
-        <div style={searchWrap}><input value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="ค้นหาลูกค้า" style={searchInput} /></div>
+      <div style={{ fontSize: 11, color: "var(--faint)", padding: "0 14px 4px" }}>เรียงตามยอดซื้อ · แตะดินสอเพื่อตั้งชื่อเล่น/สี</div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignContent: "start" }}>
+        {list.length === 0 && <div style={{ gridColumn: "1 / -1", padding: "16px 4px", color: "var(--dim)", fontSize: 13 }}>ไม่พบลูกค้า</div>}
+        {list.map(c => {
+          const lb = labelOf(c);
+          const sel = String(c.id) === customerId;
+          const cond = c.defaultPayType === "credit" ? ("เครดิต " + (c.defaultCreditDays || 45)) : "เงินสด";
+          return <div key={c.id} onClick={() => selectCustomer(c)} style={{ position: "relative", display: "flex", flexDirection: "column", justifyContent: "center", minHeight: 66, padding: "10px 28px 10px 11px", borderRadius: 10, cursor: "pointer", border: "1.5px solid " + (sel ? "var(--blue)" : "var(--line)"), background: lb.bgColor || (sel ? "var(--blue-bg)" : "var(--panel)") }}>
+            <div style={{ fontSize: 22, fontWeight: 600, color: lb.nameColor || "var(--text)", lineHeight: 1.2, wordBreak: "break-word" }}>{lb.nick || cN(c)}</div>
+            <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 3 }}>{cond}{c.defaultDiscount ? " · ลด " + c.defaultDiscount + "%" : ""}</div>
+            <div style={{ fontSize: 10, color: "var(--faint)", marginTop: 1 }}>{"฿" + fmt(Math.round(custRevenue[c.id] || 0))}</div>
+            <span onClick={e => { e.stopPropagation(); openLabelEditor(c); }} title="ตั้งชื่อเล่น/สี" style={{ position: "absolute", top: 5, right: 6, fontSize: 14, color: "var(--dim)", padding: 2, lineHeight: 1 }}>✎</span>
+          </div>;
+        })}
       </div>
     </div>;
   };
@@ -205,9 +236,23 @@ export default function QuickSO({ sh, onClose }) {
   // ── ขั้น 2: สินค้า ──
   const panelProducts = () => {
     const s = prodSearch.toLowerCase();
-    const list = s ? prodList.filter(p => (pN(p) || "").toLowerCase().includes(s) || (p.brand || "").toLowerCase().includes(s) || (p.code || "").toLowerCase().includes(s)) : prodList;
+    const list = prodList.filter(p => {
+      if (fBrand && p.brand !== fBrand) return false;
+      if (fCat !== "" && p.categoryId !== +fCat) return false;
+      if (s && !((pN(p) || "").toLowerCase().includes(s) || (p.brand || "").toLowerCase().includes(s) || (p.code || "").toLowerCase().includes(s))) return false;
+      return true;
+    });
     return <div style={{ flex: "0 0 33.3333%", height: "100%", display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <div style={{ fontSize: 11, color: "var(--faint)", padding: "2px 14px 4px" }}>ขายดีสุดอยู่บน · พิมพ์จำนวน หรือกด +1 / +5</div>
+      <div style={{ padding: "6px 12px 6px" }}>
+        <input value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="ค้นหาสินค้า / รหัส" style={{ ...IB, height: 40, paddingLeft: 14 }} />
+      </div>
+      <div style={{ display: "flex", padding: "0 12px 6px" }}>
+        <BrandChipRow brands={brandsSorted} counts={brandCounts} value={fBrand} onChange={setFBrand} />
+      </div>
+      {catsSorted.length > 0 && <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "0 12px 6px" }}>
+        {catsSorted.map(c => { const on = String(fCat) === String(c.id); return <button key={c.id} onClick={() => setFCat(on ? "" : c.id)} style={{ flexShrink: 0, fontSize: 12, padding: "5px 12px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit", border: "1.5px solid " + (on ? "var(--blue)" : "var(--line)"), background: on ? "var(--blue-bg)" : "var(--panel)", color: on ? "var(--blue)" : "var(--text)" }}>{c.name} <span style={{ fontSize: 10, color: on ? "var(--blue)" : "var(--dim)" }}>{catCounts[c.id] || 0}</span></button>; })}
+      </div>}
+      <div style={{ fontSize: 11, color: "var(--faint)", padding: "0 14px 4px" }}>ขายดีสุดอยู่บน · พิมพ์จำนวน หรือกด +1 / +5</div>
       <div style={listArea}>
         {list.length === 0 && <div style={{ padding: "16px 4px", color: "var(--dim)", fontSize: 13 }}>ไม่พบสินค้า</div>}
         {list.slice(0, 80).map(p => {
@@ -236,7 +281,6 @@ export default function QuickSO({ sh, onClose }) {
           <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: "var(--dim)" }}>{itemCount + " รายการ"}</div><div style={{ fontSize: 15, fontWeight: 600 }}>{"฿" + fmt(sub)}</div></div>
           <button onClick={() => goStep(3)} disabled={!canStep3} style={primaryBtn(canStep3)}>ถัดไป</button>
         </div>
-        <div style={searchWrap}><input value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="ค้นหาสินค้า / รหัส" style={searchInput} /></div>
       </div>
     </div>;
   };
@@ -374,5 +418,34 @@ export default function QuickSO({ sh, onClose }) {
         </div>
       </div>
     </div>
+    {labelDraft && (() => {
+      const c = contacts.find(x => x.id === labelDraft.custId);
+      const fallback = (c && cN(c)) || "ตัวอย่าง";
+      return <div onClick={e => { e.stopPropagation(); setLabelDraft(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 10001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: "min(360px,100%)", background: "var(--panel)", borderRadius: 14, padding: 18, maxHeight: "90vh", overflowY: "auto" }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>ตั้งชื่อเล่น / สี (เฉพาะของคุณ)</div>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 4 }}>ชื่อเล่นร้าน</div>
+          <input value={labelDraft.nick} onChange={e => setLabelDraft(d => ({ ...d, nick: e.target.value }))} placeholder={fallback} style={{ ...IB, marginBottom: 14 }} />
+          <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 6 }}>สีชื่อ</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+            {NAME_SWATCHES.map(col => <button key={col || "def"} onClick={() => setLabelDraft(d => ({ ...d, nameColor: col }))} style={{ width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 15, border: (labelDraft.nameColor === col ? "2.5px solid var(--blue)" : "1px solid var(--line)"), background: "var(--bg2)", color: col || "var(--text)" }}>{col ? "ก" : "—"}</button>)}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 6 }}>สีพื้นหลัง</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+            {BG_SWATCHES.map(col => <button key={col || "def"} onClick={() => setLabelDraft(d => ({ ...d, bgColor: col }))} style={{ width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 11, color: "var(--dim)", display: "flex", alignItems: "center", justifyContent: "center", border: (labelDraft.bgColor === col ? "2.5px solid var(--blue)" : "1px solid var(--line)"), background: col || "var(--panel)" }}>{col ? "" : "—"}</button>)}
+          </div>
+          <div style={{ marginBottom: 16, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line)", background: labelDraft.bgColor || "var(--panel)" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: labelDraft.nameColor || "var(--text)" }}>{labelDraft.nick || fallback}</div>
+            <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>ตัวอย่างการ์ด</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={clearLabel} style={{ ...stepBtn, height: 40, color: "var(--red)" }}>ล้าง</button>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => setLabelDraft(null)} style={{ ...stepBtn, height: 40 }}>ยกเลิก</button>
+            <button onClick={saveLabel} style={{ ...primaryBtn(true), height: 40 }}>บันทึก</button>
+          </div>
+        </div>
+      </div>;
+    })()}
   </div>;
 }
