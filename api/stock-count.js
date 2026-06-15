@@ -126,3 +126,50 @@ export function parseStockCountResponse(apiData) {
   const rawPiles = Array.isArray(parsed && parsed.piles) ? parsed.piles : [];
   return { piles: rawPiles.map(coercePile).filter(Boolean) };
 }
+
+export const config = { api: { bodyParser: { sizeLimit: "8mb" } } };
+
+export default async function handler(req, res) {
+  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGIN || "https://stock-app-gray-seven.vercel.app").split(",");
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
+
+  try {
+    const { image, catalog, model } = req.body || {};
+    if (!image || !image.base64) return res.status(400).json({ error: "Missing image.base64" });
+    const mediaType = image.mediaType || "image/jpeg";
+    const modelId = resolveModel(model);
+    const systemPrompt = buildSystemPrompt(formatCatalog(catalog || []));
+    const body = buildRequestBody({ modelId, base64: image.base64, mediaType, systemPrompt });
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => null);
+      const errMsg = (errBody && errBody.error && (errBody.error.message || errBody.error.type)) || response.statusText;
+      return res.status(response.status).json({ error: errMsg });
+    }
+
+    const data = await response.json();
+    const { piles } = parseStockCountResponse(data);
+    return res.status(200).json({ piles, model: modelId });
+  } catch (e) {
+    console.error("stock-count error:", e.message, e.stack);
+    return res.status(500).json({ error: e.message || "Internal server error" });
+  }
+}

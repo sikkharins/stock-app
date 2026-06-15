@@ -133,6 +133,37 @@ export default defineConfig(({ mode }) => {
           });
         });
 
+        server.middlewares.use('/api/stock-count', async (req, res) => {
+          if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+          if (req.method !== 'POST') { res.writeHead(405); res.end('Method not allowed'); return; }
+          const apiKey = env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+          if (!apiKey) { res.writeHead(500); res.end(JSON.stringify({ error: 'Set ANTHROPIC_API_KEY in .env' })); return; }
+          let body = '';
+          req.on('data', c => body += c);
+          req.on('end', async () => {
+            try {
+              const parsed = JSON.parse(body);
+              const { default: handler } = await import('./api/stock-count.js');
+              const mockReq = { method: 'POST', body: parsed, headers: req.headers };
+              const mockRes = {
+                statusCode: 200,
+                headers: {},
+                setHeader(k, v) { this.headers[k] = v; },
+                status(code) { this.statusCode = code; return this; },
+                json(data) {
+                  res.writeHead(this.statusCode, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify(data));
+                },
+                end() { res.writeHead(this.statusCode); res.end(); }
+              };
+              await handler(mockReq, mockRes);
+            } catch (e) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: e.message }));
+            }
+          });
+        });
+
         server.middlewares.use('/api/line-send', async (req, res) => {
           if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
           if (req.method !== 'POST') { res.writeHead(405); res.end('Method not allowed'); return; }
