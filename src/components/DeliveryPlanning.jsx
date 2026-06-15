@@ -544,7 +544,9 @@ export default function DeliveryPlanningPage({ sh }) {
       helperIds: [...runHelperIds],
       helperNames,
       soNums: pickedSoNums,
-      customerNames: pickedCustomers,
+      // Parallel to soNums (one entry per SO, not deduped). Earlier versions
+      // stored the deduped list which broke per-SO display in the history modal.
+      customerNames: pickedRows.map((r) => r.custName),
       revenue: pickedRevenue,
       volumeM3: pickedVolM3,
       driverNote: driverNote.trim(),
@@ -2299,10 +2301,21 @@ export default function DeliveryPlanningPage({ sh }) {
                 .map((r) => {
                   // Legacy runs (created before status field) → treat as completed.
                   const status = r.status || "completed";
+                  // Resolve per-SO customer names at render time so legacy runs
+                  // whose stored customerNames was deduped still display each SO's
+                  // customer correctly.
+                  const resolvedNames = (r.soNums || []).map((sn, i) => {
+                    const cached = (r.customerNames || [])[i];
+                    if (cached) return cached;
+                    const so = (sales || []).find((s) => s.soNum === sn);
+                    if (!so) return "";
+                    const cust = (contacts || []).find((c) => c.id === so.customerId);
+                    return cust ? cN(cust) : "";
+                  });
                   return (
                     <RunCard
                       key={r.id}
-                      run={r}
+                      run={{ ...r, customerNames: resolvedNames }}
                       status={status}
                       onConfirm={(deliveredSoNums) => confirmRunDelivery(r.id, deliveredSoNums)}
                       onCancel={() => cancelRun(r.id)}
