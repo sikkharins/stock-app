@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
   resolveModel, formatCatalog, buildSystemPrompt, buildRequestBody, STOCK_COUNT_SCHEMA,
+  coercePile, parseStockCountResponse,
 } from "./stock-count.js";
 
 describe("resolveModel", () => {
@@ -55,5 +56,45 @@ describe("buildRequestBody", () => {
       type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAAA" },
     });
     expect(body.messages[0].content[1].type).toBe("text");
+  });
+});
+
+describe("coercePile", () => {
+  test("normalize pile ปกติ (ปัด count เป็นจำนวนเต็ม)", () => {
+    expect(coercePile({ productId: 5, guess: "g", count: 8.4, confidence: "high", note: "n" }))
+      .toEqual({ productId: 5, guess: "g", count: 8, confidence: "high", note: "n" });
+  });
+  test("productId null + confidence แปลก → low + default note", () => {
+    expect(coercePile({ productId: null, guess: "g", count: 3, confidence: "weird" }))
+      .toEqual({ productId: null, guess: "g", count: 3, confidence: "low", note: "" });
+  });
+  test("count ไม่ใช่ตัวเลข → null (ถูกตัดทิ้ง)", () => {
+    expect(coercePile({ guess: "g", count: "x", confidence: "high" })).toBeNull();
+  });
+});
+
+describe("parseStockCountResponse", () => {
+  test("ดึง piles จาก text block (ข้าม thinking block)", () => {
+    const api = { stop_reason: "end_turn", content: [
+      { type: "thinking", thinking: "..." },
+      { type: "text", text: JSON.stringify({ piles: [
+        { productId: 1, guess: "a", count: 4, confidence: "high" },
+      ] }) },
+    ] };
+    expect(parseStockCountResponse(api)).toEqual({
+      piles: [{ productId: 1, guess: "a", count: 4, confidence: "high", note: "" }],
+    });
+  });
+  test("refusal → throw", () => {
+    expect(() => parseStockCountResponse({ stop_reason: "refusal", content: [] })).toThrow(/refus/i);
+  });
+  test("ไม่มี text block → throw", () => {
+    expect(() => parseStockCountResponse({ content: [{ type: "thinking", thinking: "x" }] })).toThrow();
+  });
+  test("JSON พัง → throw", () => {
+    expect(() => parseStockCountResponse({ content: [{ type: "text", text: "not json" }] })).toThrow();
+  });
+  test("ไม่มี piles → array ว่าง", () => {
+    expect(parseStockCountResponse({ content: [{ type: "text", text: "{}" }] })).toEqual({ piles: [] });
   });
 });

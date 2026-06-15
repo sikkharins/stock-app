@@ -91,3 +91,38 @@ export function buildRequestBody({ modelId, base64, mediaType, systemPrompt }) {
     ],
   };
 }
+
+const CONFIDENCE = new Set(["low", "med", "high"]);
+
+// normalize 1 pile → คืน shape มาตรฐาน หรือ null ถ้าใช้ไม่ได้ (count ไม่ใช่ตัวเลข)
+export function coercePile(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const count = Number(raw.count);
+  if (!Number.isFinite(count)) return null;
+  const productId = raw.productId === undefined ? null : raw.productId;
+  return {
+    productId,
+    guess: typeof raw.guess === "string" ? raw.guess : "",
+    count: Math.max(0, Math.round(count)),
+    confidence: CONFIDENCE.has(raw.confidence) ? raw.confidence : "low",
+    note: typeof raw.note === "string" ? raw.note : "",
+  };
+}
+
+// ดึง+validate piles จาก response ของ Anthropic Messages API
+// throw เมื่อ refusal หรือ output อ่านไม่ได้
+export function parseStockCountResponse(apiData) {
+  if (!apiData || typeof apiData !== "object") throw new Error("empty response");
+  if (apiData.stop_reason === "refusal") throw new Error("model refused the request");
+  const blocks = Array.isArray(apiData.content) ? apiData.content : [];
+  const textBlock = blocks.find((b) => b && b.type === "text" && typeof b.text === "string");
+  if (!textBlock) throw new Error("no text block in response");
+  let parsed;
+  try {
+    parsed = JSON.parse(textBlock.text);
+  } catch {
+    throw new Error("response was not valid JSON");
+  }
+  const rawPiles = Array.isArray(parsed && parsed.piles) ? parsed.piles : [];
+  return { piles: rawPiles.map(coercePile).filter(Boolean) };
+}
