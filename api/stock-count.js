@@ -64,13 +64,28 @@ export function buildSystemPrompt(catalogText) {
 กฎสำคัญ:
 - คุณ "ไม่รู้" และ "ไม่ต้องสน" ยอดในระบบ ห้ามปัดเลขให้ดูสวยหรือเดาให้ตรงเลขใด ๆ — นับตามที่เห็นจริงเท่านั้น
 - guess เป็นข้อความสั้นบอกว่ากองนั้นคืออะไร (ยี่ห้อ/รุ่น/ลักษณะ)
+- ถ้าได้รับภาพหลายมุมของฉากเดียวกัน ให้ใช้ทุกมุมประกอบการนับ (มุมข้าง/บนช่วยประเมินความลึกที่มุมหน้ามองไม่เห็น) และนับแต่ละกองเป็น "รายการเดียว" ห้ามนับซ้ำข้ามมุม
 - ตอบตาม schema ที่กำหนดเท่านั้น
 
 catalog สินค้าในระบบ (id | ยี่ห้อ — ชื่อ/รุ่น | หน่วย | ลักษณะ):
 ${catalogText}`;
 }
 
-export function buildRequestBody({ modelId, base64, mediaType, systemPrompt }) {
+// images: [{ base64, mediaType, angle? }] — รับได้ตั้งแต่ 1 รูปขึ้นไป
+// หลายรูป = หลายมุมของฉากเดียวกัน: ใส่ label มุมก่อนแต่ละรูป + สั่งประกอบกันนับ ไม่นับซ้ำข้ามมุม
+export function buildRequestBody({ modelId, images, systemPrompt }) {
+  const imgs = Array.isArray(images) ? images : [];
+  const content = [];
+  imgs.forEach((img, i) => {
+    if (img.angle) content.push({ type: "text", text: `[มุมที่ ${i + 1}: ${img.angle}]` });
+    content.push({ type: "image", source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.base64 } });
+  });
+  content.push({
+    type: "text",
+    text: imgs.length > 1
+      ? "ภาพทั้งหมดด้านบนเป็นหลายมุมของฉากเดียวกัน (กองสินค้าชุดเดิม) ใช้ทุกมุมประกอบกันเพื่อนับให้แม่นขึ้น โดยเฉพาะใช้มุมข้าง/บนประเมินความลึกที่มุมหน้ามองไม่เห็น แต่ละกองรายงานเพียงรายการเดียว (อย่านับซ้ำข้ามมุม) แล้วตอบตาม schema"
+      : "ตรวจนับสินค้าในรูปนี้ตามคำสั่ง แล้วตอบตาม schema",
+  });
   return {
     model: modelId,
     max_tokens: 16000,
@@ -80,15 +95,7 @@ export function buildRequestBody({ modelId, base64, mediaType, systemPrompt }) {
       format: { type: "json_schema", schema: STOCK_COUNT_SCHEMA },
     },
     system: systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: "ตรวจนับสินค้าในรูปนี้ตามคำสั่ง แล้วตอบตาม schema" },
-        ],
-      },
-    ],
+    messages: [{ role: "user", content }],
   };
 }
 
@@ -142,12 +149,14 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
 
   try {
-    const { image, catalog, model } = req.body || {};
-    if (!image || !image.base64) return res.status(400).json({ error: "Missing image.base64" });
-    const mediaType = image.mediaType || "image/jpeg";
+    const { image, images, catalog, model } = req.body || {};
+    const imgs = (Array.isArray(images) && images.length ? images : (image ? [image] : []))
+      .filter((im) => im && im.base64)
+      .map((im) => ({ base64: im.base64, mediaType: im.mediaType || "image/jpeg", angle: im.angle }));
+    if (!imgs.length) return res.status(400).json({ error: "Missing images[].base64" });
     const modelId = resolveModel(model);
     const systemPrompt = buildSystemPrompt(formatCatalog(catalog || []));
-    const body = buildRequestBody({ modelId, base64: image.base64, mediaType, systemPrompt });
+    const body = buildRequestBody({ modelId, images: imgs, systemPrompt });
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

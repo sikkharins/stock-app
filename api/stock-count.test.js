@@ -43,19 +43,39 @@ describe("buildSystemPrompt", () => {
 });
 
 describe("buildRequestBody", () => {
-  test("สร้าง vision request: schema + adaptive thinking + image block", () => {
+  test("single image: schema + adaptive thinking + image block", () => {
     const body = buildRequestBody({
-      modelId: "claude-opus-4-8", base64: "AAAA", mediaType: "image/jpeg", systemPrompt: "SP",
+      modelId: "claude-opus-4-8",
+      images: [{ base64: "AAAA", mediaType: "image/jpeg" }],
+      systemPrompt: "SP",
     });
     expect(body.model).toBe("claude-opus-4-8");
     expect(body.thinking).toEqual({ type: "adaptive" });
     expect(body.output_config.effort).toBe("high");
     expect(body.output_config.format).toEqual({ type: "json_schema", schema: STOCK_COUNT_SCHEMA });
     expect(body.system).toBe("SP");
-    expect(body.messages[0].content[0]).toEqual({
+    const c = body.messages[0].content;
+    expect(c[0]).toEqual({
       type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAAA" },
     });
-    expect(body.messages[0].content[1].type).toBe("text");
+    expect(c[c.length - 1].type).toBe("text");
+  });
+
+  test("multi image: ใส่ label มุมก่อนแต่ละรูป + คำสั่งประกอบหลายมุม", () => {
+    const body = buildRequestBody({
+      modelId: "claude-sonnet-4-6",
+      images: [
+        { base64: "AAA", mediaType: "image/jpeg", angle: "หน้า" },
+        { base64: "BBB", mediaType: "image/jpeg", angle: "ข้าง" },
+      ],
+      systemPrompt: "SP",
+    });
+    const c = body.messages[0].content;
+    expect(c[0]).toEqual({ type: "text", text: "[มุมที่ 1: หน้า]" });
+    expect(c[1].source.data).toBe("AAA");
+    expect(c[2]).toEqual({ type: "text", text: "[มุมที่ 2: ข้าง]" });
+    expect(c[3].source.data).toBe("BBB");
+    expect(c[c.length - 1].text).toContain("หลายมุม");
   });
 });
 
