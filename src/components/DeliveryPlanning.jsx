@@ -21,7 +21,6 @@ import { Modal, MBtns } from "./ui/Modal.jsx";
 import Field from "./ui/Field.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
 import ThaiDateInput from "./ui/ThaiDateInput.jsx";
-import StatCard from "./ui/StatCard.jsx";
 import DeliveryMap from "./DeliveryMap.jsx";
 
 // Delivery Planning — pick SOs from `pending_delivery` pool that balance
@@ -414,6 +413,40 @@ function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
     </div>
   );
 }
+
+// Numbered step badge used in the 3-step layout (choose truck → pick SO → summary).
+function StepBadge({ n }) {
+  return (
+    <span
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: "50%",
+        background: "var(--blue-bg)",
+        color: "var(--blue)",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 13,
+        fontWeight: 700,
+        flexShrink: 0,
+      }}
+    >
+      {n}
+    </span>
+  );
+}
+
+const STEP_TOOL_BTN = {
+  padding: "6px 12px",
+  borderRadius: 7,
+  border: "1px solid var(--line)",
+  background: "var(--bg2)",
+  color: "var(--text)",
+  cursor: "pointer",
+  fontSize: 12,
+  fontFamily: "inherit",
+};
 
 export default function DeliveryPlanningPage({ sh }) {
   const {
@@ -944,7 +977,7 @@ export default function DeliveryPlanningPage({ sh }) {
   };
 
   // Build the 80mm / 3" thermal-printer HTML. Used both for the inline preview
-  // iframe in the Pick List modal and for the hidden iframe that triggers print.
+  // iframe in the ใบจัดของ (pick list) modal and for the hidden iframe that prints.
   const thermalHtml = useMemo(() => {
     if (pickList.length === 0) return "";
     const esc = (s) =>
@@ -968,7 +1001,7 @@ export default function DeliveryPlanningPage({ sh }) {
       esc(truck?.name || "—") +
       (truck?.driverName ? " · " + esc(truck.driverName) : "");
     return (
-      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Pick List</title>" +
+      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>ใบจัดของ</title>" +
       "<style>" +
       "@page{size:80mm auto;margin:2mm}" +
       "*{box-sizing:border-box}" +
@@ -989,7 +1022,7 @@ export default function DeliveryPlanningPage({ sh }) {
       ".foot{text-align:center;font-size:10px;margin-top:6px;color:#555}" +
       "@media print{html,body{width:80mm}}" +
       "</style></head><body>" +
-      "<div class='hdr'>PICK LIST</div>" +
+      "<div class='hdr'>ใบจัดของ</div>" +
       "<div class='sub'>" + esc(toBE(date)) + "</div>" +
       "<div class='sub'>" + headerLine + "</div>" +
       "<div class='tot'>" + totalQty + " ชิ้น · " + pickList.length + " รายการ · " + pickedRows.length + " SO</div>" +
@@ -1088,7 +1121,7 @@ export default function DeliveryPlanningPage({ sh }) {
             />
           </Field>
           <div style={{ gridColumn: "1/-1" }}>
-            <Field label="คนขับประจำรถ">
+            <Field label="พนักงานขับรถ">
               <input
                 value={truckForm.driverName || ""}
                 onChange={(e) =>
@@ -1218,19 +1251,45 @@ export default function DeliveryPlanningPage({ sh }) {
   return (
     <div>
       {/* Header */}
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ margin: 0 }}>วางแผนจัดส่ง</h2>
+      </div>
+
+      {/* ① Step 1 — choose transport truck */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: "wrap",
+          background: "var(--panel)",
+          border: "2px solid var(--blue)",
+          borderRadius: 10,
+          padding: "14px 16px",
+          marginBottom: 12,
         }}
       >
-        <h2 style={{ margin: 0 }}>วางแผนจัดส่ง</h2>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, color: "var(--dim)" }}>รถ:</span>
-          <div style={{ minWidth: 180 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <StepBadge n={1} />
+          <span style={{ fontSize: 15, fontWeight: 600 }}>เลือกรถขนส่ง</span>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {ed && (
+              <button onClick={() => oM("manageTrucks")} style={STEP_TOOL_BTN}>
+                จัดการรถ
+              </button>
+            )}
+            <button onClick={() => oM("runHistory")} style={STEP_TOOL_BTN}>
+              ประวัติรอบ ({(deliveryRuns || []).length})
+            </button>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 4 }}>รถ</div>
             <CustomSelect
               value={String(truckId ?? "")}
               onChange={(v) => setTruckId(+v)}
@@ -1240,74 +1299,31 @@ export default function DeliveryPlanningPage({ sh }) {
               }))}
             />
           </div>
-          <span style={{ fontSize: 12, color: "var(--dim)", marginLeft: 8 }}>
-            วันที่:
-          </span>
           <div style={{ width: 140 }}>
+            <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 4 }}>
+              วันที่จัดส่ง
+            </div>
             <ThaiDateInput value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
-          {ed && (
-            <button
-              onClick={() => oM("manageTrucks")}
-              style={{
-                padding: "6px 14px",
-                borderRadius: 7,
-                border: "1px solid var(--line)",
-                background: "var(--bg2)",
-                color: "var(--text)",
-                cursor: "pointer",
-                fontSize: 13,
-                fontFamily: "inherit",
-              }}
-            >
-              จัดการรถ
-            </button>
-          )}
-          <button
-            onClick={() => oM("runHistory")}
-            style={{
-              padding: "6px 14px",
-              borderRadius: 7,
-              border: "1px solid var(--line)",
-              background: "var(--bg2)",
-              color: "var(--text)",
-              cursor: "pointer",
-              fontSize: 13,
-              fontFamily: "inherit",
-            }}
-          >
-            ประวัติรอบ ({(deliveryRuns || []).length})
-          </button>
+          <div style={{ display: "flex", gap: 20, alignItems: "center", paddingBottom: 2 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--dim)" }}>ความจุ</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "var(--blue)" }}>
+                {truckCapM3}{" "}
+                <span style={{ fontSize: 13, color: "var(--dim)", fontWeight: 400 }}>m³</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--dim)" }}>พนักงานขับรถ</div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>
+                {truck?.driverName || (
+                  <span style={{ color: "var(--faint)", fontWeight: 400 }}>—</span>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-
-      {/* Stats row */}
-      {!isMobile && <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
-          gap: 10,
-          marginBottom: 14,
-        }}
-      >
-        <StatCard label="SO รอจัดส่ง" value={String(pendingSOs.length)} />
-        <StatCard
-          label="เลือกแล้ว"
-          value={`${pickedRows.length} / ${ranked.length}`}
-          color="var(--blue)"
-        />
-        <StatCard
-          label="ปริมาตรใช้"
-          value={`${pickedVolM3.toFixed(2)} / ${truckCapM3} m³`}
-          color={overCapacity ? "var(--red)" : "var(--green)"}
-          sub={`${utilPct.toFixed(0)}% ของรถ`}
-        />
-        <StatCard
-          label="ยอดขายรวม"
-          value={`฿${fmt(Math.round(pickedRevenue))}`}
-          color="var(--green)"
-        />
-      </div>}
 
       {/* Body: ranked SO list + summary */}
       <div
@@ -1336,7 +1352,11 @@ export default function DeliveryPlanningPage({ sh }) {
               flexWrap: "wrap",
             }}
           >
-            <div style={{ fontWeight: 600, fontSize: 14 }}>SO รอจัดส่ง</div>
+            <StepBadge n={2} />
+            <div style={{ fontWeight: 600, fontSize: 14 }}>เลือก SO ที่จะจัดส่ง</div>
+            <span style={{ fontSize: 12, color: "var(--dim)" }}>
+              เลือกแล้ว {pickedRows.length}/{ranked.length} · {pickedVolM3.toFixed(2)} m³
+            </span>
             <div
               style={{
                 display: "inline-flex",
@@ -1620,8 +1640,8 @@ export default function DeliveryPlanningPage({ sh }) {
                 fontFamily: "inherit",
               }}
             >
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>สรุปรอบ</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>สรุป & จัดส่ง</span>
                 <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 700 }}>
                   ฿{fmt(Math.round(pickedRevenue))}
                 </span>
@@ -1637,8 +1657,11 @@ export default function DeliveryPlanningPage({ sh }) {
               </span>
             </button>
           ) : (
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>
-              สรุปรอบจัดส่ง — {truck?.name || "—"}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <StepBadge n={3} />
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                สรุป & จัดส่ง — {truck?.name || "—"}
+              </span>
             </div>
           )}
           {(!isMobile || summaryOpen) && (<>
@@ -1826,7 +1849,7 @@ export default function DeliveryPlanningPage({ sh }) {
               marginBottom: 8,
             }}
           >
-            สร้าง Pick List
+            พิมพ์ใบจัดของ
           </button>
           {ed && (
             <button
@@ -1861,7 +1884,7 @@ export default function DeliveryPlanningPage({ sh }) {
 
       {/* Modals */}
       {modal === "pickList" && (
-        <Modal title={`Pick List — ${toBE(date)} (${truck?.name || "—"})`} onClose={cM} wide>
+        <Modal title={`ใบจัดของ — ${toBE(date)} (${truck?.name || "—"})`} onClose={cM} wide>
           <div
             style={{
               display: "flex",
@@ -2083,7 +2106,7 @@ export default function DeliveryPlanningPage({ sh }) {
                     {t.widthCm && t.lengthCm && t.heightCm
                       ? ` · ${t.widthCm}×${t.lengthCm}×${t.heightCm} cm`
                       : ""}
-                    {t.driverName ? ` · คนขับ ${t.driverName}` : ""}
+                    {t.driverName ? ` · พนักงานขับรถ ${t.driverName}` : ""}
                     {t.note ? ` · ${t.note}` : ""}
                   </div>
                 </div>
@@ -2165,12 +2188,12 @@ export default function DeliveryPlanningPage({ sh }) {
               {truck?.driverName ? (
                 <>
                   {" "}
-                  <span style={{ color: "var(--dim)" }}>· คนขับ:</span>{" "}
+                  <span style={{ color: "var(--dim)" }}>· พนักงานขับรถ:</span>{" "}
                   <strong>{truck.driverName}</strong>
                 </>
               ) : (
                 <span style={{ fontSize: 11, color: "var(--orange)", marginLeft: 6 }}>
-                  ยังไม่ตั้งคนขับ (แก้ใน "จัดการรถ")
+                  ยังไม่ตั้งพนักงานขับรถ (แก้ใน "จัดการรถ")
                 </span>
               )}
             </div>
@@ -2301,7 +2324,7 @@ export default function DeliveryPlanningPage({ sh }) {
           >
             เมื่อบันทึก SO ทั้ง {pickedRows.length} ใบจะเปลี่ยนสถานะเป็น
             "เตรียมส่ง" (ของขึ้นรถแล้ว) · ยังยกเลิกได้จากหน้า "ประวัติรอบ"
-            · ยืนยันส่งเสร็จหลังคนขับกลับมา
+            · ยืนยันส่งเสร็จหลังพนักงานขับรถกลับมา
           </div>
           <div
             style={{
