@@ -13,6 +13,7 @@ import AppSkeleton from "./components/ui/Skeleton.jsx";
 const DashPage = lazy(() => import("./components/Dashboard.jsx"));
 const ProdPage = lazy(() => import("./components/Products.jsx"));
 const LogPage = lazy(() => import("./components/StockLog.jsx"));
+const StockCountPage = lazy(() => import("./components/StockCount.jsx"));
 const POPage = lazy(() => import("./components/PurchaseOrders.jsx"));
 const SalesPage = lazy(() => import("./components/Sales.jsx"));
 const PromosPage = lazy(() => import("./components/Promotions.jsx"));
@@ -29,9 +30,9 @@ const SalesOverviewPage = lazy(() => import("./components/SalesOverview.jsx"));
 const FinancialCalendarPage = lazy(() => import("./components/FinancialCalendar.jsx"));
 const DeliveryPlanningPage = lazy(() => import("./components/DeliveryPlanning.jsx"));
 
-const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",purchase:"↓",sales:"↗",promos:"★",events:"◈",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙",delivery_planning:"▦"};
+const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",stock_count:"◉",purchase:"↓",sales:"↗",promos:"★",events:"◈",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙",delivery_planning:"▦"};
 const NAV_SECTIONS=[
-  {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","purchase","sales","promos","events"]},
+  {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","stock_count","purchase","sales","promos","events"]},
   {label:{th:"การจัดการ",en:"Manage"},tabs:["finance","reports","sales_overview","defective","suppliers","customers"]},
   {label:{th:"วางแผน",en:"Planning"},tabs:["financial_calendar","delivery_planning"]},
   {label:{th:"ระบบ",en:"System"},tabs:["users"]},
@@ -82,7 +83,7 @@ export default function App(){
   const[cats,setCats]=useState(initCats);const[cashCats,setCashCats]=useState(initCashCats);const[tagMappings,setTagMappings]=useState(initTagMappings);const[brands,setBrands]=useState(initBrands);
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
-  const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[fabOpen,setFabOpen]=useState(false);const[showFabCustomizer,setShowFabCustomizer]=useState(false);
+  const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[pendingAdjust,setPendingAdjust]=useState(null);const[fabOpen,setFabOpen]=useState(false);const[showFabCustomizer,setShowFabCustomizer]=useState(false);
   // Per-user FAB customization (label, fontSize, color, size, items order/visibility/rename)
   const [fabCustom,setFabCustom]=useState({});
   const fabSizeRef = useRef(44);
@@ -406,7 +407,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null),pendingAdjust,setPendingAdjust,clearPendingAdjust:()=>setPendingAdjust(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
@@ -500,6 +501,7 @@ export default function App(){
           {tab==="dashboard"&&<DashPage sh={sh}/>}
           {tab==="products"&&<ProdPage sh={sh}/>}
           {tab==="stock_log"&&<LogPage sh={sh}/>}
+          {tab==="stock_count"&&<StockCountPage sh={sh}/>}
           {tab==="purchase"&&<POPage sh={sh}/>}
           {tab==="sales"&&<SalesPage sh={sh}/>}
           {tab==="promos"&&<PromosPage sh={sh}/>}

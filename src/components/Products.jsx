@@ -50,6 +50,7 @@ export default function ProdPage({sh}){
   const[form,setForm]=useState(emptyF);const[formErrors,setFormErrors]=useState([]);
   useEffect(()=>{if(sh.quickCreate==="product"&&ed){setFormErrors([]);setForm(emptyF);oM("product");sh.clearQuickCreate();}},[sh.quickCreate]);
   const[adjPr,setAdjPr]=useState(null);const[adjForm,setAdjForm]=useState({type:"adjust_in",qty:"",note:""});const[confirmDel,setConfirmDel]=useState(null);
+  useEffect(()=>{if(sh.pendingAdjust!=null){const pr=products.find(p=>String(p.id)===String(sh.pendingAdjust));if(pr&&ed){setAdjPr(pr);setAdjForm({type:"adjust_in",qty:"",note:""});oM("adjust");}sh.clearPendingAdjust();}},[sh.pendingAdjust]);
   const[sel,setSel]=useState(new Set());const[bulkMode,setBulkMode]=useState(false);const[bulkAct,setBulkAct]=useState(null);
   const[bkPriceF,setBkPriceF]=useState({mode:"set",value:"",pct:""});const[bkStockF,setBkStockF]=useState({type:"adjust_in",qty:"",note:""});const[bkCatF,setBkCatF]=useState({categoryId:"",subcategoryId:""});const[bkMinF,setBkMinF]=useState("");const[bkDistF,setBkDistF]=useState("");
   const setF=(k,v)=>setForm(f=>{const n={...f,[k]:v};if(k==="categoryId")n.subcategoryId="";return n;});
