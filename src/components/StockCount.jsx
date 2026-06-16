@@ -2,7 +2,7 @@ import { useState } from "react";
 import { IB } from "../utils/constants.js";
 import Btn from "./ui/Btn.jsx";
 import ProductPicker from "./ui/ProductPicker.jsx";
-import { buildComparison } from "../utils/stockCompare.ts";
+import { buildComparison, buildZoneComparison } from "../utils/stockCompare.ts";
 
 const ANGLES = ["", "หน้า", "ข้าง", "บน", "อื่นๆ"];
 const CONF = {
@@ -39,13 +39,14 @@ function ConfBadge({ c }) {
 }
 
 export default function StockCountPage({ sh }) {
-  const { products, pN, handleTab, setPendingAdjust } = sh;
+  const { products, pN, handleTab, setPendingAdjust, zones = [] } = sh;
   const [shots, setShots] = useState([]);
   const [model, setModel] = useState("opus");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [piles, setPiles] = useState(null);
   const [overrides, setOverrides] = useState({});
+  const [zoneId, setZoneId] = useState("");
 
   const addShots = async (e) => {
     const files = [...(e.target.files || [])];
@@ -76,7 +77,12 @@ export default function StockCountPage({ sh }) {
   };
 
   const effPiles = (piles || []).map((p, i) => (overrides[i] != null ? { ...p, productId: overrides[i] } : p));
+  const zone = zoneId ? zones.find((z) => String(z.id) === String(zoneId)) : null;
   const { matched, unmatched } = buildComparison(effPiles, products);
+  const zres = zone ? buildZoneComparison(zone, effPiles, products) : null;
+  const tableRows = zone ? zres.expectedSeen : matched;
+  const unmatchedRows = zone ? zres.unmatched : unmatched;
+  const totalShown = zone ? (zres.expectedSeen.length + zres.expectedMissing.length + zres.foreignSeen.length) : matched.length;
   const goAdjust = (pid) => { setPendingAdjust(pid); handleTab("products"); };
 
   const TD = { padding: "8px 10px", fontSize: 13, borderBottom: "0.5px solid var(--line)" };
@@ -109,6 +115,10 @@ export default function StockCountPage({ sh }) {
             <option value="opus">Opus (แม่นกว่า)</option>
             <option value="sonnet">Sonnet (ถูกกว่า)</option>
           </select>
+          <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} style={{ ...IB, width: "auto", padding: "7px 10px", fontSize: 13 }}>
+            <option value="">ทั้งคลัง (ไม่ระบุโซน)</option>
+            {zones.map((z) => <option key={String(z.id)} value={String(z.id)}>{z.name}</option>)}
+          </select>
           <Btn onClick={run} disabled={!shots.length || loading}>{loading ? "กำลังนับ..." : "ตรวจนับ"}</Btn>
         </div>
         {error && <div style={{ marginTop: 10, color: "var(--red)", fontSize: 13 }}>{error}</div>}
@@ -118,10 +128,23 @@ export default function StockCountPage({ sh }) {
 
       {piles && !loading && (
         <>
-          {matched.length === 0 && unmatched.length === 0 && <div style={{ color: "var(--dim)", fontSize: 13, padding: 12 }}>ไม่พบกองสินค้าในรูป</div>}
+          {totalShown === 0 && unmatchedRows.length === 0 && <div style={{ color: "var(--dim)", fontSize: 13, padding: 12 }}>ไม่พบกองสินค้าในรูป</div>}
 
-          {matched.length > 0 && (
+          {zone && zres.expectedMissing.length > 0 && (
+            <div style={{ background: "rgba(255,59,48,0.06)", border: "1px solid var(--red)", borderRadius: 10, padding: 12, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", marginBottom: 8 }}>ควรมีแต่ไม่เห็นในรูป ({zres.expectedMissing.length}) — อาจหาย/ถูกย้าย ควรไปนับซ้ำ</div>
+              {zres.expectedMissing.map((r) => (
+                <div key={String(r.product.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "6px 0", borderTop: "0.5px solid var(--line)" }}>
+                  <div style={{ fontSize: 13 }}>{r.product.brand} — {pN(r.product)} <span style={{ color: "var(--dim)" }}>· ควรมี {r.systemStock}</span></div>
+                  <button onClick={() => goAdjust(r.product.id)} style={{ fontSize: 12, padding: "5px 10px", borderRadius: 6, border: "1px solid var(--orange)", background: "rgba(255,149,0,0.14)", color: "var(--orange)", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>ปรับสต็อก</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tableRows.length > 0 && (
             <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
+              {zone && <div style={{ fontSize: 12, color: "var(--dim)", padding: "8px 12px", borderBottom: "0.5px solid var(--line)" }}>ของในโซนที่ AI เห็น — ส่วนต่างเทียบกับสต็อก "รวมทุกโซน" (อ้างอิงคร่าวๆ)</div>}
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
                   <thead>
@@ -135,7 +158,7 @@ export default function StockCountPage({ sh }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {matched.map((m) => {
+                    {tableRows.map((m) => {
                       const same = m.diff === 0;
                       return (
                         <tr key={String(m.product.id)} title={m.note}>
@@ -154,10 +177,22 @@ export default function StockCountPage({ sh }) {
             </div>
           )}
 
-          {unmatched.length > 0 && (
+          {zone && zres.foreignSeen.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dim)", margin: "0 0 8px" }}>เจอในรูปแต่ไม่ได้อยู่โซนนี้ ({zres.foreignSeen.length}) — อาจวางผิดที่ หรือยังไม่ได้ผูกโซน</div>
+              {zres.foreignSeen.map((r) => (
+                <div key={String(r.product.id)} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", marginBottom: 8, display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontSize: 13 }}>{r.product.brand} — {pN(r.product)}</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}><span style={{ fontSize: 13, fontWeight: 600 }}>AI นับ {r.aiCount}</span><ConfBadge c={r.confidence} /></div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {unmatchedRows.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dim)", margin: "0 0 8px" }}>จับคู่ catalog ไม่ได้ ({unmatched.length}) — เลือกสินค้าเองได้</div>
-              {unmatched.map((u) => (
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dim)", margin: "0 0 8px" }}>จับคู่ catalog ไม่ได้ ({unmatchedRows.length}) — เลือกสินค้าเองได้</div>
+              {unmatchedRows.map((u) => (
                 <div key={u.idx} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: 12, marginBottom: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
                     <div style={{ fontSize: 13 }}>{u.guess || "(ไม่มีคำอธิบาย)"}{u.note ? <span style={{ color: "var(--dim)", fontSize: 12 }}> — {u.note}</span> : null}</div>
