@@ -54,6 +54,8 @@ export default function ProdPage({sh}){
   const[sel,setSel]=useState(new Set());const[bulkMode,setBulkMode]=useState(false);const[bulkAct,setBulkAct]=useState(null);
   const[bkPriceF,setBkPriceF]=useState({mode:"set",value:"",pct:""});const[bkStockF,setBkStockF]=useState({type:"adjust_in",qty:"",note:""});const[bkCatF,setBkCatF]=useState({categoryId:"",subcategoryId:""});const[bkMinF,setBkMinF]=useState("");const[bkDistF,setBkDistF]=useState("");
   const setF=(k,v)=>setForm(f=>{const n={...f,[k]:v};if(k==="categoryId")n.subcategoryId="";return n;});
+  // Set a dimension AND auto-update cubicM when all 3 dims are positive.
+  const setDim=(k,v)=>setForm(f=>{const n={...f,[k]:v};const w=+(k==="widthCm"?v:n.widthCm)||0;const l=+(k==="lengthCm"?v:n.lengthCm)||0;const h=+(k==="heightCm"?v:n.heightCm)||0;if(w>0&&l>0&&h>0)n.cubicM=Math.round(w*l*h/1e6*1000)/1000;return n;});
   const toggleSel=id=>setSel(prev=>{const n=new Set(prev);if(n.has(id))n.delete(id);else n.add(id);return n;});
   const selAll=()=>setSel(new Set(sorted.map(p=>p.id)));const selNone=()=>setSel(new Set());
   const selProds=useMemo(()=>products.filter(p=>sel.has(p.id)),[products,sel]);
@@ -322,9 +324,9 @@ export default function ProdPage({sh}){
         <div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginTop:4}}>
           <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:8}}>ขนาดกล่อง (cm) — สำหรับจัดวางบนรถ</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-            <Field label="กว้าง W"><input type="number" step="0.1" value={form.widthCm??""} onChange={e=>setF("widthCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="60"/></Field>
-            <Field label="ยาว L"><input type="number" step="0.1" value={form.lengthCm??""} onChange={e=>setF("lengthCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="80"/></Field>
-            <Field label="สูง H"><input type="number" step="0.1" value={form.heightCm??""} onChange={e=>setF("heightCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="175"/></Field>
+            <Field label="กว้าง W"><input type="number" step="0.1" value={form.widthCm??""} onChange={e=>setDim("widthCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="60"/></Field>
+            <Field label="ยาว L"><input type="number" step="0.1" value={form.lengthCm??""} onChange={e=>setDim("lengthCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="80"/></Field>
+            <Field label="สูง H"><input type="number" step="0.1" value={form.heightCm??""} onChange={e=>setDim("heightCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="175"/></Field>
           </div>
           <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer"}}>
             <input type="checkbox" checked={!!form.noLayDown} onChange={e=>setF("noLayDown",e.target.checked)}/>
