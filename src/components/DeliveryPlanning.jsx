@@ -12,6 +12,7 @@ import {
   soRevenue,
   consolidatePickList,
   soItemsByCategory,
+  mkLog,
   PROXIMITY_RADIUS_KM,
   MAX_HELPERS_PER_RUN,
   MAX_HELPER_POOL,
@@ -422,6 +423,8 @@ export default function DeliveryPlanningPage({ sh }) {
     sales,
     setSales,
     products,
+    setProducts,
+    addLog,
     cats,
     trucks,
     setTrucks,
@@ -575,12 +578,39 @@ export default function DeliveryPlanningPage({ sh }) {
   // got delivered (the rest go back to pending_delivery so they can be re-planned).
   // Works for both out_for_delivery (first confirmation) and completed runs (admin
   // edit fixing a mistake) — for the latter, SO statuses flip accordingly.
+  // Stock is deducted/restored to mirror Sales.confirmDelivery so totals stay
+  // consistent regardless of which entry point flips the status.
   const confirmRunDelivery = (runId, deliveredSoNums) => {
     const run = (deliveryRuns || []).find((r) => r.id === runId);
     if (!run || run.status === "cancelled") return;
     const delivered = new Set(deliveredSoNums);
     const allInRun = run.soNums || [];
     const skipped = allInRun.filter((sn) => !delivered.has(sn));
+
+    // Walk each SO and figure out the stock delta vs its current status.
+    // newCompleted: pending/out_for_delivery → completed → subtract stock
+    // wasCompleted: completed → pending_delivery (admin uncheck) → add stock back
+    // No-op when status is unchanged.
+    const stockDelta = new Map(); // productId → qty (negative = subtract)
+    const logEntries = []; // { pid, qty, soNum, dir: "out"|"in" }
+    for (const sn of allInRun) {
+      const so = (sales || []).find((s) => s.soNum === sn);
+      if (!so) continue;
+      const wasCompleted = so.status === "completed";
+      const willBeCompleted = delivered.has(sn);
+      if (willBeCompleted === wasCompleted) continue;
+      const sign = willBeCompleted ? -1 : 1;
+      for (const it of so.items || []) {
+        stockDelta.set(it.productId, (stockDelta.get(it.productId) || 0) + sign * it.qty);
+        logEntries.push({
+          pid: it.productId,
+          qty: it.qty,
+          soNum: sn,
+          dir: willBeCompleted ? "out" : "in",
+        });
+      }
+    }
+
     setSales((prev) =>
       (prev || []).map((s) => {
         if (!allInRun.includes(s.soNum)) return s;
@@ -589,6 +619,35 @@ export default function DeliveryPlanningPage({ sh }) {
           : { ...s, status: "pending_delivery" };
       })
     );
+
+    if (stockDelta.size > 0) {
+      setProducts((pp) =>
+        pp.map((pr) => {
+          const d = stockDelta.get(pr.id);
+          if (d == null || d === 0) return pr;
+          return { ...pr, stock: Math.max(0, pr.stock + d) };
+        })
+      );
+      for (const e of logEntries) {
+        const pr = (products || []).find((p) => p.id === e.pid);
+        if (!pr) continue;
+        const before = pr.stock;
+        const after = Math.max(0, before + (e.dir === "out" ? -e.qty : e.qty));
+        addLog(
+          mkLog(
+            pr.id,
+            e.dir,
+            e.qty,
+            before,
+            after,
+            e.soNum,
+            e.dir === "out" ? "ยืนยันส่งจากประวัติรอบ" : "ย้อน SO กลับ (ประวัติรอบ)",
+            cu?.username || ""
+          )
+        );
+      }
+    }
+
     setDeliveryRuns((prev) =>
       (prev || []).map((r) =>
         r.id === runId
