@@ -2,6 +2,7 @@ import { useState } from "react";
 import { IB } from "../utils/constants.js";
 import Btn from "./ui/Btn.jsx";
 import ProductPicker from "./ui/ProductPicker.jsx";
+import { getRelayUrl } from "../utils/cameraCapture.ts";
 
 const blank = () => ({ id: Date.now(), name: "", note: "", productIds: [] });
 
@@ -10,6 +11,23 @@ export default function ZonePage({ sh }) {
   const ed = canE("zones");
   const [editing, setEditing] = useState(null); // draft zone หรือ null
   const [pick, setPick] = useState(null);
+  const [camPresets, setCamPresets] = useState([]);
+  const [presetErr, setPresetErr] = useState("");
+
+  const loadPresets = async () => {
+    setPresetErr("");
+    try {
+      const res = await fetch(getRelayUrl() + "/presets");
+      const data = await res.json();
+      setCamPresets(data.presets || []);
+    } catch {
+      setPresetErr("ดึง preset ไม่ได้ — เปิดโปรแกรม relay บนเครื่องที่ต่อ LAN เดียวกับกล้องหรือยัง");
+    }
+  };
+  const togglePreset = (p) => setEditing((z) => {
+    const has = (z.presets || []).some((x) => String(x.token) === String(p.token));
+    return { ...z, presets: has ? (z.presets || []).filter((x) => String(x.token) !== String(p.token)) : [...(z.presets || []), { token: p.token, name: p.name }] };
+  });
 
   const startAdd = () => { setEditing(blank()); setPick(null); };
   const startEdit = (z) => { setEditing({ ...z, productIds: [...(z.productIds || [])] }); setPick(null); };
@@ -60,6 +78,26 @@ export default function ZonePage({ sh }) {
             ))}
           </div>
           <ProductPicker value={pick} onChange={addProduct} products={products} pName={pN} getAvail={(pid) => { const p = products.find((x) => String(x.id) === String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
+          <div style={{ fontSize: 13, fontWeight: 600, margin: "14px 0 6px" }}>preset กล้อง (โซนนี้) ({(editing.presets || []).length})</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            {(editing.presets || []).length === 0 && <span style={{ fontSize: 12.5, color: "var(--dim)" }}>ยังไม่ผูก preset กล้อง</span>}
+            {(editing.presets || []).map((p) => (
+              <span key={String(p.token)} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 14, padding: "4px 6px 4px 10px", fontSize: 12.5 }}>
+                {p.name}
+                <button onClick={() => togglePreset(p)} style={{ width: 18, height: 18, borderRadius: 9, border: "none", background: "var(--line2)", color: "var(--text)", cursor: "pointer", fontSize: 12, lineHeight: "18px", padding: 0 }}>×</button>
+              </span>
+            ))}
+          </div>
+          <button onClick={loadPresets} style={{ fontSize: 12, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--blue)", cursor: "pointer", fontFamily: "inherit", marginBottom: 8 }}>ดึง preset จากกล้อง</button>
+          {presetErr && <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>{presetErr}</div>}
+          {camPresets.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {camPresets.map((p) => {
+                const on = (editing.presets || []).some((x) => String(x.token) === String(p.token));
+                return <button key={String(p.token)} onClick={() => togglePreset(p)} style={{ fontSize: 12, padding: "5px 10px", borderRadius: 14, border: "1px solid " + (on ? "var(--blue)" : "var(--line2)"), background: on ? "rgba(0,113,227,0.12)" : "var(--bg)", color: on ? "var(--blue)" : "var(--text)", cursor: "pointer", fontFamily: "inherit" }}>{on ? "✓ " : ""}{p.name}</button>;
+              })}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <Btn onClick={save}>บันทึก</Btn>
             <button onClick={cancel} style={{ padding: "8px 14px", borderRadius: 7, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>ยกเลิก</button>
