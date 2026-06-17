@@ -9,7 +9,7 @@ import VATRepReport from "./VATRepReport.jsx";
 const TABS=[["overview","ภาพรวม"],["compare","เปรียบเทียบ"],["targets","เป้า"],["vatreport","ตัวแทน VAT"],["audit","Audit"],["prices","ราคา"]];
 
 export default function RepPage({sh}){
-  const{products,sales,pos,pN,targets,setTargets,audit,priceHist,users,contacts,canE,cats}=sh;
+  const{products,sales,pos,pN,cN,quotes,targets,setTargets,audit,priceHist,users,contacts,canE,cats}=sh;
   const[sub,setSub]=useState("overview");
   return<div>
     <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid var(--line)",overflowX:"auto"}}>
@@ -19,7 +19,7 @@ export default function RepPage({sh}){
     {sub==="compare"&&<CompareReport products={products} sales={sales} cats={cats}/>}
     {sub==="targets"&&<TargetsReport targets={targets} setTargets={setTargets} sales={sales} contacts={contacts} users={users} canE={canE("reports")}/>}
     {sub==="vatreport"&&<VATRepReport sales={sales} contacts={contacts}/>}
-    {sub==="audit"&&<AuditTab audit={audit}/>}
+    {sub==="audit"&&<AuditTab audit={audit} sales={sales} pos={pos} quotes={quotes} products={products} contacts={contacts} pN={pN} cN={cN}/>}
     {sub==="prices"&&<PriceTab priceHist={priceHist} products={products} pN={pN}/>}
   </div>;
 }
