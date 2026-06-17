@@ -64,8 +64,8 @@ describe("DeliveryPlanning", () => {
     );
     expect(screen.getByRole("heading", { name: /วางแผนจัดส่ง/ })).toBeInTheDocument();
     expect(screen.getByText("SO-001")).toBeInTheDocument();
-    // Stats card present
-    expect(screen.getAllByText("SO รอจัดส่ง").length).toBeGreaterThan(0);
+    // Step 2 header present
+    expect(screen.getByText("เลือก SO ที่จะจัดส่ง")).toBeInTheDocument();
   });
 
   test("selecting an SO updates running totals and enables Pick List button", async () => {
@@ -85,7 +85,7 @@ describe("DeliveryPlanning", () => {
       />
     );
 
-    const pickBtn = screen.getByRole("button", { name: /สร้าง Pick List/ });
+    const pickBtn = screen.getByRole("button", { name: /พิมพ์ใบจัดของ/ });
     expect(pickBtn).toBeDisabled();
 
     // Toggle via checkbox
@@ -93,7 +93,7 @@ describe("DeliveryPlanning", () => {
     await user.click(checkbox);
 
     expect(pickBtn).not.toBeDisabled();
-    // 3 × 1.0 = 3.00 m³ — appears in stat card + volume gauge
+    // 3 × 1.0 = 3.00 m³ — shown in the volume gauge
     expect(screen.getAllByText(/3\.00 \/ 8 m³/).length).toBeGreaterThanOrEqual(1);
   });
 
@@ -131,10 +131,10 @@ describe("DeliveryPlanning", () => {
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
 
-    await user.click(screen.getByRole("button", { name: /สร้าง Pick List/ }));
+    await user.click(screen.getByRole("button", { name: /พิมพ์ใบจัดของ/ }));
 
-    // Modal opened — assert via Print button which only exists inside Pick List modal
-    expect(screen.getByRole("button", { name: /พิมพ์/ })).toBeInTheDocument();
+    // Modal opened — assert via its title (the trigger button also matches /พิมพ์/)
+    expect(screen.getByText(/ใบจัดของ —/)).toBeInTheDocument();
     expect(screen.getByText("ตู้เย็น")).toBeInTheDocument();
     // Customer column now shows customer names instead of SO numbers
     expect(screen.getByText(/A.*B|B.*A/)).toBeInTheDocument();
