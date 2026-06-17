@@ -42,6 +42,7 @@ function getLast6Months() {
 export default function CustomerProfile({ customer, sales, quotes, payments, products, pN, promos = [], setContacts, canEdit = true, onClose, onEdit }) {
   const [tab, setTab] = useState("so");
   const [confirmAct, setConfirmAct] = useState(null); // {title, msg, onOk}
+  const [hoverSO, setHoverSO] = useState(null); // {so, x, y}
 
   const isDesktop = useMediaQuery("(min-width: 900px)");
 
@@ -173,7 +174,11 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
               <tbody>{custSales.map(so=>{
                 const net=soNet(so);
                 const ost=so.status==="completed"?Math.max(0,net-getPaid(so.soNum)):0;
-                return <tr key={so.id} style={{borderBottom:"0.5px solid var(--line)",background:ost>0?"rgba(255,149,0,0.14)":""}}>
+                return <tr key={so.id}
+                  onMouseEnter={e=>setHoverSO({so,x:e.clientX,y:e.clientY})}
+                  onMouseMove={e=>setHoverSO(h=>h&&h.so.id===so.id?{...h,x:e.clientX,y:e.clientY}:h)}
+                  onMouseLeave={()=>setHoverSO(null)}
+                  style={{borderBottom:"0.5px solid var(--line)",background:ost>0?"rgba(255,149,0,0.14)":"",cursor:"default"}}>
                   <td style={{padding:"7px 8px",fontWeight:500}}>{so.soNum}</td>
                   <td style={{padding:"7px 8px",color:"var(--dim)"}}>{toBE(so.date)}</td>
                   <td style={{padding:"7px 8px"}}><SOBadge status={so.status}/></td>
@@ -187,6 +192,51 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
             </table>
           </div>
       )}
+      {tab==="so"&&hoverSO&&(()=>{
+        const so=hoverSO.so;
+        const net=soNet(so);
+        const paid=getPaid(so.soNum);
+        const rem=so.status==="completed"?Math.max(0,net-paid):0;
+        const W=360;
+        const M=12;
+        const vw=typeof window!=="undefined"?window.innerWidth:1280;
+        const vh=typeof window!=="undefined"?window.innerHeight:800;
+        const flipLeft=hoverSO.x-W-M>0;
+        const top=Math.min(Math.max(hoverSO.y-30,M),vh-260);
+        const positionStyle=flipLeft
+          ?{right:vw-hoverSO.x+M,top}
+          :{left:hoverSO.x+M,top};
+        return <div style={{position:"fixed",...positionStyle,width:W,background:"var(--panel)",border:"1px solid var(--line)",borderRadius:10,boxShadow:"var(--shadow-card-hi, 0 12px 28px rgba(0,0,0,0.35))",padding:"12px 14px",zIndex:200,pointerEvents:"none",fontSize:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}>
+            <span style={{fontWeight:700,fontSize:13}}>{so.soNum}</span>
+            <SOBadge status={so.status}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"2px 12px",color:"var(--dim)",fontSize:11,marginBottom:8,paddingBottom:8,borderBottom:"1px solid var(--line)"}}>
+            <div>วันที่: <span style={{color:"var(--text)",fontWeight:500}}>{toBE(so.date)}</span></div>
+            <div>การชำระ: <span style={{color:"var(--text)",fontWeight:500}}>{so.payType==="cash"?"เงินสด":"เครดิต "+(so.creditDays||0)+" วัน"}</span></div>
+            {so.vatRepName&&<div style={{gridColumn:"1/-1"}}>VAT: <span style={{color:"var(--blue)",fontWeight:500}}>{so.vatRepName}</span></div>}
+          </div>
+          <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
+            {(so.items||[]).map((it,idx)=>{
+              const pr=(products||[]).find(p=>p.id===it.productId);
+              return <div key={idx} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"3px 0",fontSize:11,borderBottom:idx<so.items.length-1?"0.5px solid var(--line)":"none"}}>
+                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--text)"}}>{pr?pN(pr):"#"+it.productId}</span>
+                <span style={{color:"var(--dim)",flexShrink:0}}>{it.qty}×฿{fmt(it.price)}</span>
+                <span style={{fontWeight:500,minWidth:64,textAlign:"right",flexShrink:0}}>฿{fmt(it.qty*it.price)}</span>
+              </div>;
+            })}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:2,paddingTop:6,borderTop:"1px solid var(--line)"}}>
+            {(so.discountAmt||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)",fontSize:11}}><span>ส่วนลด</span><span>−฿{fmt(so.discountAmt)}</span></div>}
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:13}}><span>ยอดสุทธิ</span><span>฿{fmt(net)}</span></div>
+            {so.status==="completed"&&<>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--green)"}}><span>ชำระแล้ว</span><span>฿{fmt(paid)}</span></div>
+              {rem>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--red)",fontWeight:600}}><span>คงเหลือ</span><span>฿{fmt(rem)}</span></div>}
+            </>}
+          </div>
+          {so.note&&<div style={{marginTop:8,paddingTop:6,borderTop:"1px solid var(--line)",fontSize:11,color:"var(--dim)",fontStyle:"italic"}}>หมายเหตุ: {so.note}</div>}
+        </div>;
+      })()}
 
       {/* Tab: ใบเสนอราคา */}
       {tab==="qt"&&(
