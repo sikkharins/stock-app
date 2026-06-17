@@ -1061,6 +1061,24 @@ export const poStatusFromShipments = (po: DropshipPO): string => {
   return fullyCommitted && allDelivered ? "received" : "partial";
 };
 
+// When editing a PO that already has receipts, you may not drop a received
+// product or set its ordered qty below what's already been received. Returns
+// the first offending {productId, received}, or null if the edit is allowed.
+export const poEditViolation = (
+  po: DropshipPO,
+  newItems: { productId: number | string; qty: number | string }[]
+): { productId: number; received: number } | null => {
+  if (!(po.shipments || []).length) return null;
+  for (const r of shipmentTotals(po)) {
+    if (r.received <= 0) continue;
+    const line = newItems.find((i) => +i.productId === r.productId);
+    const newQty = line ? +line.qty || 0 : 0;
+    if (newQty < r.received)
+      return { productId: r.productId, received: r.received };
+  }
+  return null;
+};
+
 export interface BuildDropshipSOContact {
   id: number | string;
   defaultCreditDays?: number;

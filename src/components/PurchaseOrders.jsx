@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, nextDocNum, shipmentTotals, poStatusFromShipments, buildDropshipShipmentSO } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, nextDocNum, shipmentTotals, poStatusFromShipments, buildDropshipShipmentSO, poEditViolation } from "../utils/helpers.js";
 import { printDoc } from "./PrintDocument.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Badge from "./ui/Badge.jsx";
@@ -120,15 +120,27 @@ export default function POPage({sh}){
   // stock, record a delivered receipt (no SO), and recompute PO status.
   const receivePartial=()=>{
     const po=shipModal;if(!po)return;
-    const recv=shipForm.filter(s=>+s.qty>0).map(s=>({productId:+s.productId,qty:+s.qty}));
-    if(!recv.length){setWarnMsg("กรุณาระบุจำนวนที่รับอย่างน้อย 1 รายการ");return;}
+    const recv=shipForm.filter(s=>!s.bonus&&+s.qty>0).map(s=>({productId:+s.productId,qty:+s.qty}));
+    const bonusRows=shipForm.filter(s=>s.bonus&&+s.qty>0);
+    if(bonusRows.some(b=>!b.productId)){setWarnMsg("เลือกสินค้าของแถมให้ครบ หรือลบแถวที่ว่าง");return;}
+    const bonus=bonusRows.map(b=>({productId:+b.productId,qty:+b.qty,cost:+b.cost||0}));
+    if(!recv.length&&!bonus.length){setWarnMsg("กรุณาระบุจำนวนที่รับอย่างน้อย 1 รายการ");return;}
     const roll=shipmentTotals(po);
     for(const r of recv){const rr=roll.find(x=>x.productId===r.productId);if(rr&&r.qty>rr.remaining){setWarnMsg("จำนวนที่รับเกินยอดคงเหลือของบางรายการ");return;}}
+    // ของแถมต้องเป็นสินค้าที่ยังไม่มีใน PO (กัน productId ซ้ำ → rollup ถูกต้อง)
+    for(const b of bonus){if((po.items||[]).some(i=>+i.productId===b.productId)){const pr=products.find(p=>+p.id===b.productId);setWarnMsg("สินค้า "+(pr?pN(pr):b.productId)+" มีใน PO อยู่แล้ว — รับในรายการนั้นแทน (ของแถมไว้สำหรับสินค้าที่ไม่ได้สั่ง)");return;}}
+    const all=[...recv,...bonus.map(b=>({productId:b.productId,qty:b.qty}))];
     for(const r of recv){const pr=products.find(p=>p.id===r.productId);if(pr)addLog(mkLog(pr.id,"in",r.qty,pr.stock,pr.stock+r.qty,po.poNum,"รับของ PO (บางส่วน)",cu.username));}
-    setProducts(pp=>pp.map(pr=>{const r=recv.find(x=>x.productId===pr.id);return r?{...pr,stock:pr.stock+r.qty}:pr;}));
-    const receipt={id:Date.now(),date:todayStr(),by:cu?.username||"",items:recv,delivered:true};
-    setPOs(p=>p.map(x=>{if(x.id!==po.id)return x;const shipments=[...(x.shipments||[]),receipt];return{...x,shipments,status:poStatusFromShipments({...x,shipments})};}));
-    addA("รับของ PO (บางส่วน)",po.poNum);
+    for(const b of bonus){const pr=products.find(p=>p.id===b.productId);if(pr)addLog(mkLog(pr.id,"in",b.qty,pr.stock,pr.stock+b.qty,po.poNum,"รับของแถม PO",cu.username));}
+    setProducts(pp=>pp.map(pr=>{const r=all.find(x=>x.productId===pr.id);return r?{...pr,stock:pr.stock+r.qty}:pr;}));
+    const receipt={id:Date.now(),date:todayStr(),by:cu?.username||"",items:all,delivered:true};
+    setPOs(p=>p.map(x=>{
+      if(x.id!==po.id)return x;
+      const newItems=[...(x.items||[]),...bonus.map(b=>{const pr=products.find(pp=>+pp.id===b.productId);return{productId:b.productId,qty:b.qty,cost:b.cost,sellPrice:pr?pr.price:0,bonus:true};})];
+      const shipments=[...(x.shipments||[]),receipt];
+      return{...x,items:newItems,shipments,status:poStatusFromShipments({...x,items:newItems,shipments})};
+    }));
+    addA("รับของ PO (บางส่วน)"+(bonus.length?" + ของแถม":""),po.poNum);
     setShipModal(null);cM();
   };
 
@@ -188,6 +200,8 @@ export default function POPage({sh}){
   const updatePO=()=>{
     if(!form.supplierId||form.items.some(i=>!i.productId))return;
     if(form.dropShip&&!form.dropShipCustomerId){setWarnMsg("กรุณาเลือกลูกค้าปลายทางสำหรับส่งนอกสถานที่");return;}
+    // Guard: don't drop a received product or set its ordered qty below what's already received.
+    if(editPO){const v=poEditViolation(editPO,form.items);if(v){const pr=products.find(p=>+p.id===v.productId);setWarnMsg("ลดจำนวน/ลบรายการต่ำกว่าที่รับไปแล้วไม่ได้ — "+(pr?pN(pr):v.productId)+" รับไปแล้ว "+v.received);return;}}
     const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",refNo:form.refNo||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
     setPOs(p=>p.map(x=>x.id===editPO.id?{...x,...base}:x));
     addA("แก้ไข PO",editPO.poNum);setEditPO(null);cM();
@@ -202,6 +216,8 @@ export default function POPage({sh}){
   const canEditDraftPO=po=>!isSup&&po.status==="draft"&&(po.createdBy===cu?.username||ed);
   // Admin bypass: PO ที่รับของแล้ว — stock NOT auto-adjusted (warning in form + distinct button).
   const canAdminEditReceivedPO=po=>!isSup&&isAdmin&&po.status==="received";
+  // Admin can edit an approved/partially-received PO (e.g. add bonus/แถม items that arrived).
+  const canEditOpenPO=po=>!isSup&&isAdmin&&(po.status==="approved"||po.status==="partial");
   const rowActions=po=>{
     const a=[];
     a.push(<button key="v" onClick={()=>{setViewPO(po);oM("viewPO");}} style={{...AB,border:"1px solid var(--blue)",background:"var(--blue-bg)",color:"var(--blue)"}}>ดู</button>);
@@ -209,6 +225,8 @@ export default function POPage({sh}){
       a.push(<button key="edit" onClick={()=>openEditPO(po)} style={{...AB,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)"}}>แก้ไข</button>);
     if(canAdminEditReceivedPO(po))
       a.push(<button key="edit-admin" onClick={()=>openEditPO(po)} title="แก้ไข PO ที่รับของแล้ว — สต็อกไม่ปรับอัตโนมัติ" style={{...AB,border:"1px solid var(--purple)",background:"rgba(175,82,222,0.12)",color:"var(--purple)"}}>แก้ไข (admin)</button>);
+    if(canEditOpenPO(po))
+      a.push(<button key="edit-open" onClick={()=>openEditPO(po)} title="แก้ไข PO ที่อนุมัติแล้ว — เพิ่ม/แก้รายการ (เช่น ของแถม)" style={{...AB,border:"1px solid var(--purple)",background:"rgba(175,82,222,0.12)",color:"var(--purple)"}}>แก้ไข (admin)</button>);
     if(po.status==="draft"&&(po.createdBy===cu?.username||ed)&&!isSup)
       a.push(<button key="sub" onClick={()=>submitForApproval(po)} style={{...AB,border:"1px solid var(--orange)",background:"rgba(255,149,0,0.12)",color:"var(--orange)"}}>ส่งขออนุมัติ</button>);
     if(canApproveThis(po)){
@@ -325,6 +343,9 @@ export default function POPage({sh}){
       {editPO&&editPO.status==="received"&&<div style={{background:"rgba(255,59,48,0.12)",border:"1px solid var(--red)",borderRadius:6,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--red)",fontWeight:500}}>
         {"⚠ PO นี้รับของแล้ว — แก้ไขจะไม่ปรับสต็อกอัตโนมัติ ต้องปรับ stock log เองถ้าจำนวน/รายการเปลี่ยน"}
       </div>}
+      {editPO&&(editPO.status==="approved"||editPO.status==="partial")&&<div style={{background:"rgba(175,82,222,0.12)",border:"1px solid var(--purple)",borderRadius:6,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--purple)",fontWeight:500}}>
+        {"⚠ PO นี้อนุมัติแล้ว — เพิ่ม/แก้รายการจะไม่ผ่านการอนุมัติซ้ำ และสต็อกไม่ปรับอัตโนมัติ (รับของตามปกติภายหลัง) · ห้ามลดจำนวนต่ำกว่าที่รับไปแล้ว"}
+      </div>}
       <MBtns onCancel={()=>{setEditPO(null);cM();}} onSave={editPO?updatePO:savePO} saveLabel={editPO?"บันทึก":"บันทึก Draft"}/>
     </Modal>}
 
@@ -360,7 +381,7 @@ export default function POPage({sh}){
 
       <table style={{width:"100%",borderCollapse:"collapse",marginBottom:12}}>
         <thead><tr style={{borderBottom:"0.5px solid var(--line)"}}>{["สินค้า","Qty","ต้นทุน/หน่วย","รวม"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"var(--dim)",fontSize:12}}>{h}</th>)}</tr></thead>
-        <tbody>{viewPO.items.map((it,i)=>{const pr=products.find(x=>x.id===it.productId);return <tr key={i} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"6px 8px"}}>{pr?pN(pr):"-"}</td><td style={{padding:"6px 8px"}}>{it.qty}</td><td style={{padding:"6px 8px"}}>{"฿"+fmt(it.cost)}</td><td style={{padding:"6px 8px",fontWeight:500}}>{"฿"+fmt(it.qty*it.cost)}</td></tr>;})}
+        <tbody>{viewPO.items.map((it,i)=>{const pr=products.find(x=>x.id===it.productId);return <tr key={i} style={{borderBottom:"0.5px solid var(--line)"}}><td style={{padding:"6px 8px"}}>{pr?pN(pr):"-"}{it.bonus&&<span style={{marginLeft:6,fontSize:10,color:"var(--green)",background:"rgba(52,199,89,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500}}>{"แถม"}</span>}</td><td style={{padding:"6px 8px"}}>{it.qty}</td><td style={{padding:"6px 8px"}}>{"฿"+fmt(it.cost)}</td><td style={{padding:"6px 8px",fontWeight:500}}>{"฿"+fmt(it.qty*it.cost)}</td></tr>;})}
         </tbody>
       </table>
       <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
@@ -456,15 +477,29 @@ export default function POPage({sh}){
 
     {modal==="recordShip"&&shipModal&&<Modal title={(shipMode==="receive"?"รับของบางส่วน — ":"บันทึกการส่ง — ")+shipModal.poNum} onClose={()=>{setShipModal(null);cM();}}>
       <div style={{fontSize:12,color:"var(--dim)",marginBottom:10}}>{shipMode==="receive"?"ใส่จำนวนที่รับจริงรอบนี้ (ค่าเริ่มต้น = คงเหลือ) — สต็อกจะเพิ่มทันที ส่วนที่เหลือค้างไว้รอรอบถัดไป":"ใส่จำนวนที่ส่งจริงรอบนี้ (ค่าเริ่มต้น = คงเหลือ) — ระบบจะสร้าง SO ตามจำนวนนี้ ส่วนที่เหลือค้างไว้รอรอบถัดไป"}</div>
-      {(()=>{const roll=shipmentTotals(shipModal);return shipModal.items.map((it,idx)=>{const pr=products.find(x=>+x.id===+it.productId);const r=roll.find(x=>x.productId===+it.productId);const remain=r?r.remaining:0;const sf=shipForm.find(x=>x.productId===+it.productId);return <div key={idx} style={{marginBottom:8,padding:"8px 12px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)"}}>
+      {(()=>{const roll=shipmentTotals(shipModal);return shipModal.items.map((it,idx)=>{const pr=products.find(x=>+x.id===+it.productId);const r=roll.find(x=>x.productId===+it.productId);const remain=r?r.remaining:0;const sf=shipForm.find(x=>!x.bonus&&x.productId===+it.productId);return <div key={idx} style={{marginBottom:8,padding:"8px 12px",background:"var(--bg)",borderRadius:8,border:"1px solid var(--line)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:13,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pr?(pr.brand+" — "+pN(pr)):it.productId}</div>
             <div style={{fontSize:11,color:"var(--dim)",marginTop:2}}>{"สั่ง "+it.qty+" · "+(shipMode==="receive"?"รับแล้ว ":"ส่งแล้ว ")+(r?r.committed:0)+" · คงเหลือ "+remain}</div>
           </div>
-          <input type="number" min="0" max={remain} value={sf?sf.qty:0} onChange={e=>{const v=e.target.value;setShipForm(f=>f.map(x=>x.productId===+it.productId?{...x,qty:v}:x));}} style={{...IB,width:80,flex:"none"}}/>
+          <input type="number" min="0" max={remain} value={sf?sf.qty:0} onChange={e=>{const v=e.target.value;setShipForm(f=>f.map(x=>(!x.bonus&&x.productId===+it.productId)?{...x,qty:v}:x));}} style={{...IB,width:80,flex:"none"}}/>
         </div>
       </div>;});})()}
+      {shipMode==="receive"&&<>
+        {shipForm.filter(x=>x.bonus).map(b=><div key={b.bid} style={{marginBottom:8,padding:"8px 12px",background:"rgba(52,199,89,0.06)",borderRadius:8,border:"1px dashed var(--green)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:11,fontWeight:600,color:"var(--green)"}}>{"ของแถม (ไม่ได้สั่ง)"}</span>
+            <span onClick={()=>setShipForm(f=>f.filter(x=>x.bid!==b.bid))} style={{cursor:"pointer",color:"var(--red)",fontSize:18,lineHeight:1}}>{"×"}</span>
+          </div>
+          <CustomSelect searchable value={b.productId?String(b.productId):""} onChange={v=>setShipForm(f=>f.map(x=>x.bid===b.bid?{...x,productId:v?+v:""}:x))} options={[{value:"",label:"เลือกสินค้าแถม..."},...products.filter(pr=>!pr.discontinued).map(pr=>({value:String(pr.id),label:pr.brand+" — "+pN(pr),searchText:pr.code||""}))]}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:6}}>
+            <Field label="จำนวน"><input type="number" min="1" value={b.qty} onChange={e=>{const v=e.target.value;setShipForm(f=>f.map(x=>x.bid===b.bid?{...x,qty:v}:x));}} style={IB}/></Field>
+            <Field label="ราคา/หน่วย (แถม=0)"><input type="number" min="0" value={b.cost} onChange={e=>{const v=e.target.value;setShipForm(f=>f.map(x=>x.bid===b.bid?{...x,cost:v}:x));}} style={IB}/></Field>
+          </div>
+        </div>)}
+        <button onClick={()=>setShipForm(f=>[...f,{bid:Date.now()+Math.floor(Math.random()*1000),productId:"",qty:1,cost:0,bonus:true}])} style={{fontSize:12,padding:"5px 10px",borderRadius:6,border:"1px dashed var(--green)",cursor:"pointer",background:"transparent",color:"var(--green)",marginBottom:12,fontFamily:"inherit"}}>{"+ เพิ่มรายการแถม"}</button>
+      </>}
       <MBtns onCancel={()=>{setShipModal(null);cM();}} onSave={shipMode==="receive"?receivePartial:recordShipment} saveLabel={shipMode==="receive"?"ยืนยันรับของ":"สร้าง SO + บันทึกการส่ง"}/>
     </Modal>}
 

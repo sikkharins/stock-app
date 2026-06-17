@@ -25,6 +25,7 @@ import {
   shipmentTotals,
   poStatusFromShipments,
   buildDropshipShipmentSO,
+  poEditViolation,
   type Promo,
   type Sale,
   type Product,
@@ -1262,5 +1263,55 @@ describe("buildDropshipShipmentSO", () => {
     expect(so.includeVat).toBe(false);
     expect(so.vatAmount).toBe(0);
     expect(so.creditDays).toBe(45);
+  });
+});
+
+describe("poEditViolation", () => {
+  const po = {
+    poNum: "PO-1",
+    items: [
+      { productId: 1, qty: 10, cost: 5 },
+      { productId: 2, qty: 4, cost: 2 },
+    ],
+    shipments: [
+      { id: 1, soNum: "", delivered: true, items: [{ productId: 1, qty: 7 }] },
+    ],
+  };
+
+  test("no shipments → always allowed (null)", () => {
+    expect(poEditViolation({ items: po.items } as never, po.items as never)).toBeNull();
+  });
+
+  test("keeping a received line at/above received qty is allowed", () => {
+    expect(
+      poEditViolation(po as never, [
+        { productId: 1, qty: 7 },
+        { productId: 2, qty: 4 },
+      ] as never)
+    ).toBeNull();
+  });
+
+  test("reducing a received line below received is blocked", () => {
+    expect(poEditViolation(po as never, [{ productId: 1, qty: 5 }] as never)).toMatchObject({
+      productId: 1,
+      received: 7,
+    });
+  });
+
+  test("removing a received line is blocked", () => {
+    expect(poEditViolation(po as never, [{ productId: 2, qty: 4 }] as never)).toMatchObject({
+      productId: 1,
+      received: 7,
+    });
+  });
+
+  test("adding a new (bonus) product is allowed", () => {
+    expect(
+      poEditViolation(po as never, [
+        { productId: 1, qty: 10 },
+        { productId: 2, qty: 4 },
+        { productId: 9, qty: 3 },
+      ] as never)
+    ).toBeNull();
   });
 });
