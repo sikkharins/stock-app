@@ -2,10 +2,14 @@ import { useState, useMemo } from "react";
 import { fmtD } from "../../utils/helpers.js";
 import { dlCSV } from "../../utils/csv.js";
 import { categorizeAudit, CATEGORIES } from "../../utils/auditCategory.ts";
-import { auditInRange } from "../../utils/auditRefs.ts";
+import { auditInRange, parseAuditRef } from "../../utils/auditRefs.ts";
 import CustomSelect from "../ui/CustomSelect.jsx";
 
 const DATE_CHIPS = [["all","ทั้งหมด"],["today","วันนี้"],["7d","7 วัน"],["month","เดือนนี้"]];
+const SO_ST={pending_delivery:"รอส่ง",out_for_delivery:"เตรียมส่ง",completed:"สำเร็จ",cancelled:"ยกเลิก",pending_special_approval:"รออนุมัติ"};
+const PO_ST={draft:"ร่าง",pending_approval:"รออนุมัติ",approved:"อนุมัติ",partial:"รับบางส่วน",received:"รับครบ",closed:"ปิดรับ",cancelled:"ยกเลิก"};
+const QT_ST={draft:"ร่าง",sent:"ส่งแล้ว",approved:"อนุมัติ",converted:"แปลง SO",cancelled:"ยกเลิก",expired:"หมดอายุ"};
+const baht=n=>"฿"+Number(n||0).toLocaleString("th-TH");
 
 function CatBadge({ cat }) {
   return <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:cat.bg,color:cat.color,fontWeight:500,whiteSpace:"nowrap"}}>{cat.label}</span>;
@@ -26,6 +30,19 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
   const [fU,setFU]=useState("");
   const [fCat,setFCat]=useState("");
   const [riskOnly,setRiskOnly]=useState(false);
+  const [hover,setHover]=useState(null); // {ref,x,y}
+
+  const codes=useMemo(()=>(products||[]).map(p=>p.code).filter(Boolean),[products]);
+  const cName=id=>{const c=(contacts||[]).find(x=>x.id===id);return c?cN(c):"#"+id;};
+
+  const lookup=(ref)=>{
+    if(!ref) return null;
+    if(ref.type==="so"){const r=(sales||[]).find(s=>s.soNum===ref.num);return r&&{kind:"so",num:r.soNum,st:SO_ST[r.status]||r.status,who:cName(r.customerId),total:(r.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(r.discountAmt||0),n:(r.items||[]).length};}
+    if(ref.type==="po"){const r=(pos||[]).find(p=>p.poNum===ref.num);return r&&{kind:"po",num:r.poNum,st:PO_ST[r.status]||r.status,who:cName(r.supplierId),total:(r.items||[]).reduce((s,i)=>s+i.qty*i.cost,0),n:(r.items||[]).length};}
+    if(ref.type==="qt"){const r=(quotes||[]).find(x=>x.qtNum===ref.num);return r&&{kind:"qt",num:r.qtNum,st:QT_ST[r.status]||r.status,who:cName(r.customerId),total:(r.items||[]).reduce((s,i)=>s+i.qty*i.price,0),n:(r.items||[]).length};}
+    if(ref.type==="product"){const r=(products||[]).find(p=>p.code===ref.code);return r&&{kind:"product",num:r.code,name:pN(r),stock:r.stock,price:r.price};}
+    return null;
+  };
 
   const rows=useMemo(()=>audit.map(l=>({...l,cat:categorizeAudit(l.action)})),[audit]);
   const users=useMemo(()=>[...new Set(audit.map(l=>l.user))],[audit]);
@@ -91,11 +108,14 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
                   <div style={{color:"var(--text)"}}>{tpart||"-"}</div>
                   <div style={{color:"var(--faint)"}}>{dpart}</div>
                 </td>
-                <td style={{padding:"8px 12px"}}>
+                <td style={{padding:"8px 12px"}}
+                  onMouseEnter={e=>{const ref=parseAuditRef(l.detail,codes);if(ref)setHover({ref,x:e.clientX,y:e.clientY});}}
+                  onMouseMove={e=>setHover(h=>h?{...h,x:e.clientX,y:e.clientY}:h)}
+                  onMouseLeave={()=>setHover(null)}>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     <CatBadge cat={l.cat}/>
                     <span>{l.action}</span>
-                    {l.detail&&<span style={{color:"var(--dim)"}}>{"· "+l.detail}</span>}
+                    {l.detail&&<span style={{color:"var(--dim)",textDecoration:parseAuditRef(l.detail,codes)?"underline dotted":"none",textUnderlineOffset:2}}>{"· "+l.detail}</span>}
                   </div>
                 </td>
                 <td style={{padding:"8px 12px",fontWeight:500,textAlign:"right",whiteSpace:"nowrap"}}>{l.user}</td>
@@ -104,5 +124,39 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
           </table>
         </div>
       </>}
+
+    {hover&&(()=>{
+      const info=lookup(hover.ref);
+      const W=300,M=12;
+      const vw=typeof window!=="undefined"?window.innerWidth:1280;
+      const vh=typeof window!=="undefined"?window.innerHeight:800;
+      const flipLeft=hover.x-W-M>0;
+      const top=Math.min(Math.max(hover.y-30,M),vh-220);
+      const pos=flipLeft?{right:vw-hover.x+M,top}:{left:hover.x+M,top};
+      return <div style={{position:"fixed",...pos,width:W,background:"var(--panel)",border:"1px solid var(--line)",borderRadius:10,boxShadow:"var(--shadow-card-hi, 0 12px 28px rgba(0,0,0,0.35))",padding:"12px 14px",zIndex:200,pointerEvents:"none",fontSize:12}}>
+        {!info
+          ? <div style={{color:"var(--dim)"}}>ไม่พบเอกสาร (อาจถูกลบ)</div>
+          : info.kind==="product"
+            ? <>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{info.num}</div>
+                <div style={{color:"var(--text)",marginBottom:8}}>{info.name}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"2px 12px",color:"var(--dim)"}}>
+                  <div>คงเหลือ: <span style={{color:"var(--text)",fontWeight:500}}>{info.stock}</span></div>
+                  <div>ราคา: <span style={{color:"var(--text)",fontWeight:500}}>{baht(info.price)}</span></div>
+                </div>
+              </>
+            : <>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6}}>
+                  <span style={{fontWeight:700,fontSize:13}}>{info.num}</span>
+                  <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"var(--hover)",color:"var(--dim)",fontWeight:500}}>{info.st}</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"2px 12px",color:"var(--dim)"}}>
+                  <div style={{gridColumn:"1/-1"}}>{info.kind==="po"?"ผู้ขาย":"ลูกค้า"}: <span style={{color:"var(--text)",fontWeight:500}}>{info.who}</span></div>
+                  <div>รายการ: <span style={{color:"var(--text)",fontWeight:500}}>{info.n}</span></div>
+                  <div>ยอด: <span style={{color:"var(--text)",fontWeight:500}}>{baht(info.total)}</span></div>
+                </div>
+              </>}
+      </div>;
+    })()}
   </div>;
 }
