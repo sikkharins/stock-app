@@ -3,6 +3,7 @@ import { IB } from "../utils/constants.js";
 import Btn from "./ui/Btn.jsx";
 import ProductPicker from "./ui/ProductPicker.jsx";
 import { buildComparison, buildZoneComparison } from "../utils/stockCompare.ts";
+import { pickCaptureTargets, getRelayUrl, setRelayUrl } from "../utils/cameraCapture.ts";
 
 const ANGLES = ["", "หน้า", "ข้าง", "บน", "อื่นๆ"];
 const CONF = {
@@ -47,6 +48,11 @@ export default function StockCountPage({ sh }) {
   const [piles, setPiles] = useState(null);
   const [overrides, setOverrides] = useState({});
   const [zoneId, setZoneId] = useState("");
+  const [relayUrl, setRelayUrlState] = useState(getRelayUrl());
+  const [camPresets, setCamPresets] = useState(null); // null=ปิด picker, []=เปิดแต่ไม่มี
+  const [camErr, setCamErr] = useState("");
+  const [capturing, setCapturing] = useState("");
+  const [manualSel, setManualSel] = useState([]);
 
   const addShots = async (e) => {
     const files = [...(e.target.files || [])];
@@ -85,6 +91,38 @@ export default function StockCountPage({ sh }) {
   const totalShown = zone ? (zres.expectedSeen.length + zres.expectedMissing.length + zres.foreignSeen.length) : matched.length;
   const goAdjust = (pid) => { setPendingAdjust(pid); handleTab("products"); };
 
+  const openCam = async () => {
+    setCamErr(""); setManualSel([]);
+    try {
+      const res = await fetch(relayUrl + "/presets");
+      const data = await res.json();
+      setCamPresets(data.presets || []);
+    } catch {
+      setCamPresets([]);
+      setCamErr("เรียก relay ไม่ได้ — เปิดโปรแกรม relay บนเครื่องที่ต่อ LAN เดียวกับกล้องหรือยัง (ถ้าเบราว์เซอร์บล็อก ใช้ปุ่ม + เพิ่มรูป อัปโหลดเองได้)");
+    }
+  };
+  const doCapture = async (targets) => {
+    if (!targets.length) return;
+    setCamErr("");
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        setCapturing(`กำลังดึง ${i + 1}/${targets.length} (${targets[i].name})`);
+        const q = targets[i].token ? "?preset=" + encodeURIComponent(targets[i].token) : "";
+        const res = await fetch(relayUrl + "/snapshot" + q);
+        if (!res.ok) throw new Error("snapshot");
+        const blob = await res.blob();
+        const shot = await resizeToBase64(blob);
+        setShots((s) => [...s, { ...shot, angle: targets[i].name }]);
+      }
+      setCamPresets(null);
+    } catch {
+      setCamErr("ดึงเฟรมไม่สำเร็จ (กล้อง/ffmpeg/relay)");
+    } finally {
+      setCapturing("");
+    }
+  };
+
   const TD = { padding: "8px 10px", fontSize: 13, borderBottom: "0.5px solid var(--line)" };
 
   return (
@@ -101,7 +139,7 @@ export default function StockCountPage({ sh }) {
                 <button onClick={() => removeShot(i)} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: 11, border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", cursor: "pointer", fontSize: 13, lineHeight: "22px", padding: 0 }}>×</button>
               </div>
               <select value={s.angle} onChange={(e) => setAngle(i, e.target.value)} style={{ ...IB, marginTop: 5, padding: "4px 6px", fontSize: 12 }}>
-                {ANGLES.map((a) => <option key={a} value={a}>{a || "เลือกมุม"}</option>)}
+                {(ANGLES.includes(s.angle) ? ANGLES : [s.angle, ...ANGLES]).map((a) => <option key={a} value={a}>{a || "เลือกมุม"}</option>)}
               </select>
             </div>
           ))}
@@ -120,7 +158,36 @@ export default function StockCountPage({ sh }) {
             {zones.map((z) => <option key={String(z.id)} value={String(z.id)}>{z.name}</option>)}
           </select>
           <Btn onClick={run} disabled={!shots.length || loading}>{loading ? "กำลังนับ..." : "ตรวจนับ"}</Btn>
+          <button onClick={openCam} disabled={!!capturing} style={{ padding: "8px 14px", borderRadius: 7, border: "1px dashed var(--line2)", color: "var(--blue)", background: "var(--bg)", cursor: capturing ? "default" : "pointer", fontSize: 13, fontWeight: 500, fontFamily: "inherit" }}>{capturing || "ดึงจากกล้อง"}</button>
         </div>
+        {camPresets !== null && (
+          <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg2)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: camPresets.length ? 10 : 0 }}>
+              <button onClick={() => doCapture(pickCaptureTargets({ mode: "current" }))} disabled={!!capturing} style={{ fontSize: 12.5, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--blue)", background: "rgba(0,113,227,0.1)", color: "var(--blue)", cursor: "pointer", fontFamily: "inherit" }}>มุมปัจจุบัน</button>
+              {zone && (zone.presets || []).length > 0 && (
+                <button onClick={() => doCapture(pickCaptureTargets({ mode: "zone", zone, presets: camPresets }))} disabled={!!capturing} style={{ fontSize: 12.5, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--green)", background: "rgba(52,199,89,0.12)", color: "var(--green)", cursor: "pointer", fontFamily: "inherit" }}>ดึงตามโซน ({pickCaptureTargets({ mode: "zone", zone, presets: camPresets }).length} มุม)</button>
+              )}
+              <button onClick={() => { setCamPresets(null); setCamErr(""); }} style={{ fontSize: 12.5, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--dim)", cursor: "pointer", fontFamily: "inherit" }}>ปิด</button>
+            </div>
+            {camPresets.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 6 }}>หรือเลือกมุมเอง:</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                  {camPresets.map((p) => {
+                    const on = manualSel.includes(String(p.token));
+                    return <button key={String(p.token)} onClick={() => setManualSel((m) => on ? m.filter((t) => t !== String(p.token)) : [...m, String(p.token)])} style={{ fontSize: 12, padding: "5px 10px", borderRadius: 14, border: "1px solid " + (on ? "var(--blue)" : "var(--line2)"), background: on ? "rgba(0,113,227,0.12)" : "var(--bg)", color: on ? "var(--blue)" : "var(--text)", cursor: "pointer", fontFamily: "inherit" }}>{on ? "✓ " : ""}{p.name}</button>;
+                  })}
+                </div>
+                <button onClick={() => doCapture(pickCaptureTargets({ mode: "manual", selectedTokens: manualSel, presets: camPresets }))} disabled={!manualSel.length || !!capturing} style={{ fontSize: 12.5, padding: "6px 12px", borderRadius: 6, border: "none", background: manualSel.length ? "var(--blue)" : "var(--line2)", color: "#fff", cursor: manualSel.length ? "pointer" : "default", fontFamily: "inherit" }}>ดึงที่เลือก ({manualSel.length})</button>
+              </>
+            )}
+            <div style={{ marginTop: 10, display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: "var(--dim)" }}>relay:</span>
+              <input value={relayUrl} onChange={(e) => { setRelayUrlState(e.target.value); setRelayUrl(e.target.value); }} style={{ ...IB, width: 200, padding: "4px 8px", fontSize: 12 }} />
+            </div>
+          </div>
+        )}
+        {camErr && <div style={{ marginTop: 8, color: "var(--red)", fontSize: 12.5 }}>{camErr}</div>}
         {error && <div style={{ marginTop: 10, color: "var(--red)", fontSize: 13 }}>{error}</div>}
       </div>
 
