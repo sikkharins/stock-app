@@ -1,0 +1,9 @@
+{
+  "name": "stock-app-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "On-demand local relay: grab a frame + PTZ presets from a Tapo C560WS for the stock-app AI count screen.",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "onvif": "^0.7.1" }
+}
