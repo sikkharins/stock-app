@@ -187,7 +187,7 @@ export default function App(){
   const addLog=log=>setLogs(p=>[log,...p]);
   const oM=n=>setModal(n);const cM=()=>setModal(null);
   const addA=(a,d)=>setAudit(p=>[mkAudit(a,d,cu?.username),...p].slice(0,500));
-  const addPH=(pid,f,o,n)=>setPriceHist(p=>[{id:Date.now(),date:nowStr(),productId:pid,field:f,oldVal:o,newVal:n,user:cu?.username},...p].slice(0,500));
+  const addPH=(pid,f,o,n)=>setPriceHist(p=>[{id:Date.now()+Math.random(),date:nowStr(),productId:pid,field:f,oldVal:o,newVal:n,user:cu?.username},...p].slice(0,500));
   const notifs=getNotifs(products,sales,pos,payments,quotes);
 
   const applyData=(d,fallbackLS)=>{
@@ -591,12 +591,21 @@ export default function App(){
       setQuotes(p=>[...p,{id:Date.now(),qtNum:qn,status:"draft",convertedTo:"",customerId:+data.customerId,date:todayStr(),validUntil:vd.toISOString().slice(0,10),items,includeVat:data.includeVat!==false,payType:data.payType||"cash",discPct:data.payType==="cash"?(data.discPct||1):0,creditDays:data.payType==="credit"?(data.creditDays||45):0,note:"สร้างโดย AI Bot"}]);
       addA("สร้าง QT (AI Bot)",qn);
     }} onUpdateProducts={(updates)=>{
+      // Log price/cost history outside the setProducts updater: calling addPH inside
+      // an updater double-fires under StrictMode and writes duplicate-id history entries.
+      for(const u of updates){
+        const p=products.find(x=>x.id===+u.productId);
+        if(!p)continue;
+        const c=u.changes||{};
+        if(c.price!=null&&+c.price!==p.price)addPH(p.id,"price",p.price,+c.price);
+        if(c.cost!=null&&+c.cost!==(p.cost||0))addPH(p.id,"cost",p.cost||0,+c.cost);
+      }
       setProducts(prev=>prev.map(p=>{
         const u=updates.find(x=>+x.productId===p.id);
         if(!u)return p;
         const c=u.changes||{};const up={...p};
-        if(c.price!=null){addPH(p.id,"price",p.price,+c.price);up.price=+c.price;}
-        if(c.cost!=null){addPH(p.id,"cost",p.cost||0,+c.cost);up.cost=+c.cost;}
+        if(c.price!=null)up.price=+c.price;
+        if(c.cost!=null)up.cost=+c.cost;
         if(c.stock!=null)up.stock=+c.stock;
         if(c.minStock!=null)up.minStock=+c.minStock;
         if(c.name!=null)up.name=c.name;
