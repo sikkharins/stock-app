@@ -1,0 +1,43 @@
+import { describe, test, expect } from "vitest";
+import { pickCaptureTargets } from "./cameraCapture";
+
+const presets = [
+  { token: "1", name: "ซ้าย" },
+  { token: "2", name: "กลาง" },
+  { token: "3", name: "ขวา" },
+];
+
+describe("pickCaptureTargets", () => {
+  test("current → มุมปัจจุบัน (token null)", () => {
+    expect(pickCaptureTargets({ mode: "current", presets })).toEqual([{ token: null, name: "มุมปัจจุบัน" }]);
+  });
+
+  test("zone → preset ของโซน (เรียงตามโซน) ใช้ชื่อจาก presets ปัจจุบัน", () => {
+    const zone = { presets: [{ token: "3", name: "ขวา(เก่า)" }, { token: "1", name: "ซ้าย" }] };
+    expect(pickCaptureTargets({ mode: "zone", zone, presets })).toEqual([
+      { token: "3", name: "ขวา" },
+      { token: "1", name: "ซ้าย" },
+    ]);
+  });
+
+  test("zone: preset ที่ token หายจากกล้อง → กรองออก", () => {
+    const zone = { presets: [{ token: "1", name: "ซ้าย" }, { token: "9", name: "หาย" }] };
+    expect(pickCaptureTargets({ mode: "zone", zone, presets }).map((t) => t.token)).toEqual(["1"]);
+  });
+
+  test("zone ไม่มี preset → []", () => {
+    expect(pickCaptureTargets({ mode: "zone", zone: { presets: [] }, presets })).toEqual([]);
+    expect(pickCaptureTargets({ mode: "zone", zone: {}, presets })).toEqual([]);
+  });
+
+  test("manual → ตาม selectedTokens (เรียงตามที่เลือก), token แปลกปลอมถูกข้าม", () => {
+    expect(pickCaptureTargets({ mode: "manual", selectedTokens: ["2", "9", "1"], presets })).toEqual([
+      { token: "2", name: "กลาง" },
+      { token: "1", name: "ซ้าย" },
+    ]);
+  });
+
+  test("manual ไม่เลือกอะไร → []", () => {
+    expect(pickCaptureTargets({ mode: "manual", selectedTokens: [], presets })).toEqual([]);
+  });
+});

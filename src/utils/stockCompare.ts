@@ -57,7 +57,7 @@ export function buildComparison(
   return { matched, unmatched };
 }
 
-export interface Zone { id: number | string; name: string; note?: string; productIds: (number | string)[]; }
+export interface Zone { id: number | string; name: string; note?: string; productIds: (number | string)[]; presets?: { token: string; name: string }[]; }
 export interface ExpectedSeenRow { product: Product; aiCount: number; systemStock: number; diff: number; confidence: string; note: string; }
 export interface ExpectedMissingRow { product: Product; systemStock: number; }
 export interface ForeignRow { product: Product; aiCount: number; confidence: string; note: string; }
