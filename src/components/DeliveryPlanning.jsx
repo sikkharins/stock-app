@@ -763,7 +763,14 @@ export default function DeliveryPlanningPage({ sh }) {
     });
     const filtered = zoneFilter
       ? rows.filter((r) => {
-          const blob = (r.cust?.address || "") + " " + (r.cust?.geoNote || "");
+          const blob =
+            (r.cust?.address || "") +
+            " " +
+            (r.cust?.geoNote || "") +
+            " " +
+            (r.custName || "") +
+            " " +
+            (r.so?.soNum || "");
           return blob.toLowerCase().includes(zoneFilter.toLowerCase());
         })
       : rows;
@@ -1392,7 +1399,7 @@ export default function DeliveryPlanningPage({ sh }) {
               <input
                 value={zoneFilter}
                 onChange={(e) => setZoneFilter(e.target.value)}
-                placeholder="ค้นหาเขต/พื้นที่/จุดส่ง..."
+                placeholder="ค้นหาลูกค้า/เลข SO/เขต/พื้นที่..."
                 style={{ ...IB, flex: 1, padding: "5px 10px", fontSize: 12 }}
               />
             )}
