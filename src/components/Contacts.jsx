@@ -41,7 +41,7 @@ export default function ContactPage({sh,ft}){
   const SS=(users||[]).filter(u=>u.salesName).map(u=>u.salesName);
   const isC=ft==="customer";const tk=isC?"customers":"suppliers";const ed=canE(tk);const cd=canD(tk);
   const sf=isC&&cu.role!=="SalesManager"&&cu.salesName;
-  const ef={type:ft,name:"",nameT:"",phone:"",email:"",address:"",taxId:"",salesPerson:"",vatReps:[],staff:[]};
+  const ef={type:ft,name:"",nameT:"",phone:"",email:"",address:"",taxId:"",custCode:"",salesPerson:"",vatReps:[],staff:[]};
   const[form,setForm]=useState(ef);const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
   const[viewProfile,setViewProfile]=useState(null);
   const[viewSupplier,setViewSupplier]=useState(null);
@@ -451,6 +451,7 @@ export default function ContactPage({sh,ft}){
       <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <Field label="ชื่อ EN"><input value={form.name||""} onChange={e=>setF("name",e.target.value)} style={IB}/></Field>
         <Field label="ชื่อ TH"><input value={form.nameT||""} onChange={e=>setF("nameT",e.target.value)} style={IB}/></Field>
+        {isC&&<Field label="รหัสลูกค้า"><input value={form.custCode||""} onChange={e=>setF("custCode",e.target.value)} style={IB}/></Field>}
         <Field label="โทร"><input value={form.phone||""} onChange={e=>setF("phone",e.target.value)} style={IB}/></Field>
         <Field label="Email"><input value={form.email||""} onChange={e=>setF("email",e.target.value)} style={IB}/></Field>
         {isC&&<div style={{gridColumn:"1/-1"}}><Field label="เซลส์"><CustomSelect value={form.salesPerson||""} onChange={v=>setF("salesPerson",v)} options={[{value:"",label:"ไม่ระบุ"},...SS.map(s=>({value:s,label:s}))]}/></Field></div>}
