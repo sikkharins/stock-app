@@ -6,6 +6,7 @@ import {
   buildRows,
   computeTotals,
   paginate,
+  buildSOFormHtml,
 } from "./PrintSOForm.js";
 
 describe("toBEShort", () => {
@@ -90,5 +91,39 @@ describe("paginate", () => {
   });
   test("ว่าง -> [[]] (1 หน้าว่าง)", () => {
     expect(paginate([], 12)).toEqual([[]]);
+  });
+});
+
+describe("buildSOFormHtml", () => {
+  const products = [{ id: 1, nameT: "ตู้เย็น", unit: "เครื่อง", price: 107 }];
+  const contacts = [{ id: 9, nameT: "ร้าน A", address: "123 ถนน", taxId: "TAX1", custCode: "C001", salesPerson: "เซลส์1" }];
+  const baseSO = {
+    legacyNum: "IV2026/06115", date: "2026-06-17", customerId: 9,
+    payType: "credit", creditDays: 60, includeVat: true, discountAmt: 0,
+    items: [{ productId: 1, qty: 2, price: 107 }],
+  };
+
+  test("มีเลขที่ ชื่อลูกค้า รหัสลูกค้า เซลส์ และยอดรวม", () => {
+    const html = buildSOFormHtml(baseSO, products, contacts);
+    expect(html).toContain("IV2026/06115");
+    expect(html).toContain("ร้าน A");
+    expect(html).toContain("C001");
+    expect(html).toContain("เซลส์1");
+    expect(html).toContain("214.00"); // grand
+    expect(html).toContain("@page");
+    expect(html).toContain("205mm 279mm");
+  });
+
+  test("ตัวแทน VAT -> โชว์ชื่อ/เลขบัตรตัวแทน", () => {
+    const so = { ...baseSO, useVatRep: true, vatRepName: "ตัวแทน X", vatRepAddress: "ADDR X", vatRepIdCard: "RID13" };
+    const html = buildSOFormHtml(so, products, contacts);
+    expect(html).toContain("ตัวแทน X");
+    expect(html).toContain("RID13");
+  });
+
+  test("สินค้าเกิน 12 บรรทัด -> 2 หน้า", () => {
+    const items = Array.from({ length: 13 }, () => ({ productId: 1, qty: 1, price: 107 }));
+    const html = buildSOFormHtml({ ...baseSO, items }, products, contacts);
+    expect((html.match(/class="so-page"/g) || []).length).toBe(2);
   });
 });
