@@ -133,6 +133,10 @@ describe("buildSOFormHtml", () => {
     expect(html).toContain("สองร้อยสิบสี่บาทถ้วน"); // bahtText(grand)
     expect(html).toContain("@page");
     expect(html).toContain("205mm 279mm");
+    // per-field tagging (คลิกเลือก/เลื่อนได้)
+    expect(html).toContain('data-fid="custName"');
+    expect(html).toContain('data-fid="col:price"');
+    expect(html).toContain('data-fid="grand"');
   });
 
   test("ตัวแทน VAT -> โชว์ชื่อ/เลขบัตรตัวแทน", () => {

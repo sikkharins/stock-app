@@ -166,8 +166,9 @@ const esc = (s) =>
   String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // div วางตำแหน่ง mm — ชิดซ้ายทุกช่อง (x = ขอบซ้ายของข้อความ)
-function cell(x, y, text) {
-  return `<div style="position:absolute;left:${x}mm;top:${y}mm;white-space:nowrap;">${text}</div>`;
+// fid = id ฟิลด์ (คลิกเลือกในหน้าพิมพ์เพื่อปรับ), isRow = true ถ้าเป็นเซลล์ตาราง (เลื่อนแนวตั้ง = ทั้งตาราง)
+function cell(x, y, text, fid, isRow) {
+  return `<div class="so-f" data-fid="${fid}"${isRow ? ' data-row="1"' : ""} style="position:absolute;left:${x}mm;top:${y}mm;white-space:nowrap;cursor:pointer;">${text}</div>`;
 }
 
 // ตัดที่อยู่เป็นหลายบรรทัด (ตาม newline + ความยาว) จำกัด maxLines
@@ -188,35 +189,35 @@ function splitAddr(addr, maxLines) {
 
 function renderPage(pageRows, head, totals, isLast) {
   const c = [];
-  if (head.custCode) c.push(cell(F.custCode.x, F.custCode.y, esc(head.custCode)));
-  c.push(cell(F.custName.x, F.custName.y, esc(head.name)));
+  if (head.custCode) c.push(cell(F.custCode.x, F.custCode.y, esc(head.custCode), "custCode"));
+  c.push(cell(F.custName.x, F.custName.y, esc(head.name), "custName"));
   splitAddr(head.address, F.custAddr.maxLines).forEach((ln, i) =>
-    c.push(cell(F.custAddr.x, F.custAddr.y + i * F.custAddr.lineH, esc(ln))));
-  if (head.taxId) c.push(cell(F.custTaxId.x, F.custTaxId.y, esc(head.taxId)));
-  c.push(cell(F.docNo.x, F.docNo.y, esc(head.docNo)));
-  c.push(cell(F.docDate.x, F.docDate.y, esc(head.docDate)));
-  c.push(cell(F.payTerm.x, F.payTerm.y, esc(head.payTerm)));
-  if (head.dueDate) c.push(cell(F.dueDate.x, F.dueDate.y, esc(head.dueDate)));
-  if (head.salesman) c.push(cell(F.salesman.x, F.salesman.y, esc(head.salesman)));
+    c.push(cell(F.custAddr.x, F.custAddr.y + i * F.custAddr.lineH, esc(ln), "custAddr")));
+  if (head.taxId) c.push(cell(F.custTaxId.x, F.custTaxId.y, esc(head.taxId), "custTaxId"));
+  c.push(cell(F.docNo.x, F.docNo.y, esc(head.docNo), "docNo"));
+  c.push(cell(F.docDate.x, F.docDate.y, esc(head.docDate), "docDate"));
+  c.push(cell(F.payTerm.x, F.payTerm.y, esc(head.payTerm), "payTerm"));
+  if (head.dueDate) c.push(cell(F.dueDate.x, F.dueDate.y, esc(head.dueDate), "dueDate"));
+  if (head.salesman) c.push(cell(F.salesman.x, F.salesman.y, esc(head.salesman), "salesman"));
 
   pageRows.forEach((r, i) => {
     const y = ROWS.top + i * ROWS.height;
-    c.push(cell(COLS.no.x, y, String(r.no)));
-    c.push(cell(COLS.name.x, y, esc(r.name)));
-    c.push(cell(COLS.qty.x, y, String(r.qty)));
-    c.push(cell(COLS.unit.x, y, esc(r.unit)));
-    c.push(cell(COLS.price.x, y, fmtC(r.unitPrice)));
-    c.push(cell(COLS.amount.x, y, fmtC(r.amount)));
+    c.push(cell(COLS.no.x, y, String(r.no), "col:no", true));
+    c.push(cell(COLS.name.x, y, esc(r.name), "col:name", true));
+    c.push(cell(COLS.qty.x, y, String(r.qty), "col:qty", true));
+    c.push(cell(COLS.unit.x, y, esc(r.unit), "col:unit", true));
+    c.push(cell(COLS.price.x, y, fmtC(r.unitPrice), "col:price", true));
+    c.push(cell(COLS.amount.x, y, fmtC(r.amount), "col:amount", true));
   });
 
   if (isLast) {
-    c.push(cell(TOTALS.subTotal.x, TOTALS.subTotal.y, fmtC(totals.subTotal)));
-    if (totals.discount > 0) c.push(cell(TOTALS.discount.x, TOTALS.discount.y, fmtC(totals.discount)));
-    c.push(cell(TOTALS.goods.x, TOTALS.goods.y, fmtC(totals.goods)));
-    if (totals.vat != null) c.push(cell(TOTALS.vat.x, TOTALS.vat.y, fmtC(totals.vat)));
-    c.push(cell(TOTALS.grand.x, TOTALS.grand.y, fmtC(totals.grand)));
-    c.push(cell(TOTALS.bahtText.x, TOTALS.bahtText.y, "(" + esc(bahtText(totals.grand)) + ")"));
-    if (head.note) c.push(cell(F.note.x, F.note.y, esc(head.note)));
+    c.push(cell(TOTALS.subTotal.x, TOTALS.subTotal.y, fmtC(totals.subTotal), "subTotal"));
+    if (totals.discount > 0) c.push(cell(TOTALS.discount.x, TOTALS.discount.y, fmtC(totals.discount), "discount"));
+    c.push(cell(TOTALS.goods.x, TOTALS.goods.y, fmtC(totals.goods), "goods"));
+    if (totals.vat != null) c.push(cell(TOTALS.vat.x, TOTALS.vat.y, fmtC(totals.vat), "vat"));
+    c.push(cell(TOTALS.grand.x, TOTALS.grand.y, fmtC(totals.grand), "grand"));
+    c.push(cell(TOTALS.bahtText.x, TOTALS.bahtText.y, "(" + esc(bahtText(totals.grand)) + ")", "bahtText"));
+    if (head.note) c.push(cell(F.note.x, F.note.y, esc(head.note), "note"));
   }
 
   return `<div class="so-page"${isLast ? "" : ' style="page-break-after:always;"'}>` +
@@ -254,7 +255,7 @@ body{font-family:${FONT.family};font-size:${FONT.size}px;color:#000;background:#
 .so-grid{position:absolute;inset:0;display:none;border:0.3mm solid rgba(0,0,0,0.4);
   background-image:repeating-linear-gradient(to right,rgba(0,0,0,0.13) 0 0.2mm,transparent 0.2mm 10mm),
                    repeating-linear-gradient(to bottom,rgba(0,0,0,0.13) 0 0.2mm,transparent 0.2mm 10mm);}
-@media screen{body{background:#888;padding:10px;}.so-page{background:#fff;margin:0 auto 10px;box-shadow:0 0 4px rgba(0,0,0,0.4);}}
+@media screen{body{background:#888;padding:10px;}.so-page{background:#fff;margin:0 auto 10px;box-shadow:0 0 4px rgba(0,0,0,0.4);}.so-f:hover{outline:1px dashed rgba(0,100,255,0.55);}}
 @media print{.no-print{display:none!important;}body{background:#fff;padding:0;}.so-page{box-shadow:none;margin:0;}}
 @page{size:${PAGE.w}mm ${PAGE.h}mm;margin:0;}
 .tb{padding:8px 14px;border-bottom:1px solid #ddd;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-family:system-ui,sans-serif;font-size:13px;}
@@ -264,32 +265,54 @@ body{font-family:${FONT.family};font-size:${FONT.size}px;color:#000;background:#
 <body>
 <div class="no-print tb">
   <button onclick="window.print()" style="background:#111;color:#fff;border:none;">พิมพ์</button>
-  <span>เลื่อน (mm):</span>
-  X <input id="offX" type="number" step="0.5" onchange="_setOff()">
-  Y <input id="offY" type="number" step="0.5" onchange="_setOff()">
-  <button onclick="_nudge(-0.5,0)">◀</button><button onclick="_nudge(0.5,0)">▶</button>
-  <button onclick="_nudge(0,-0.5)">▲</button><button onclick="_nudge(0,0.5)">▼</button>
-  <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" style="width:auto;" onchange="_toggleGrid(this)"> แสดงกรอบช่วยจูน</label>
+  <span id="selLabel" style="font-weight:600;color:#06f;min-width:120px;">ปรับทั้งใบ</span>
+  <button onclick="_nudge(-0.5,0)" title="ซ้าย">◀</button><button onclick="_nudge(0.5,0)" title="ขวา">▶</button>
+  <button onclick="_nudge(0,-0.5)" title="ขึ้น">▲</button><button onclick="_nudge(0,0.5)" title="ลง">▼</button>
+  <button onclick="_deselect()">ปรับทั้งใบ</button>
+  <button onclick="_resetField()">รีเซ็ตช่องนี้</button>
+  <button onclick="_resetAll()">รีเซ็ตทั้งหมด</button>
+  <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" style="width:auto;" onchange="_toggleGrid(this)"> กรอบช่วยจูน</label>
   <button onclick="window.close()">ปิด</button>
-  <span style="color:#b00;">ตั้งเครื่องพิมพ์ Actual size / 100% (ห้าม Fit to page) · 205×279mm</span>
+  <span style="color:#b00;">คลิกช่องในตัวอย่างเพื่อเลือก → กด ◀▶▲▼ หรือลูกศร (Shift=0.1mm) · พิมพ์ Actual size 100% · 205×279mm</span>
 </div>
 ${body}
 <script>
 (function(){
-  var KEY="so_form_offset";
-  function load(){try{return JSON.parse(localStorage.getItem(KEY))||{x:0,y:0};}catch(e){return {x:0,y:0};}}
-  function save(o){try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}}
-  var off=load();
-  var xIn=document.getElementById("offX"),yIn=document.getElementById("offY");
-  function apply(){
-    var els=document.querySelectorAll(".so-page-inner");
-    for(var i=0;i<els.length;i++)els[i].style.transform="translate("+off.x+"mm,"+off.y+"mm)";
-    if(xIn)xIn.value=off.x; if(yIn)yIn.value=off.y;
+  var GKEY="so_form_offset", FKEY="so_field_offsets";
+  function jget(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
+  function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+  var g=jget(GKEY)||{x:0,y:0}, fo=jget(FKEY)||{}, sel=null, selIsRow=false;
+  var els=document.querySelectorAll(".so-f");
+  var LABELS={custCode:"รหัสลูกค้า",custName:"ชื่อลูกค้า",custAddr:"ที่อยู่",custTaxId:"เลขผู้เสียภาษี",docNo:"เลขที่",docDate:"วันที่",payTerm:"เงื่อนไขชำระ",dueDate:"ครบกำหนด",salesman:"พนักงานขาย",note:"หมายเหตุ",bahtText:"ยอดเงินตัวอักษร",subTotal:"รวมก่อน VAT",discount:"ส่วนลด",goods:"มูลค่าสินค้า",vat:"VAT",grand:"รวมทั้งสิ้น","col:no":"คอลัมน์ลำดับ","col:name":"คอลัมน์รายการ","col:qty":"คอลัมน์จำนวน","col:unit":"คอลัมน์หน่วย","col:price":"คอลัมน์ราคา/หน่วย","col:amount":"คอลัมน์จำนวนเงิน"};
+  function offFor(el){
+    var fid=el.getAttribute("data-fid");
+    var dx=(fo[fid]&&fo[fid].dx)||0;
+    var dy=el.getAttribute("data-row")?((fo.rows&&fo.rows.dy)||0):((fo[fid]&&fo[fid].dy)||0);
+    return {x:g.x+dx, y:g.y+dy};
   }
-  window._nudge=function(dx,dy){off.x=Math.round((off.x+dx)*10)/10;off.y=Math.round((off.y+dy)*10)/10;save(off);apply();};
-  window._setOff=function(){off.x=parseFloat(xIn.value)||0;off.y=parseFloat(yIn.value)||0;save(off);apply();};
-  window._toggleGrid=function(cb){var g=document.querySelectorAll(".so-grid");for(var i=0;i<g.length;i++)g[i].style.display=cb.checked?"block":"none";};
-  apply();
+  function apply(){for(var i=0;i<els.length;i++){var o=offFor(els[i]);els[i].style.transform="translate("+o.x+"mm,"+o.y+"mm)";}}
+  function hl(){for(var i=0;i<els.length;i++){els[i].style.outline=(sel&&els[i].getAttribute("data-fid")===sel)?"1.5px solid #06f":"";}}
+  function label(){var el=document.getElementById("selLabel");if(!el)return;el.textContent=sel?("กำลังปรับ: "+(LABELS[sel]||sel)+(selIsRow?" (ขึ้น/ลง=ทั้งตาราง)":"")):"ปรับทั้งใบ";}
+  for(var i=0;i<els.length;i++){els[i].addEventListener("click",function(e){sel=this.getAttribute("data-fid");selIsRow=!!this.getAttribute("data-row");hl();label();e.stopPropagation();});}
+  function r1(v){return Math.round(v*10)/10;}
+  window._nudge=function(dx,dy){
+    if(!sel){g.x=r1(g.x+dx);g.y=r1(g.y+dy);jset(GKEY,g);apply();return;}
+    if(dx){fo[sel]=fo[sel]||{};fo[sel].dx=r1((fo[sel].dx||0)+dx);}
+    if(dy){if(selIsRow){fo.rows=fo.rows||{};fo.rows.dy=r1((fo.rows.dy||0)+dy);}else{fo[sel]=fo[sel]||{};fo[sel].dy=r1((fo[sel].dy||0)+dy);}}
+    jset(FKEY,fo);apply();
+  };
+  window._deselect=function(){sel=null;selIsRow=false;hl();label();};
+  window._resetField=function(){if(!sel)return;delete fo[sel];if(selIsRow&&fo.rows)delete fo.rows;jset(FKEY,fo);apply();};
+  window._resetAll=function(){fo={};g={x:0,y:0};jset(FKEY,fo);jset(GKEY,g);_deselect();apply();};
+  window._toggleGrid=function(cb){var gr=document.querySelectorAll(".so-grid");for(var i=0;i<gr.length;i++)gr[i].style.display=cb.checked?"block":"none";};
+  document.addEventListener("keydown",function(e){
+    var s=e.shiftKey?0.1:0.5;
+    if(e.key==="ArrowLeft"){_nudge(-s,0);e.preventDefault();}
+    else if(e.key==="ArrowRight"){_nudge(s,0);e.preventDefault();}
+    else if(e.key==="ArrowUp"){_nudge(0,-s);e.preventDefault();}
+    else if(e.key==="ArrowDown"){_nudge(0,s);e.preventDefault();}
+  });
+  apply();label();
 })();
 </script>
 </body></html>`;
