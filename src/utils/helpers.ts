@@ -1,4 +1,5 @@
 import { STOCK_STATUS } from "./constants.js";
+import type { AuditChange } from "./auditDiff.js";
 
 // --- Minimal interfaces (duck-typed; only fields helpers actually read) ------
 
@@ -212,6 +213,7 @@ export interface Audit {
   action: string;
   detail: string;
   user: string;
+  changes?: AuditChange[];
 }
 
 export type StockStatusResult = StockStatusEntry & { days: number | null };
@@ -344,12 +346,13 @@ export const mkLog = (
   user: user || "system",
 });
 
-export const mkAudit = (action: string, detail: string, user?: string): Audit => ({
+export const mkAudit = (action: string, detail: string, user?: string, changes?: AuditChange[]): Audit => ({
   id: Date.now() + Math.random(),
   date: nowStr(),
   action,
   detail,
   user: user || "system",
+  ...(changes && changes.length ? { changes } : {}),
 });
 
 export const AddDue = (d: string | undefined, n: number): string => {

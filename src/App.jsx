@@ -186,7 +186,7 @@ export default function App(){
   const getCN=id=>{const c=cats.find(x=>x.id===+id);return c?c.name:"-";};
   const addLog=log=>setLogs(p=>[log,...p]);
   const oM=n=>setModal(n);const cM=()=>setModal(null);
-  const addA=(a,d)=>setAudit(p=>[mkAudit(a,d,cu?.username),...p].slice(0,500));
+  const addA=(a,d,changes)=>setAudit(p=>[mkAudit(a,d,cu?.username,changes),...p].slice(0,500));
   const addPH=(pid,f,o,n)=>setPriceHist(p=>[{id:Date.now()+Math.random(),date:nowStr(),productId:pid,field:f,oldVal:o,newVal:n,user:cu?.username},...p].slice(0,500));
   const notifs=getNotifs(products,sales,pos,payments,quotes);
 
