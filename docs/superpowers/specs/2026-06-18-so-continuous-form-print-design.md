@@ -1,7 +1,10 @@
 # SO — พิมพ์ฟอร์มต่อเนื่อง (Epson LQ-2190 overlay)
 
 **Date:** 2026-06-18
-**Scope:** ไฟล์ใหม่ `src/components/PrintSOForm.js` + เพิ่มปุ่ม 1 ปุ่มใน `src/components/Sales.jsx` (SO view modal). ไม่แตะ `printDoc`/`PrintDocument.jsx` เดิม
+**Scope:**
+- ไฟล์ใหม่ `src/components/PrintSOForm.js` + เพิ่มปุ่ม 1 ปุ่มใน `src/components/Sales.jsx` (SO view modal)
+- เพิ่ม field `custCode` (รหัสลูกค้า) ในฟอร์มลูกค้า `src/components/Contacts.jsx`
+- ไม่แตะ `printDoc`/`PrintDocument.jsx` เดิม
 
 ## Problem
 กระดาษต่อเนื่องที่ใช้กับ LQ-2190 **มีฟอร์มพิมพ์สำเร็จมาแล้ว** (เส้น/หัวข้อ/ช่อง — ใบส่งสินค้า/ใบกำกับภาษี ของ หจก. ทีเอส อีเลคโทรนิค) ต้องการให้พิมพ์ SO โดย "ยิงเฉพาะข้อมูลลงช่องให้ตรง" (overlay) ไม่ใช่วาดฟอร์มใหม่แบบ `printDoc` เดิมที่เป็น A4 เต็มใบ
@@ -14,6 +17,14 @@
 - **12 บรรทัด** สินค้า/ฟอร์ม
 
 ## Design
+
+### field รหัสลูกค้า (`custCode`) — `Contacts.jsx`
+- เพิ่ม `custCode:""` ใน `ef` (empty form, ~บรรทัด 44)
+- เพิ่ม input ในฟอร์มเพิ่ม/แก้ไข **เฉพาะลูกค้า** (`isC`) วางใต้ "ชื่อ TH":
+  `{isC&&<Field label="รหัสลูกค้า"><input value={form.custCode||""} onChange={e=>setF("custCode",e.target.value)} style={IB}/></Field>}`
+- กรอกเอง (free text) ไม่ auto-gen, ไม่บังคับกรอก
+- ลูกค้าเก่าที่ไม่มี `custCode` → ช่องในฟอร์มพิมพ์เว้นว่าง (ปลอดภัย)
+- ไม่แตะการ์ด/โปรไฟล์ลูกค้า (customer redesign) — แสดงรหัสบนการ์ดเป็น optional ไว้ทีหลัง
 
 ### ไฟล์ + trigger
 - ไฟล์ใหม่ `src/components/PrintSOForm.js` → `export function printSOForm(so, products, contacts)`
@@ -50,7 +61,7 @@ FIELDS = {
 ### ข้อมูล → ช่อง (mapping)
 | ช่องฟอร์ม | ที่มา |
 |---|---|
-| รหัสลูกค้า | **เว้นว่าง** (ระบบไม่มี field นี้) |
+| รหัสลูกค้า | `contact.custCode` (field ใหม่ — ดูหัวข้อ "field รหัสลูกค้า") |
 | ชื่อลูกค้า | `contact.nameT \|\| contact.name` |
 | ที่อยู่ | `contact.address` (ตัดบรรทัดตาม lineH ถ้ายาว) |
 | เลขผู้เสียภาษี | `contact.taxId` |
