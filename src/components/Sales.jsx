@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
 import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo, nextDocNum, poStatusFromShipments } from "../utils/helpers.js";
+import { diffFields, diffLineItems } from "../utils/auditDiff.ts";
 import { printDoc } from "./PrintDocument.jsx";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -132,7 +133,11 @@ function SOList({sh}){
       setContacts(prev=>prev.map(c=>c.id===customer.id?{...c,promoClaims:newClaims,savedRewards:finalRewards}:c));
     }
 
-    if(soId){const oldSO=sales.find(s=>s.id===soId);const keepStatus=oldSO?.status==="pending_special_approval"&&needsApproval?"pending_special_approval":needsApproval?"pending_special_approval":oldSO?.status||"pending_delivery";setSales(p=>p.map(s=>s.id===soId?{...s,...soBase,status:keepStatus}:s));addA("แก้ไข SO",editSO?.soNum||"");setEditSO(null);}
+    if(soId){const oldSO=sales.find(s=>s.id===soId);const keepStatus=oldSO?.status==="pending_special_approval"&&needsApproval?"pending_special_approval":needsApproval?"pending_special_approval":oldSO?.status||"pending_delivery";setSales(p=>p.map(s=>s.id===soId?{...s,...soBase,status:keepStatus}:s));
+      const _money=n=>"฿"+fmt(n);const _cust=id=>{const c=contacts.find(x=>x.id===id);return c?cN(c):(id?"#"+id:"—");};const _nameOf=pid=>{const p=products.find(x=>x.id===pid);return p?pN(p):"#"+pid;};
+      const _soDefs=[{key:"customerId",label:"ลูกค้า",fmt:_cust},{key:"date",label:"วันที่",fmt:toBE},{key:"payType",label:"การชำระ",fmt:v=>v==="cash"?"เงินสด":v==="credit"?"เครดิต":String(v??"")},{key:"creditDays",label:"เครดิต (วัน)"},{key:"discountAmt",label:"ส่วนลด",fmt:_money},{key:"includeVat",label:"VAT",fmt:v=>v?"รวม":"ไม่รวม"},{key:"vatRepName",label:"ตัวแทน VAT"},{key:"note",label:"หมายเหตุ"}];
+      const _changes=oldSO?[...diffFields(oldSO,soBase,_soDefs),...diffLineItems(oldSO.items||[],soBase.items||[],{priceKey:"price",nameOf:_nameOf,fmtMoney:_money})]:[];
+      addA("แก้ไข SO",editSO?.soNum||"",_changes);setEditSO(null);}
     else{const st=needsApproval?"pending_special_approval":"pending_delivery";setSales(p=>[...p,{id:Date.now(),soNum:newSoNum,status:st,fromQuote:"",...soBase}]);addA("สร้าง SO"+(needsApproval?" (รออนุมัติ)":""),newSoNum);}
     resetPromoStates();
     cM();
