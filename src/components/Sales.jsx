@@ -3,6 +3,7 @@ import { IB, DISC_OPTS, CREDIT_OPTS } from "../utils/constants.js";
 import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo, nextDocNum, poStatusFromShipments } from "../utils/helpers.js";
 import { diffFields, diffLineItems } from "../utils/auditDiff.ts";
 import { printDoc } from "./PrintDocument.jsx";
+import { printSOForm } from "./PrintSOForm.js";
 import CustomerProfile from "./CustomerProfile.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Badge from "./ui/Badge.jsx";
@@ -616,6 +617,7 @@ function SOList({sh}){
       <div style={{marginTop:14,marginBottom:4,display:"flex",gap:8}}>
         <button onClick={()=>printDoc("so",viewSO,products,contacts)} style={{padding:"8px 18px",background:"var(--text)",color:"var(--bg)",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"พิมพ์ / PDF"}</button>
         <button onClick={()=>printDoc("so",viewSO,products,contacts,{vatMode:"exclusive"})} style={{padding:"8px 18px",background:"transparent",color:"var(--green)",border:"1px solid var(--green)",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"เช็คของขึ้นรถ"}</button>
+        <button onClick={()=>printSOForm(viewSO,products,contacts)} style={{padding:"8px 18px",background:"transparent",color:"var(--blue)",border:"1px solid var(--blue)",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"พิมพ์ฟอร์มต่อเนื่อง (LQ-2190)"}</button>
         {hasApv&&viewSO.status==="pending_special_approval"&&<button onClick={()=>{setApproveSO(viewSO);cM();}} style={{padding:"8px 18px",background:"var(--purple)",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{"อนุมัติ"}</button>}
       </div>
       <MBtns onCancel={cM}/>
