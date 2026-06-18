@@ -448,6 +448,26 @@ const STEP_TOOL_BTN = {
   fontFamily: "inherit",
 };
 
+// 80mm thermal-receipt element styles, scoped under `scope` (e.g. "body" for the
+// preview iframe, "#thermal-print-root" for the print node). Class names are
+// tr-* to avoid clashing with app styles when injected into the main document.
+const thermalReceiptCss = (scope) =>
+  `${scope}{width:76mm;margin:0 auto;padding:2mm;background:#fff;color:#000;` +
+  `font-family:'Sarabun','Tahoma',sans-serif;font-size:13px;line-height:1.35;box-sizing:border-box}` +
+  `${scope} *{box-sizing:border-box}` +
+  `${scope} .tr-hdr{text-align:center;font-weight:700;font-size:16px;margin-bottom:2px}` +
+  `${scope} .tr-sub{text-align:center;font-size:11px;margin-bottom:1px}` +
+  `${scope} .tr-tot{text-align:center;font-size:12px;font-weight:600;margin:4px 0}` +
+  `${scope} .tr-sep{border-top:1px dashed #000;margin:4px 0}` +
+  `${scope} .tr-row{padding:4px 0;border-bottom:1px dashed #999}` +
+  `${scope} .tr-row:last-child{border-bottom:none}` +
+  `${scope} .tr-row-top{display:flex;align-items:baseline;gap:4px}` +
+  `${scope} .tr-brand{font-weight:600;flex:1;min-width:0;font-size:12px;word-break:break-word}` +
+  `${scope} .tr-qty{font-weight:800;font-size:22px;margin-left:auto}` +
+  `${scope} .tr-cat{font-size:10px;color:#444}` +
+  `${scope} .tr-name{font-weight:600;font-size:14px;word-break:break-word}` +
+  `${scope} .tr-foot{text-align:center;font-size:10px;margin-top:6px;color:#555}`;
+
 export default function DeliveryPlanningPage({ sh }) {
   const {
     cN,
@@ -983,9 +1003,9 @@ export default function DeliveryPlanningPage({ sh }) {
     setTrucks((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Build the 80mm / 3" thermal-printer HTML. Used both for the inline preview
-  // iframe in the ใบจัดของ (pick list) modal and for the hidden iframe that prints.
-  const thermalHtml = useMemo(() => {
+  // Inner markup of the 80mm receipt (no <html>/<style> wrapper). Shared by the
+  // modal preview iframe and the print node so they never drift.
+  const thermalInner = useMemo(() => {
     if (pickList.length === 0) return "";
     const esc = (s) =>
       String(s || "").replace(/[&<>"']/g, (c) =>
@@ -994,13 +1014,13 @@ export default function DeliveryPlanningPage({ sh }) {
     const totalQty = pickList.reduce((s, e) => s + e.totalQty, 0);
     const rows = pickList
       .map((e) =>
-        '<div class="row">' +
-        '<div class="row-top">' +
-        '<span class="brand">' + esc(e.brand || "—") + "</span>" +
-        '<span class="qty">×' + e.totalQty + "</span>" +
+        '<div class="tr-row">' +
+        '<div class="tr-row-top">' +
+        '<span class="tr-brand">' + esc(e.brand || "—") + "</span>" +
+        '<span class="tr-qty">×' + e.totalQty + "</span>" +
         "</div>" +
-        '<div class="cat">' + esc(e.catName) + "</div>" +
-        '<div class="name">' + esc(e.name) + "</div>" +
+        '<div class="tr-cat">' + esc(e.catName) + "</div>" +
+        '<div class="tr-name">' + esc(e.name) + "</div>" +
         "</div>"
       )
       .join("");
@@ -1008,65 +1028,73 @@ export default function DeliveryPlanningPage({ sh }) {
       esc(truck?.name || "—") +
       (truck?.driverName ? " · " + esc(truck.driverName) : "");
     return (
-      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>ใบจัดของ</title>" +
-      "<style>" +
-      "@page{size:80mm auto;margin:2mm}" +
-      "*{box-sizing:border-box}" +
-      "html,body{margin:0;padding:0;background:#fff;color:#000;" +
-      "font-family:'Sarabun','Tahoma',sans-serif;font-size:13px;line-height:1.35}" +
-      "body{width:76mm;padding:2mm}" +
-      ".hdr{text-align:center;font-weight:700;font-size:16px;margin-bottom:2px}" +
-      ".sub{text-align:center;font-size:11px;margin-bottom:1px}" +
-      ".tot{text-align:center;font-size:12px;font-weight:600;margin:4px 0}" +
-      ".sep{border-top:1px dashed #000;margin:4px 0}" +
-      ".row{padding:4px 0;border-bottom:1px dashed #999}" +
-      ".row:last-child{border-bottom:none}" +
-      ".row-top{display:flex;align-items:baseline;gap:4px}" +
-      ".brand{font-weight:600;flex:1;min-width:0;font-size:12px;word-break:break-word}" +
-      ".qty{font-weight:800;font-size:22px;margin-left:auto}" +
-      ".cat{font-size:10px;color:#444}" +
-      ".name{font-weight:600;font-size:14px;word-break:break-word}" +
-      ".foot{text-align:center;font-size:10px;margin-top:6px;color:#555}" +
-      "@media print{html,body{width:80mm}}" +
-      "</style></head><body>" +
-      "<div class='hdr'>ใบจัดของ</div>" +
-      "<div class='sub'>" + esc(toBE(date)) + "</div>" +
-      "<div class='sub'>" + headerLine + "</div>" +
-      "<div class='tot'>" + totalQty + " ชิ้น · " + pickList.length + " รายการ · " + pickedRows.length + " SO</div>" +
-      "<div class='sep'></div>" +
+      "<div class='tr-hdr'>ใบจัดของ</div>" +
+      "<div class='tr-sub'>" + esc(toBE(date)) + "</div>" +
+      "<div class='tr-sub'>" + headerLine + "</div>" +
+      "<div class='tr-tot'>" + totalQty + " ชิ้น · " + pickList.length + " รายการ · " + pickedRows.length + " SO</div>" +
+      "<div class='tr-sep'></div>" +
       rows +
-      "<div class='sep'></div>" +
-      "<div class='foot'>พิมพ์ " + esc(nowStr()) + "</div>" +
-      "</body></html>"
+      "<div class='tr-sep'></div>" +
+      "<div class='tr-foot'>พิมพ์ " + esc(nowStr()) + "</div>"
     );
   }, [pickList, pickedRows.length, truck, date]);
 
-  // Print the thermal HTML by mounting it in a hidden iframe and calling print().
+  // Standalone document for the modal preview iframe.
+  const thermalHtml = useMemo(() => {
+    if (!thermalInner) return "";
+    return (
+      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>ใบจัดของ</title><style>" +
+      "@page{size:80mm auto;margin:2mm}html,body{margin:0;padding:0;background:#fff}" +
+      thermalReceiptCss("body") +
+      "</style></head><body>" + thermalInner + "</body></html>"
+    );
+  }, [thermalInner]);
+
+  // Print the 80mm receipt. Epson TM Print Assistant (and most mobile print
+  // services) capture the *main* document, not a hidden iframe — so instead of
+  // printing an iframe we inject the receipt as a sibling of #root and, via
+  // @media print, hide #root and show only the receipt. window.print() then
+  // sends just the receipt to the printer.
   const printThermal = () => {
-    if (!thermalHtml) return;
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    document.body.appendChild(iframe);
+    if (!thermalInner) return;
+    const STYLE_ID = "thermal-print-style";
+    const NODE_ID = "thermal-print-root";
+    document.getElementById(STYLE_ID)?.remove();
+    document.getElementById(NODE_ID)?.remove();
+
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent =
+      "@media screen{#" + NODE_ID + "{display:none}}" +
+      "@media print{" +
+      "@page{size:80mm auto;margin:2mm}" +
+      "html,body{margin:0!important;padding:0!important;background:#fff!important}" +
+      "#root{display:none!important}" +
+      "#" + NODE_ID + "{display:block!important}" +
+      thermalReceiptCss("#" + NODE_ID) +
+      "}";
+
+    const node = document.createElement("div");
+    node.id = NODE_ID;
+    node.innerHTML = thermalInner;
+
+    document.body.appendChild(style);
+    document.body.appendChild(node);
+
     const cleanup = () => {
-      setTimeout(() => {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      }, 1000);
+      style.remove();
+      node.remove();
+      window.removeEventListener("afterprint", cleanup);
     };
-    iframe.onload = () => {
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => {
       try {
-        const w = iframe.contentWindow;
-        w.focus();
-        w.print();
+        window.print();
       } finally {
-        cleanup();
+        // Fallback cleanup for browsers that don't fire afterprint (some mobile).
+        setTimeout(cleanup, 60000);
       }
-    };
-    iframe.srcdoc = thermalHtml;
+    }, 50);
   };
 
   // --- Render ---
