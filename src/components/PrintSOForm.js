@@ -12,6 +12,44 @@ export const toBEShort = (d) => {
 export const fmtC = (n) =>
   Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// ===== เลข -> ตัวอักษรภาษาไทย (บาท) =====
+const TH_DIGIT = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
+const TH_POS = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
+function readNumber(num) {
+  num = Math.floor(num);
+  if (num === 0) return "";
+  if (num > 999999) {
+    const m = Math.floor(num / 1000000);
+    const rest = num % 1000000;
+    return readNumber(m) + "ล้าน" + (rest > 0 ? readNumber(rest) : "");
+  }
+  const s = String(num);
+  const len = s.length;
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    const d = +s[i];
+    const p = len - i - 1; // หลักจากขวา
+    if (d === 0) continue;
+    if (p === 1 && d === 1) out += "สิบ";
+    else if (p === 1 && d === 2) out += "ยี่สิบ";
+    else if (p === 0 && d === 1 && len > 1) out += "เอ็ด";
+    else out += TH_DIGIT[d] + TH_POS[p];
+  }
+  return out;
+}
+export function bahtText(amount) {
+  amount = Number(amount || 0);
+  const neg = amount < 0;
+  amount = Math.abs(amount);
+  const baht = Math.floor(amount);
+  const satang = Math.round((amount - baht) * 100);
+  if (baht === 0 && satang === 0) return "ศูนย์บาทถ้วน";
+  let t = "";
+  if (baht > 0) t += readNumber(baht) + "บาท";
+  t += satang > 0 ? readNumber(satang) + "สตางค์" : "ถ้วน";
+  return (neg ? "ลบ" : "") + t;
+}
+
 // ใครคือผู้รับบิล: ถ้าเลือกตัวแทนออก VAT ใช้ข้อมูลตัวแทนแทนลูกค้า
 export function resolveBillTo(so, contact) {
   contact = contact || {};
@@ -31,8 +69,9 @@ export function resolveBillTo(so, contact) {
   };
 }
 
-// แถวสินค้า — ราคาก่อน VAT เมื่อ includeVat, แตก parts เป็นหลายบรรทัด นับ no ต่อบรรทัด
-export function buildRows(so, products) {
+// แถวสินค้า — ชื่อ = หมวด(จาก categoryId) + ยี่ห้อ(brand) + nameT
+// ราคาก่อน VAT เมื่อ includeVat, แตก parts เป็นหลายบรรทัด นับ no ต่อบรรทัด
+export function buildRows(so, products, cats) {
   const ex = so.includeVat === true;
   const rows = [];
   let n = 0;
@@ -49,7 +88,9 @@ export function buildRows(so, products) {
   };
   (so.items || []).forEach((it) => {
     const pr = (products || []).find((x) => x.id === it.productId) || {};
-    const baseName = pr.nameT || pr.name || "-";
+    const cat = (cats || []).find((c) => c.id === pr.categoryId);
+    const catName = cat ? cat.name : "";
+    const baseName = [catName, pr.brand || "", pr.nameT || pr.name || "-"].filter(Boolean).join(" ");
     const unit = pr.unit || "";
     if (it.parts && it.parts.length > 0) {
       it.parts.forEach((pt) => push(it, unit, baseName + " — " + (pt.name || pt.key || ""), pt.price || 0));
@@ -85,36 +126,48 @@ export function paginate(rows, perPage) {
   return pages;
 }
 
-// ===== LAYOUT (mm) — ค่าประมาณ จูนกับเครื่องจริงภายหลัง =====
+// ===== LAYOUT (mm) — ทุกฟิลด์มีพิกัด {x,y} อิสระต่อกัน แก้ได้ทีละช่อง =====
 const PAGE = { w: 205, h: 279 };
+// ตารางสินค้า: ROWS = จุดเริ่ม/ระยะห่างต่อบรรทัด, COLS = x ของแต่ละคอลัมน์ (อิสระ)
 const ROWS = { count: 12, top: 115, height: 11 };
-// x ของแต่ละคอลัมน์ (price/amount = ขอบขวา ของตัวเลข)
-const COLS = { no: 10, name: 20, qty: 118, unit: 132, price: 165, amount: 200 };
+const COLS = {
+  no:     { x: 8 },
+  name:   { x: 16 },
+  qty:    { x: 116 },
+  unit:   { x: 130 },
+  price:  { x: 150 },
+  amount: { x: 182 },
+};
+// ฟิลด์หัวเอกสาร — แต่ละช่องพิกัดของตัวเอง
 const F = {
-  custCode:  { x: 40,  y: 46 },
-  custName:  { x: 35,  y: 55 },
-  custAddr:  { x: 12,  y: 62, lineH: 6, maxLines: 3 },
-  custTaxId: { x: 45,  y: 80 },
-  docNo:     { x: 148, y: 48 },
-  docDate:   { x: 148, y: 58 },
-  payTerm:   { x: 25,  y: 92 },
-  dueDate:   { x: 90,  y: 92 },
-  salesman:  { x: 150, y: 92 },
-  totalsX:   200,
-  totals:    { subTotal: 232, discount: 240, goods: 248, vat: 256, grand: 264 },
-  note:      { x: 12,  y: 248 },
+  custCode:  { x: 30,  y: 46 },
+  custName:  { x: 22,  y: 54 },
+  custAddr:  { x: 22,  y: 61, lineH: 6, maxLines: 3 },
+  custTaxId: { x: 40,  y: 80 },
+  docNo:     { x: 150, y: 47 },
+  docDate:   { x: 150, y: 58 },
+  payTerm:   { x: 18,  y: 92 },
+  dueDate:   { x: 78,  y: 92 },
+  salesman:  { x: 140, y: 92 },
+  note:      { x: 14,  y: 236 },
+};
+// ยอดรวม — แต่ละบรรทัดพิกัดของตัวเอง + ยอดเป็นตัวอักษร (ซ้าย)
+const TOTALS = {
+  bahtText: { x: 14,  y: 255 },
+  subTotal: { x: 182, y: 232 },
+  discount: { x: 182, y: 240 },
+  goods:    { x: 182, y: 248 },
+  vat:      { x: 182, y: 256 },
+  grand:    { x: 182, y: 264 },
 };
 const FONT = { size: 11, family: "'Sarabun', monospace" };
 
 const esc = (s) =>
   String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// div วางตำแหน่ง mm; align right = ขอบขวาอยู่ที่ x, center = กึ่งกลางที่ x
-function cell(x, y, text, align) {
-  let t = "";
-  if (align === "right") t = "text-align:right;transform:translateX(-100%);";
-  else if (align === "center") t = "text-align:center;transform:translateX(-50%);";
-  return `<div style="position:absolute;left:${x}mm;top:${y}mm;${t}white-space:nowrap;">${text}</div>`;
+// div วางตำแหน่ง mm — ชิดซ้ายทุกช่อง (x = ขอบซ้ายของข้อความ)
+function cell(x, y, text) {
+  return `<div style="position:absolute;left:${x}mm;top:${y}mm;white-space:nowrap;">${text}</div>`;
 }
 
 // ตัดที่อยู่เป็นหลายบรรทัด (ตาม newline + ความยาว) จำกัด maxLines
@@ -148,20 +201,21 @@ function renderPage(pageRows, head, totals, isLast) {
 
   pageRows.forEach((r, i) => {
     const y = ROWS.top + i * ROWS.height;
-    c.push(cell(COLS.no, y, String(r.no), "center"));
-    c.push(cell(COLS.name, y, esc(r.name)));
-    c.push(cell(COLS.qty, y, String(r.qty), "center"));
-    c.push(cell(COLS.unit, y, esc(r.unit), "center"));
-    c.push(cell(COLS.price, y, fmtC(r.unitPrice), "right"));
-    c.push(cell(COLS.amount, y, fmtC(r.amount), "right"));
+    c.push(cell(COLS.no.x, y, String(r.no)));
+    c.push(cell(COLS.name.x, y, esc(r.name)));
+    c.push(cell(COLS.qty.x, y, String(r.qty)));
+    c.push(cell(COLS.unit.x, y, esc(r.unit)));
+    c.push(cell(COLS.price.x, y, fmtC(r.unitPrice)));
+    c.push(cell(COLS.amount.x, y, fmtC(r.amount)));
   });
 
   if (isLast) {
-    c.push(cell(F.totalsX, F.totals.subTotal, fmtC(totals.subTotal), "right"));
-    if (totals.discount > 0) c.push(cell(F.totalsX, F.totals.discount, fmtC(totals.discount), "right"));
-    c.push(cell(F.totalsX, F.totals.goods, fmtC(totals.goods), "right"));
-    if (totals.vat != null) c.push(cell(F.totalsX, F.totals.vat, fmtC(totals.vat), "right"));
-    c.push(cell(F.totalsX, F.totals.grand, fmtC(totals.grand), "right"));
+    c.push(cell(TOTALS.subTotal.x, TOTALS.subTotal.y, fmtC(totals.subTotal)));
+    if (totals.discount > 0) c.push(cell(TOTALS.discount.x, TOTALS.discount.y, fmtC(totals.discount)));
+    c.push(cell(TOTALS.goods.x, TOTALS.goods.y, fmtC(totals.goods)));
+    if (totals.vat != null) c.push(cell(TOTALS.vat.x, TOTALS.vat.y, fmtC(totals.vat)));
+    c.push(cell(TOTALS.grand.x, TOTALS.grand.y, fmtC(totals.grand)));
+    c.push(cell(TOTALS.bahtText.x, TOTALS.bahtText.y, "(" + esc(bahtText(totals.grand)) + ")"));
     if (head.note) c.push(cell(F.note.x, F.note.y, esc(head.note)));
   }
 
@@ -169,7 +223,7 @@ function renderPage(pageRows, head, totals, isLast) {
     `<div class="so-grid"></div><div class="so-page-inner">${c.join("")}</div></div>`;
 }
 
-export function buildSOFormHtml(so, products, contacts) {
+export function buildSOFormHtml(so, products, contacts, cats) {
   const contact = (contacts || []).find((c) => c.id === so.customerId) || {};
   const billTo = resolveBillTo(so, contact);
   const head = {
@@ -185,7 +239,7 @@ export function buildSOFormHtml(so, products, contacts) {
     note: so.note || "",
   };
   const totals = computeTotals(so);
-  const pages = paginate(buildRows(so, products), ROWS.count);
+  const pages = paginate(buildRows(so, products, cats), ROWS.count);
   const body = pages.map((p, i) => renderPage(p, head, totals, i === pages.length - 1)).join("");
 
   return `<!DOCTYPE html>
@@ -241,8 +295,8 @@ ${body}
 </body></html>`;
 }
 
-export function printSOForm(so, products, contacts) {
-  const html = buildSOFormHtml(so, products, contacts);
+export function printSOForm(so, products, contacts, cats) {
+  const html = buildSOFormHtml(so, products, contacts, cats);
   const w = window.open("", "_blank", "width=920,height=720");
   if (!w) return;
   w.document.open();

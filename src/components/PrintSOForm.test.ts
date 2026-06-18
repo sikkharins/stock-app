@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import {
   toBEShort,
   fmtC,
+  bahtText,
   resolveBillTo,
   buildRows,
   computeTotals,
@@ -26,6 +27,22 @@ describe("fmtC", () => {
   });
 });
 
+describe("bahtText", () => {
+  test("จำนวนมีสตางค์", () => {
+    expect(bahtText(94129.46)).toBe("เก้าหมื่นสี่พันหนึ่งร้อยยี่สิบเก้าบาทสี่สิบหกสตางค์");
+  });
+  test("ลงท้ายบาทถ้วน / ศูนย์", () => {
+    expect(bahtText(100)).toBe("หนึ่งร้อยบาทถ้วน");
+    expect(bahtText(214)).toBe("สองร้อยสิบสี่บาทถ้วน");
+    expect(bahtText(0)).toBe("ศูนย์บาทถ้วน");
+  });
+  test("เอ็ด / ยี่สิบ / ล้าน", () => {
+    expect(bahtText(21)).toBe("ยี่สิบเอ็ดบาทถ้วน");
+    expect(bahtText(11)).toBe("สิบเอ็ดบาทถ้วน");
+    expect(bahtText(1000000)).toBe("หนึ่งล้านบาทถ้วน");
+  });
+});
+
 describe("resolveBillTo", () => {
   const contact = { nameT: "ร้าน A", address: "123", taxId: "TAX1", custCode: "C001" };
   test("ปกติ -> ใช้ข้อมูลลูกค้า + custCode", () => {
@@ -43,28 +60,30 @@ describe("resolveBillTo", () => {
 });
 
 describe("buildRows", () => {
-  const products = [{ id: 1, nameT: "ตู้เย็น", unit: "เครื่อง", price: 107 }];
-  test("includeVat -> ราคาก่อน VAT (x100/107)", () => {
+  const cats = [{ id: 5, name: "ตู้เย็น" }];
+  const products = [{ id: 1, nameT: "รุ่น A", unit: "เครื่อง", brand: "LG", categoryId: 5 }];
+  test("includeVat -> ราคาก่อน VAT + หมวด+ยี่ห้อ นำหน้า", () => {
     const so = { includeVat: true, items: [{ productId: 1, qty: 2, price: 107 }] };
-    expect(buildRows(so, products)).toEqual([
-      { no: 1, name: "ตู้เย็น", qty: 2, unit: "เครื่อง", unitPrice: 100, amount: 200 },
+    expect(buildRows(so, products, cats)).toEqual([
+      { no: 1, name: "ตู้เย็น LG รุ่น A", qty: 2, unit: "เครื่อง", unitPrice: 100, amount: 200 },
     ]);
   });
-  test("ไม่คิด VAT -> ราคาเต็ม", () => {
-    const so = { includeVat: false, items: [{ productId: 1, qty: 2, price: 100 }] };
-    expect(buildRows(so, products)).toEqual([
-      { no: 1, name: "ตู้เย็น", qty: 2, unit: "เครื่อง", unitPrice: 100, amount: 200 },
+  test("ไม่มีหมวด/ยี่ห้อ -> ใช้ nameT อย่างเดียว", () => {
+    const so = { includeVat: false, items: [{ productId: 2, qty: 1, price: 100 }] };
+    const prods = [{ id: 2, nameT: "X", unit: "ชิ้น" }];
+    expect(buildRows(so, prods, [])).toEqual([
+      { no: 1, name: "X", qty: 1, unit: "ชิ้น", unitPrice: 100, amount: 100 },
     ]);
   });
   test("split parts -> แตกหลายบรรทัด นับ no ต่อบรรทัด", () => {
     const so = { includeVat: true, items: [{ productId: 1, qty: 1, price: 107, parts: [
       { name: "ร้อน", price: 53.5 }, { name: "เย็น", price: 53.5 },
     ] }] };
-    const rows = buildRows(so, products);
+    const rows = buildRows(so, products, cats);
     expect(rows.length).toBe(2);
-    expect(rows[0]).toEqual({ no: 1, name: "ตู้เย็น — ร้อน", qty: 1, unit: "เครื่อง", unitPrice: 50, amount: 50 });
+    expect(rows[0]).toEqual({ no: 1, name: "ตู้เย็น LG รุ่น A — ร้อน", qty: 1, unit: "เครื่อง", unitPrice: 50, amount: 50 });
     expect(rows[1].no).toBe(2);
-    expect(rows[1].name).toBe("ตู้เย็น — เย็น");
+    expect(rows[1].name).toBe("ตู้เย็น LG รุ่น A — เย็น");
   });
 });
 
@@ -95,7 +114,8 @@ describe("paginate", () => {
 });
 
 describe("buildSOFormHtml", () => {
-  const products = [{ id: 1, nameT: "ตู้เย็น", unit: "เครื่อง", price: 107 }];
+  const cats = [{ id: 3, name: "ตู้เย็น" }];
+  const products = [{ id: 1, nameT: "ตู้เย็น", unit: "เครื่อง", price: 107, brand: "LG", categoryId: 3 }];
   const contacts = [{ id: 9, nameT: "ร้าน A", address: "123 ถนน", taxId: "TAX1", custCode: "C001", salesPerson: "เซลส์1" }];
   const baseSO = {
     legacyNum: "IV2026/06115", date: "2026-06-17", customerId: 9,
@@ -103,27 +123,28 @@ describe("buildSOFormHtml", () => {
     items: [{ productId: 1, qty: 2, price: 107 }],
   };
 
-  test("มีเลขที่ ชื่อลูกค้า รหัสลูกค้า เซลส์ และยอดรวม", () => {
-    const html = buildSOFormHtml(baseSO, products, contacts);
+  test("มีเลขที่ ชื่อลูกค้า รหัสลูกค้า เซลส์ ยอดรวม และยอดตัวอักษร", () => {
+    const html = buildSOFormHtml(baseSO, products, contacts, cats);
     expect(html).toContain("IV2026/06115");
     expect(html).toContain("ร้าน A");
     expect(html).toContain("C001");
     expect(html).toContain("เซลส์1");
     expect(html).toContain("214.00"); // grand
+    expect(html).toContain("สองร้อยสิบสี่บาทถ้วน"); // bahtText(grand)
     expect(html).toContain("@page");
     expect(html).toContain("205mm 279mm");
   });
 
   test("ตัวแทน VAT -> โชว์ชื่อ/เลขบัตรตัวแทน", () => {
     const so = { ...baseSO, useVatRep: true, vatRepName: "ตัวแทน X", vatRepAddress: "ADDR X", vatRepIdCard: "RID13" };
-    const html = buildSOFormHtml(so, products, contacts);
+    const html = buildSOFormHtml(so, products, contacts, cats);
     expect(html).toContain("ตัวแทน X");
     expect(html).toContain("RID13");
   });
 
   test("สินค้าเกิน 12 บรรทัด -> 2 หน้า", () => {
     const items = Array.from({ length: 13 }, () => ({ productId: 1, qty: 1, price: 107 }));
-    const html = buildSOFormHtml({ ...baseSO, items }, products, contacts);
+    const html = buildSOFormHtml({ ...baseSO, items }, products, contacts, cats);
     expect((html.match(/class="so-page"/g) || []).length).toBe(2);
   });
 });
