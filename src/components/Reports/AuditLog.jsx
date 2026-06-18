@@ -34,12 +34,13 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
 
   const codes=useMemo(()=>(products||[]).map(p=>p.code).filter(Boolean),[products]);
   const cName=id=>{const c=(contacts||[]).find(x=>x.id===id);return c?cN(c):"#"+id;};
+  const itemsOf=(arr,priceKey)=>(arr||[]).map(i=>{const p=(products||[]).find(x=>x.id===i.productId);const price=+(priceKey==="cost"?i.cost:i.price)||0;return{name:p?pN(p):"#"+i.productId,qty:i.qty,price,amt:i.qty*price};});
 
   const lookup=(ref)=>{
     if(!ref) return null;
-    if(ref.type==="so"){const r=(sales||[]).find(s=>s.soNum===ref.num);return r&&{kind:"so",num:r.soNum,st:SO_ST[r.status]||r.status,who:cName(r.customerId),total:(r.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(r.discountAmt||0),n:(r.items||[]).length};}
-    if(ref.type==="po"){const r=(pos||[]).find(p=>p.poNum===ref.num);return r&&{kind:"po",num:r.poNum,st:PO_ST[r.status]||r.status,who:cName(r.supplierId),total:(r.items||[]).reduce((s,i)=>s+i.qty*i.cost,0),n:(r.items||[]).length};}
-    if(ref.type==="qt"){const r=(quotes||[]).find(x=>x.qtNum===ref.num);return r&&{kind:"qt",num:r.qtNum,st:QT_ST[r.status]||r.status,who:cName(r.customerId),total:(r.items||[]).reduce((s,i)=>s+i.qty*i.price,0),n:(r.items||[]).length};}
+    if(ref.type==="so"){const r=(sales||[]).find(s=>s.soNum===ref.num);return r&&{kind:"so",num:r.soNum,st:SO_ST[r.status]||r.status,who:cName(r.customerId),items:itemsOf(r.items,"price"),disc:r.discountAmt||0,total:(r.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(r.discountAmt||0)};}
+    if(ref.type==="po"){const r=(pos||[]).find(p=>p.poNum===ref.num);return r&&{kind:"po",num:r.poNum,st:PO_ST[r.status]||r.status,who:cName(r.supplierId),items:itemsOf(r.items,"cost"),disc:0,total:(r.items||[]).reduce((s,i)=>s+i.qty*i.cost,0)};}
+    if(ref.type==="qt"){const r=(quotes||[]).find(x=>x.qtNum===ref.num);return r&&{kind:"qt",num:r.qtNum,st:QT_ST[r.status]||r.status,who:cName(r.customerId),items:itemsOf(r.items,"price"),disc:0,total:(r.items||[]).reduce((s,i)=>s+i.qty*i.price,0)};}
     if(ref.type==="product"){const r=(products||[]).find(p=>p.code===ref.code);return r&&{kind:"product",num:r.code,name:pN(r),stock:r.stock,price:r.price};}
     return null;
   };
@@ -103,20 +104,21 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
             </tr></thead>
             <tbody>{filtered.map(l=>{
               const [dpart,tpart]=fmtD(l.date).split(" ");
+              const ref=parseAuditRef(l.detail,codes);
               return <tr key={l.id} style={{borderBottom:"0.5px solid var(--line)",borderLeft:l.cat.risk?"3px solid var(--red)":"3px solid transparent",background:l.cat.risk?"rgba(255,59,48,0.05)":"transparent"}}>
                 <td style={{padding:"8px 12px",color:"var(--dim)",fontSize:11,whiteSpace:"nowrap"}}>
                   <div style={{color:"var(--text)"}}>{tpart||"-"}</div>
                   <div style={{color:"var(--faint)"}}>{dpart}</div>
                 </td>
-                <td style={{padding:"8px 12px"}}
-                  onMouseEnter={e=>{const ref=parseAuditRef(l.detail,codes);if(ref)setHover({ref,x:e.clientX,y:e.clientY});}}
-                  onMouseMove={e=>setHover(h=>h?{...h,x:e.clientX,y:e.clientY}:h)}
-                  onMouseLeave={()=>setHover(null)}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <td style={{padding:"8px 12px"}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:8,flexWrap:"wrap",cursor:ref?"help":"default"}}
+                    onMouseEnter={ref?(e=>setHover({ref,x:e.clientX,y:e.clientY})):undefined}
+                    onMouseMove={ref?(e=>setHover(h=>h?{...h,x:e.clientX,y:e.clientY}:h)):undefined}
+                    onMouseLeave={ref?(()=>setHover(null)):undefined}>
                     <CatBadge cat={l.cat}/>
                     <span>{l.action}</span>
-                    {l.detail&&<span style={{color:"var(--dim)",textDecoration:parseAuditRef(l.detail,codes)?"underline dotted":"none",textUnderlineOffset:2}}>{"· "+l.detail}</span>}
-                  </div>
+                    {l.detail&&<span style={{color:"var(--dim)",textDecoration:ref?"underline dotted":"none",textUnderlineOffset:2}}>{"· "+l.detail}</span>}
+                  </span>
                 </td>
                 <td style={{padding:"8px 12px",fontWeight:500,textAlign:"right",whiteSpace:"nowrap"}}>{l.user}</td>
               </tr>;
@@ -127,11 +129,11 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
 
     {hover&&(()=>{
       const info=lookup(hover.ref);
-      const W=300,M=12;
+      const W=320,M=12;
       const vw=typeof window!=="undefined"?window.innerWidth:1280;
       const vh=typeof window!=="undefined"?window.innerHeight:800;
       const flipLeft=hover.x-W-M>0;
-      const top=Math.min(Math.max(hover.y-30,M),vh-220);
+      const top=Math.min(Math.max(hover.y-30,M),vh-300);
       const pos=flipLeft?{right:vw-hover.x+M,top}:{left:hover.x+M,top};
       return <div style={{position:"fixed",...pos,width:W,background:"var(--panel)",border:"1px solid var(--line)",borderRadius:10,boxShadow:"var(--shadow-card-hi, 0 12px 28px rgba(0,0,0,0.35))",padding:"12px 14px",zIndex:200,pointerEvents:"none",fontSize:12}}>
         {!info
@@ -150,10 +152,19 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
                   <span style={{fontWeight:700,fontSize:13}}>{info.num}</span>
                   <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"var(--hover)",color:"var(--dim)",fontWeight:500}}>{info.st}</span>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"2px 12px",color:"var(--dim)"}}>
-                  <div style={{gridColumn:"1/-1"}}>{info.kind==="po"?"ผู้ขาย":"ลูกค้า"}: <span style={{color:"var(--text)",fontWeight:500}}>{info.who}</span></div>
-                  <div>รายการ: <span style={{color:"var(--text)",fontWeight:500}}>{info.n}</span></div>
-                  <div>ยอด: <span style={{color:"var(--text)",fontWeight:500}}>{baht(info.total)}</span></div>
+                <div style={{color:"var(--dim)",marginBottom:8}}>{info.kind==="po"?"ผู้ขาย: ":"ลูกค้า: "}<span style={{color:"var(--text)",fontWeight:500}}>{info.who}</span></div>
+                <div style={{maxHeight:180,overflowY:"auto",marginBottom:8,borderTop:"1px solid var(--line)",borderBottom:"1px solid var(--line)",padding:"6px 0"}}>
+                  {info.items.length===0
+                    ? <div style={{color:"var(--faint)"}}>ไม่มีรายการ</div>
+                    : info.items.map((it,idx)=><div key={idx} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"2px 0",fontSize:11}}>
+                        <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--text)"}}>{it.name}</span>
+                        <span style={{color:"var(--dim)",flexShrink:0}}>{it.qty}×{baht(it.price)}</span>
+                        <span style={{fontWeight:500,minWidth:62,textAlign:"right",flexShrink:0}}>{baht(it.amt)}</span>
+                      </div>)}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                  {info.disc>0&&<div style={{display:"flex",justifyContent:"space-between",color:"var(--orange)"}}><span>ส่วนลด</span><span>−{baht(info.disc)}</span></div>}
+                  <div style={{display:"flex",justifyContent:"space-between",fontWeight:700}}><span>{"ยอดรวม ("+info.items.length+")"}</span><span>{baht(info.total)}</span></div>
                 </div>
               </>}
       </div>;
