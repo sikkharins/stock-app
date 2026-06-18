@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB } from "../utils/constants.js";
 import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, nextDocNum, shipmentTotals, poStatusFromShipments, buildDropshipShipmentSO, poEditViolation } from "../utils/helpers.js";
+import { diffFields, diffLineItems } from "../utils/auditDiff.ts";
 import { printDoc } from "./PrintDocument.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Badge from "./ui/Badge.jsx";
@@ -204,7 +205,10 @@ export default function POPage({sh}){
     if(editPO){const v=poEditViolation(editPO,form.items);if(v){const pr=products.find(p=>+p.id===v.productId);setWarnMsg("ลดจำนวน/ลบรายการต่ำกว่าที่รับไปแล้วไม่ได้ — "+(pr?pN(pr):v.productId)+" รับไปแล้ว "+v.received);return;}}
     const base={supplierId:+form.supplierId,date:form.date,deliveryDate:form.deliveryDate||"",creditDays:+form.creditDays||0,items:form.items.map(i=>{const pr=products.find(x=>x.id===+i.productId);return{productId:+i.productId,qty:+i.qty,cost:+i.cost,sellPrice:pr?pr.price:0};}),note:form.note||"",refNo:form.refNo||"",dropShip:!!form.dropShip,dropShipCustomerId:form.dropShip?+form.dropShipCustomerId:null};
     setPOs(p=>p.map(x=>x.id===editPO.id?{...x,...base}:x));
-    addA("แก้ไข PO",editPO.poNum);setEditPO(null);cM();
+    const _money=n=>"฿"+fmt(n);const _cust=id=>{const c=contacts.find(x=>x.id===id);return c?cN(c):(id?"#"+id:"—");};const _nameOf=pid=>{const p=products.find(x=>x.id===pid);return p?pN(p):"#"+pid;};
+    const _poDefs=[{key:"supplierId",label:"ผู้ขาย",fmt:_cust},{key:"date",label:"วันที่",fmt:toBE},{key:"deliveryDate",label:"วันส่ง",fmt:toBE},{key:"creditDays",label:"เครดิต (วัน)"},{key:"refNo",label:"เลขอ้างอิง"},{key:"dropShip",label:"ส่งนอกสถานที่",fmt:v=>v?"ใช่":"ไม่"},{key:"dropShipCustomerId",label:"ลูกค้าปลายทาง",fmt:_cust},{key:"note",label:"หมายเหตุ"}];
+    const _changes=[...diffFields(editPO,base,_poDefs),...diffLineItems(editPO.items||[],base.items||[],{priceKey:"cost",nameOf:_nameOf,fmtMoney:_money})];
+    addA("แก้ไข PO",editPO.poNum,_changes);setEditPO(null);cM();
   };
 
   const openApproval=(po,action)=>{setAppModal({po,action});setAppComment("");oM("appModal");};
