@@ -105,19 +105,22 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
             <tbody>{filtered.map(l=>{
               const [dpart,tpart]=fmtD(l.date).split(" ");
               const ref=parseAuditRef(l.detail,codes);
+              const chg=l.changes&&l.changes.length?l.changes:null;
+              const hv=ref||chg;
               return <tr key={l.id} style={{borderBottom:"0.5px solid var(--line)",borderLeft:l.cat.risk?"3px solid var(--red)":"3px solid transparent",background:l.cat.risk?"rgba(255,59,48,0.05)":"transparent"}}>
                 <td style={{padding:"8px 12px",color:"var(--dim)",fontSize:11,whiteSpace:"nowrap"}}>
                   <div style={{color:"var(--text)"}}>{tpart||"-"}</div>
                   <div style={{color:"var(--faint)"}}>{dpart}</div>
                 </td>
                 <td style={{padding:"8px 12px"}}>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:8,flexWrap:"wrap",cursor:ref?"help":"default"}}
-                    onMouseEnter={ref?(e=>setHover({ref,x:e.clientX,y:e.clientY})):undefined}
-                    onMouseMove={ref?(e=>setHover(h=>h?{...h,x:e.clientX,y:e.clientY}:h)):undefined}
-                    onMouseLeave={ref?(()=>setHover(null)):undefined}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:8,flexWrap:"wrap",cursor:hv?"help":"default"}}
+                    onMouseEnter={hv?(e=>setHover({ref,changes:chg,x:e.clientX,y:e.clientY})):undefined}
+                    onMouseMove={hv?(e=>setHover(h=>h?{...h,x:e.clientX,y:e.clientY}:h)):undefined}
+                    onMouseLeave={hv?(()=>setHover(null)):undefined}>
                     <CatBadge cat={l.cat}/>
                     <span>{l.action}</span>
-                    {l.detail&&<span style={{color:"var(--dim)",textDecoration:ref?"underline dotted":"none",textUnderlineOffset:2}}>{"· "+l.detail}</span>}
+                    {l.detail&&<span style={{color:"var(--dim)",textDecoration:hv?"underline dotted":"none",textUnderlineOffset:2}}>{"· "+l.detail}</span>}
+                    {chg&&<span style={{color:"var(--faint)",fontSize:11}}>{"("+chg.length+" การเปลี่ยนแปลง)"}</span>}
                   </span>
                 </td>
                 <td style={{padding:"8px 12px",fontWeight:500,textAlign:"right",whiteSpace:"nowrap"}}>{l.user}</td>
@@ -129,6 +132,8 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
 
     {hover&&(()=>{
       const info=lookup(hover.ref);
+      const changes=hover.changes;
+      const headerNum=info?info.num:(hover.ref?(hover.ref.num||hover.ref.code):"");
       const W=320,M=12;
       const vw=typeof window!=="undefined"?window.innerWidth:1280;
       const vh=typeof window!=="undefined"?window.innerHeight:800;
@@ -136,8 +141,22 @@ export default function AuditTab({ audit, sales, pos, quotes, products, contacts
       const top=Math.min(Math.max(hover.y-30,M),vh-300);
       const pos=flipLeft?{right:vw-hover.x+M,top}:{left:hover.x+M,top};
       return <div style={{position:"fixed",...pos,width:W,background:"var(--panel)",border:"1px solid var(--line)",borderRadius:10,boxShadow:"var(--shadow-card-hi, 0 12px 28px rgba(0,0,0,0.35))",padding:"12px 14px",zIndex:200,pointerEvents:"none",fontSize:12}}>
-        {!info
-          ? <div style={{color:"var(--dim)"}}>ไม่พบเอกสาร (อาจถูกลบ)</div>
+        {changes&&changes.length
+          ? <>
+              {headerNum&&<div style={{fontWeight:700,fontSize:13,marginBottom:8}}>{headerNum}</div>}
+              <div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:8}}>
+                {changes.map((c,idx)=><div key={idx}>
+                  <div style={{color:"var(--dim)",fontSize:11,marginBottom:1}}>{c.label}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                    <span style={{color:"var(--faint)",textDecoration:"line-through"}}>{c.from}</span>
+                    <span style={{color:"var(--dim)"}}>{"→"}</span>
+                    <span style={{color:"var(--text)",fontWeight:500}}>{c.to}</span>
+                  </div>
+                </div>)}
+              </div>
+            </>
+          : !info
+            ? <div style={{color:"var(--dim)"}}>ไม่พบเอกสาร (อาจถูกลบ)</div>
           : info.kind==="product"
             ? <>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{info.num}</div>
