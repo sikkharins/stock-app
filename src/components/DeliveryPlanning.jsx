@@ -1039,12 +1039,17 @@ export default function DeliveryPlanningPage({ sh }) {
     );
   }, [pickList, pickedRows.length, truck, date]);
 
-  // Standalone document for the modal preview iframe.
+  // Standalone document for the modal preview iframe + the print window.
+  // viewport width=302px (=80mm @96dpi) pins the layout width so mobile print
+  // services render the receipt at full paper width instead of shrinking a
+  // narrow body centered in a wide page.
   const thermalHtml = useMemo(() => {
     if (!thermalInner) return "";
     return (
-      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>ใบจัดของ</title><style>" +
-      "@page{size:80mm auto;margin:2mm}html,body{margin:0;padding:0;background:#fff}" +
+      "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
+      "<meta name='viewport' content='width=302, initial-scale=1'>" +
+      "<title>ใบจัดของ</title><style>" +
+      "@page{size:80mm auto;margin:0}html,body{margin:0;padding:0;background:#fff}" +
       thermalReceiptCss("body") +
       "</style></head><body>" + thermalInner + "</body></html>"
     );
