@@ -197,18 +197,21 @@ export const printViaEpos = async (
   const body = buildEnvelope(canvasToMonoRaster(canvas));
   let res: Response;
   try {
+    // text/plain keeps this a CORS "simple request" → no preflight OPTIONS, which
+    // some ePOS firmwares don't answer. The device parses the SOAP body regardless
+    // of the declared content type.
     res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: '""' },
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
       body,
     });
   } catch {
     return {
       ok: false,
       message:
-        "เชื่อมต่อเครื่องพิมพ์ไม่ได้ — เช็ก: เครื่องเปิด ePOS-Print + HTTPS, มือถืออยู่ Wi-Fi เดียวกัน, trust cert (เปิด https://" +
+        "เชื่อมต่อเครื่องพิมพ์ไม่ได้ — เช็ก: trust cert (เปิด https://" +
         cleanHost +
-        " ครั้งแรกแล้วกดยอมรับ), และเครื่องตอบ CORS",
+        " ใน Chrome กด Proceed ก่อน), เปิดแอปใน Chrome (ไม่ใช่ PWA), เครื่องเปิด ePOS-Print + HTTPS, อยู่ Wi-Fi เดียวกัน. หมายเหตุ: ถ้าใบ 'ออกมาแล้ว' แต่ขึ้น error นี้ = เครื่องไม่ตอบ CORS แต่พิมพ์สำเร็จ",
     };
   }
   const text = await res.text().catch(() => "");
