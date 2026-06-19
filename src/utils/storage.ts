@@ -49,6 +49,7 @@ const KEY_MAP = {
   v3_delivery_runs: "delivery_runs",
   v3_delivery_helpers: "delivery_helpers",
   v3_zones: "zones",
+  v3_so_form_layout: "so_form_layout",
 } as const;
 
 type LsKey = keyof typeof KEY_MAP;

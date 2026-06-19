@@ -221,10 +221,12 @@ function renderPage(pageRows, head, totals, isLast) {
   }
 
   return `<div class="so-page"${isLast ? "" : ' style="page-break-after:always;"'}>` +
-    `<div class="so-grid"></div><div class="so-page-inner">${c.join("")}</div></div>`;
+    `<div class="so-grid"></div><div class="so-cal"></div><div class="so-page-inner">${c.join("")}</div></div>`;
 }
 
-export function buildSOFormHtml(so, products, contacts, cats) {
+export function buildSOFormHtml(so, products, contacts, cats, layout) {
+  // SAVED = ค่ากลางที่บันทึกไว้ (จาก Supabase ผ่านแอป) ใช้เป็นจุดเริ่มและเกณฑ์เทียบ "บันทึกแล้ว/ยังไม่บันทึก"
+  const SAVED = { g: (layout && layout.g) || { x: 0, y: 0 }, fo: (layout && layout.fo) || {} };
   const contact = (contacts || []).find((c) => c.id === so.customerId) || {};
   const billTo = resolveBillTo(so, contact);
   const head = {
@@ -255,6 +257,7 @@ body{font-family:${FONT.family};font-size:${FONT.size}px;color:#000;background:#
 .so-grid{position:absolute;inset:0;display:none;border:0.3mm solid rgba(0,0,0,0.4);
   background-image:repeating-linear-gradient(to right,rgba(0,0,0,0.13) 0 0.2mm,transparent 0.2mm 10mm),
                    repeating-linear-gradient(to bottom,rgba(0,0,0,0.13) 0 0.2mm,transparent 0.2mm 10mm);}
+.so-cal{position:absolute;top:2mm;left:2mm;display:none;font-size:8px;line-height:1.3;color:#b00;max-width:170mm;white-space:pre-wrap;font-family:monospace;z-index:2;}
 @media screen{body{background:#888;padding:10px;}.so-page{background:#fff;margin:0 auto 10px;box-shadow:0 0 4px rgba(0,0,0,0.4);}.so-f:hover{outline:1px dashed rgba(0,100,255,0.55);}}
 @media print{.no-print{display:none!important;}body{background:#fff;padding:0;}.so-page{box-shadow:none;margin:0;}}
 @page{size:${PAGE.w}mm ${PAGE.h}mm;margin:0;}
@@ -271,40 +274,65 @@ body{font-family:${FONT.family};font-size:${FONT.size}px;color:#000;background:#
   <button onclick="_deselect()">ปรับทั้งใบ</button>
   <button onclick="_resetField()">รีเซ็ตช่องนี้</button>
   <button onclick="_resetAll()">รีเซ็ตทั้งหมด</button>
+  <button onclick="_save()" style="background:#0a7;color:#fff;border:none;font-weight:600;">บันทึกเป็นค่ากลาง</button>
+  <span id="saveStat" style="font-size:12px;"></span>
   <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" style="width:auto;" onchange="_toggleGrid(this)"> กรอบช่วยจูน</label>
   <button onclick="window.close()">ปิด</button>
-  <span style="color:#b00;">คลิกช่องในตัวอย่างเพื่อเลือก → กด ◀▶▲▼ หรือลูกศร (Shift=0.1mm) · พิมพ์ Actual size 100% · 205×279mm</span>
+  <span style="color:#b00;">คลิกช่องในตัวอย่างเพื่อเลือก → กด ◀▶▲▼ หรือลูกศร (Shift=0.1mm) · บันทึกเป็นค่ากลาง = ใช้ได้ทุกเครื่อง · พิมพ์ Actual size 100% · 205×279mm</span>
 </div>
 ${body}
 <script>
 (function(){
-  var GKEY="so_form_offset", FKEY="so_field_offsets";
+  var SAVED=${JSON.stringify(SAVED)};
+  var DKEY="so_form_draft";
   function jget(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
   function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-  var g=jget(GKEY)||{x:0,y:0}, fo=jget(FKEY)||{}, sel=null, selIsRow=false;
+  function clone(o){return JSON.parse(JSON.stringify(o));}
+  function eq(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+  // baseline = ค่ากลางที่บันทึกไว้ ; working = draft ในเครื่องถ้ามี ไม่งั้น = baseline
+  var baseG=SAVED.g||{x:0,y:0}, baseFo=SAVED.fo||{};
+  var draft=jget(DKEY);
+  var g=draft&&draft.g?draft.g:clone(baseG), fo=draft&&draft.fo?draft.fo:clone(baseFo);
+  var sel=null, selIsRow=false;
   var els=document.querySelectorAll(".so-f");
-  var LABELS={custCode:"รหัสลูกค้า",custName:"ชื่อลูกค้า",custAddr:"ที่อยู่",custTaxId:"เลขผู้เสียภาษี",docNo:"เลขที่",docDate:"วันที่",payTerm:"เงื่อนไขชำระ",dueDate:"ครบกำหนด",salesman:"พนักงานขาย",note:"หมายเหตุ",bahtText:"ยอดเงินตัวอักษร",subTotal:"รวมก่อน VAT",discount:"ส่วนลด",goods:"มูลค่าสินค้า",vat:"VAT",grand:"รวมทั้งสิ้น","col:no":"คอลัมน์ลำดับ","col:name":"คอลัมน์รายการ","col:qty":"คอลัมน์จำนวน","col:unit":"คอลัมน์หน่วย","col:price":"คอลัมน์ราคา/หน่วย","col:amount":"คอลัมน์จำนวนเงิน"};
+  var LABELS={custCode:"รหัสลูกค้า",custName:"ชื่อลูกค้า",custAddr:"ที่อยู่",custTaxId:"เลขผู้เสียภาษี",docNo:"เลขที่",docDate:"วันที่",payTerm:"เงื่อนไขชำระ",dueDate:"ครบกำหนด",salesman:"พนักงานขาย",note:"หมายเหตุ",bahtText:"ยอดเงินตัวอักษร",subTotal:"รวมก่อน VAT",discount:"ส่วนลด",goods:"มูลค่าสินค้า",vat:"VAT",grand:"รวมทั้งสิ้น",rows:"ตาราง(แนวตั้ง)","col:no":"คอลัมน์ลำดับ","col:name":"คอลัมน์รายการ","col:qty":"คอลัมน์จำนวน","col:unit":"คอลัมน์หน่วย","col:price":"คอลัมน์ราคา/หน่วย","col:amount":"คอลัมน์จำนวนเงิน"};
   function offFor(el){
     var fid=el.getAttribute("data-fid");
     var dx=(fo[fid]&&fo[fid].dx)||0;
     var dy=el.getAttribute("data-row")?((fo.rows&&fo.rows.dy)||0):((fo[fid]&&fo[fid].dy)||0);
     return {x:g.x+dx, y:g.y+dy};
   }
-  function apply(){for(var i=0;i<els.length;i++){var o=offFor(els[i]);els[i].style.transform="translate("+o.x+"mm,"+o.y+"mm)";}}
+  function readout(){
+    var parts=[];
+    if(g.x||g.y)parts.push("ทั้งใบ X"+g.x+" Y"+g.y);
+    for(var k in fo){var o=fo[k];if(!o)continue;var dx=o.dx||0,dy=o.dy||0;if(!dx&&!dy)continue;parts.push((LABELS[k]||k)+(dx?" X"+dx:"")+(dy?" Y"+dy:""));}
+    var txt="ค่าปรับ "+new Date().toLocaleString("th-TH")+" : "+(parts.length?parts.join("  |  "):"— ยังไม่ปรับ —");
+    var cs=document.querySelectorAll(".so-cal");for(var i=0;i<cs.length;i++)cs[i].textContent=txt;
+  }
+  function status(){var el=document.getElementById("saveStat");if(!el)return;var same=eq(g,baseG)&&eq(fo,baseFo);el.textContent=same?"● บันทึกแล้ว":"○ ยังไม่บันทึก";el.style.color=same?"#0a7":"#b00";}
+  function apply(){for(var i=0;i<els.length;i++){var o=offFor(els[i]);els[i].style.transform="translate("+o.x+"mm,"+o.y+"mm)";}readout();status();}
   function hl(){for(var i=0;i<els.length;i++){els[i].style.outline=(sel&&els[i].getAttribute("data-fid")===sel)?"1.5px solid #06f":"";}}
   function label(){var el=document.getElementById("selLabel");if(!el)return;el.textContent=sel?("กำลังปรับ: "+(LABELS[sel]||sel)+(selIsRow?" (ขึ้น/ลง=ทั้งตาราง)":"")):"ปรับทั้งใบ";}
   for(var i=0;i<els.length;i++){els[i].addEventListener("click",function(e){sel=this.getAttribute("data-fid");selIsRow=!!this.getAttribute("data-row");hl();label();e.stopPropagation();});}
   function r1(v){return Math.round(v*10)/10;}
+  function saveDraft(){jset(DKEY,{g:g,fo:fo});}
   window._nudge=function(dx,dy){
-    if(!sel){g.x=r1(g.x+dx);g.y=r1(g.y+dy);jset(GKEY,g);apply();return;}
+    if(!sel){g.x=r1(g.x+dx);g.y=r1(g.y+dy);saveDraft();apply();return;}
     if(dx){fo[sel]=fo[sel]||{};fo[sel].dx=r1((fo[sel].dx||0)+dx);}
     if(dy){if(selIsRow){fo.rows=fo.rows||{};fo.rows.dy=r1((fo.rows.dy||0)+dy);}else{fo[sel]=fo[sel]||{};fo[sel].dy=r1((fo[sel].dy||0)+dy);}}
-    jset(FKEY,fo);apply();
+    saveDraft();apply();
   };
   window._deselect=function(){sel=null;selIsRow=false;hl();label();};
-  window._resetField=function(){if(!sel)return;delete fo[sel];if(selIsRow&&fo.rows)delete fo.rows;jset(FKEY,fo);apply();};
-  window._resetAll=function(){fo={};g={x:0,y:0};jset(FKEY,fo);jset(GKEY,g);_deselect();apply();};
-  window._toggleGrid=function(cb){var gr=document.querySelectorAll(".so-grid");for(var i=0;i<gr.length;i++)gr[i].style.display=cb.checked?"block":"none";};
+  window._resetField=function(){if(!sel)return;delete fo[sel];if(selIsRow&&fo.rows)delete fo.rows;saveDraft();apply();};
+  window._resetAll=function(){fo={};g={x:0,y:0};saveDraft();_deselect();apply();};
+  window._save=function(){
+    if(window.opener&&!window.opener.closed){
+      window.opener.postMessage({type:"so_form_layout_save",payload:{g:g,fo:fo}},"*");
+      baseG=clone(g);baseFo=clone(fo);try{localStorage.removeItem(DKEY);}catch(e){}
+      status();alert("บันทึกเป็นค่ากลางแล้ว (ใช้ได้ทุกเครื่อง)");
+    }else{alert("กรุณาเปิดหน้านี้จากปุ่มในแอป เพื่อบันทึกเป็นค่ากลาง");}
+  };
+  window._toggleGrid=function(cb){var gr=document.querySelectorAll(".so-grid"),ca=document.querySelectorAll(".so-cal");for(var i=0;i<gr.length;i++)gr[i].style.display=cb.checked?"block":"none";for(var j=0;j<ca.length;j++)ca[j].style.display=cb.checked?"block":"none";};
   document.addEventListener("keydown",function(e){
     var s=e.shiftKey?0.1:0.5;
     if(e.key==="ArrowLeft"){_nudge(-s,0);e.preventDefault();}
@@ -318,8 +346,8 @@ ${body}
 </body></html>`;
 }
 
-export function printSOForm(so, products, contacts, cats) {
-  const html = buildSOFormHtml(so, products, contacts, cats);
+export function printSOForm(so, products, contacts, cats, layout) {
+  const html = buildSOFormHtml(so, products, contacts, cats, layout);
   const w = window.open("", "_blank", "width=920,height=720");
   if (!w) return;
   w.document.open();

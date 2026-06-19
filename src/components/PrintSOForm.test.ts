@@ -137,6 +137,18 @@ describe("buildSOFormHtml", () => {
     expect(html).toContain('data-fid="custName"');
     expect(html).toContain('data-fid="col:price"');
     expect(html).toContain('data-fid="grand"');
+    // save-as-default + calibration readout wiring
+    expect(html).toContain("บันทึกเป็นค่ากลาง");
+    expect(html).toContain("so_form_layout_save");
+    expect(html).toContain('class="so-cal"');
+  });
+
+  test("ฝังค่ากลางที่บันทึกไว้ (layout) เป็นจุดเริ่ม", () => {
+    const layout = { g: { x: 1.5, y: -2 }, fo: { custName: { dx: 3 }, rows: { dy: 4 } } };
+    const html = buildSOFormHtml(baseSO, products, contacts, cats, layout);
+    expect(html).toContain('"x":1.5');
+    expect(html).toContain('"custName":{"dx":3}');
+    expect(html).toContain('"rows":{"dy":4}');
   });
 
   test("ตัวแทน VAT -> โชว์ชื่อ/เลขบัตรตัวแทน", () => {

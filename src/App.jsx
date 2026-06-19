@@ -82,6 +82,7 @@ export default function App(){
   const[promos,setPromos]=useState([]);const[events,setEvents]=useState([]);
   const[trucks,setTrucks]=useState(initTrucks);const[deliveryRuns,setDeliveryRuns]=useState([]);const[deliveryHelpers,setDeliveryHelpers]=useState([]);const[zones,setZones]=useState([]);
   const[cats,setCats]=useState(initCats);const[cashCats,setCashCats]=useState(initCashCats);const[tagMappings,setTagMappings]=useState(initTagMappings);const[brands,setBrands]=useState(initBrands);
+  const[soFormLayout,setSoFormLayout]=useState({});
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
   const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[pendingAdjust,setPendingAdjust]=useState(null);const[fabOpen,setFabOpen]=useState(false);const[showFabCustomizer,setShowFabCustomizer]=useState(false);
@@ -158,11 +159,22 @@ export default function App(){
 
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
-    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents,trucks:setTrucks,delivery_runs:setDeliveryRuns,delivery_helpers:setDeliveryHelpers,zones:setZones};
+    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents,trucks:setTrucks,delivery_runs:setDeliveryRuns,delivery_helpers:setDeliveryHelpers,zones:setZones,so_form_layout:setSoFormLayout};
     return RT_SETTERS.current;
   },[]);
 
   useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem("v3_theme",theme);const mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content',theme==='dark'?'#1c1c1e':'#0071e3');},[theme]);
+
+  // หน้าต่างพิมพ์ฟอร์มต่อเนื่อง (window.open) ส่งค่าปรับตำแหน่งกลับมาเพื่อบันทึกเป็นค่ากลาง (Supabase)
+  useEffect(()=>{
+    const onMsg=e=>{
+      const d=e.data;
+      if(!d||d.type!=="so_form_layout_save"||!d.payload||typeof d.payload!=="object")return;
+      setSoFormLayout({g:d.payload.g||{x:0,y:0},fo:d.payload.fo||{}});
+    };
+    window.addEventListener("message",onMsg);
+    return()=>window.removeEventListener("message",onMsg);
+  },[]);
 
   useEffect(()=>{
     if(!cu)return;
@@ -198,6 +210,7 @@ export default function App(){
     out.pos=g("pos","v3_pos",initPOs);setPOs(out.pos);
     out.sales=g("sales","v3_sales",initSales);setSales(out.sales);
     out.cats=g("cats","v3_cats",initCats);setCats(out.cats);
+    out.so_form_layout=g("so_form_layout","v3_so_form_layout",{});setSoFormLayout(out.so_form_layout&&typeof out.so_form_layout==="object"?out.so_form_layout:{});
     out.cashcats=g("cashcats","v3_cashcats",initCashCats);setCashCats(out.cashcats);
     out.tagmappings=g("tagmappings","v3_tagmappings",initTagMappings);setTagMappings(out.tagmappings);
     out.brands=g("brands","v3_brands",initBrands);setBrands(out.brands);
@@ -265,7 +278,8 @@ export default function App(){
     }
     if(res?.conflict){
       const base=lastSyncedValRef.current[sbKey];
-      const merged=mergeForKey(sbKey,base,value,res.remoteData);
+      // Array keys use the 3-way list merge; config-object keys (e.g. so_form_layout) are last-write-wins.
+      const merged=Array.isArray(value)?mergeForKey(sbKey,base,value,res.remoteData):value;
       // Adopt remote as the new base, then push the merged result on top.
       lastSyncedValRef.current[sbKey]=res.remoteData;
       lastSyncedJsonRef.current[sbKey]=JSON.stringify(res.remoteData);
@@ -319,7 +333,7 @@ export default function App(){
   // Autosave: write only the arrays that actually changed (diff vs last-synced),
   // each as an independent optimistic-locked row save with merge-on-conflict.
   useEffect(()=>{if(!loaded)return;
-    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events,trucks,delivery_runs:deliveryRuns,delivery_helpers:deliveryHelpers,zones};
+    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events,trucks,delivery_runs:deliveryRuns,delivery_helpers:deliveryHelpers,zones,so_form_layout:soFormLayout};
     setSaving(true);
     const tm=setTimeout(async()=>{
       const dirty=[];
@@ -338,7 +352,7 @@ export default function App(){
     // the 800ms timer every render → autosave would never fire. The deps below
     // are exactly what should trigger a new save (any tracked array changed).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,trucks,deliveryRuns,deliveryHelpers,zones,loaded]);
+  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,trucks,deliveryRuns,deliveryHelpers,zones,soFormLayout,loaded]);
 
   const[staleWarn,setStaleWarn]=useState(false);
   // Same as doRefresh: reloadFromServer reads only refs, stable identity unneeded.
@@ -409,7 +423,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,zones,setZones,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null),pendingAdjust,setPendingAdjust,clearPendingAdjust:()=>setPendingAdjust(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,soFormLayout,setSoFormLayout,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,zones,setZones,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null),pendingAdjust,setPendingAdjust,clearPendingAdjust:()=>setPendingAdjust(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
