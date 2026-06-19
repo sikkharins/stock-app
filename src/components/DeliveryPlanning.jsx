@@ -1050,51 +1050,28 @@ export default function DeliveryPlanningPage({ sh }) {
     );
   }, [thermalInner]);
 
-  // Print the 80mm receipt. Epson TM Print Assistant (and most mobile print
-  // services) capture the *main* document, not a hidden iframe — so instead of
-  // printing an iframe we inject the receipt as a sibling of #root and, via
-  // @media print, hide #root and show only the receipt. window.print() then
-  // sends just the receipt to the printer.
+  // Print the 80mm receipt. Mobile print services (Epson TM Print Assistant,
+  // RawBT, etc.) capture the *rendered page*, ignoring @media print — so hiding
+  // #root via print CSS doesn't work. Instead open the receipt as its own
+  // top-level document (nothing but the receipt) and print that; whatever the
+  // print service captures is then just the receipt.
   const printThermal = () => {
-    if (!thermalInner) return;
-    const STYLE_ID = "thermal-print-style";
-    const NODE_ID = "thermal-print-root";
-    document.getElementById(STYLE_ID)?.remove();
-    document.getElementById(NODE_ID)?.remove();
-
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
-    style.textContent =
-      "@media screen{#" + NODE_ID + "{display:none}}" +
-      "@media print{" +
-      "@page{size:80mm auto;margin:2mm}" +
-      "html,body{margin:0!important;padding:0!important;background:#fff!important}" +
-      "#root{display:none!important}" +
-      "#" + NODE_ID + "{display:block!important}" +
-      thermalReceiptCss("#" + NODE_ID) +
-      "}";
-
-    const node = document.createElement("div");
-    node.id = NODE_ID;
-    node.innerHTML = thermalInner;
-
-    document.body.appendChild(style);
-    document.body.appendChild(node);
-
-    const cleanup = () => {
-      style.remove();
-      node.remove();
-      window.removeEventListener("afterprint", cleanup);
-    };
-    window.addEventListener("afterprint", cleanup);
-    setTimeout(() => {
-      try {
-        window.print();
-      } finally {
-        // Fallback cleanup for browsers that don't fire afterprint (some mobile).
-        setTimeout(cleanup, 60000);
-      }
-    }, 50);
+    if (!thermalHtml) return;
+    const w = window.open("", "_blank");
+    if (!w) {
+      setWarnMsg(
+        'เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาต pop-up สำหรับเว็บนี้แล้วลองใหม่'
+      );
+      return;
+    }
+    // Self-printing standalone doc: only the receipt, auto-fires print on load.
+    const printDoc = thermalHtml.replace(
+      "</body>",
+      "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},300);};</scr" + "ipt></body>"
+    );
+    w.document.open();
+    w.document.write(printDoc);
+    w.document.close();
   };
 
   // --- Render ---
