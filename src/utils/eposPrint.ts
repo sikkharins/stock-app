@@ -19,7 +19,10 @@ export interface ReceiptData {
   rows: ReceiptRow[];
 }
 
-const WIDTH = 576; // 72mm printable @ 203dpi
+// 512 dots: the conservative print width that stays inside the TM-T88VI's
+// printable area on every paper/column config (576 got the right edge — the
+// ×qty column — cropped by the printer).
+const WIDTH = 512;
 const PAD = 16;
 const CW = WIDTH - PAD * 2;
 const FONT = "'Sarabun','Tahoma',sans-serif";
