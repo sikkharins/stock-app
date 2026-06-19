@@ -518,7 +518,6 @@ export default function DeliveryPlanningPage({ sh }) {
   const [driverNote, setDriverNote] = useState("");
   const [warnMsg, setWarnMsg] = useState(null);
   const [runHelperIds, setRunHelperIds] = useState([]);
-  const [previewFormat, setPreviewFormat] = useState("a4"); // "a4" | "80mm"
   const [eposIp, setEposIp] = useState(
     () => localStorage.getItem("v3_epos_printer_ip") || "192.168.1.131"
   );
@@ -1952,142 +1951,30 @@ export default function DeliveryPlanningPage({ sh }) {
             <span>{pickedRows.length} SO</span>
           </div>
 
-          {/* Format switcher */}
-          <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)", width: "fit-content" }}>
-            {[
-              ["a4", "A4"],
-              ["80mm", '80mm (3")'],
-            ].map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => setPreviewFormat(k)}
-                style={{
-                  padding: "6px 14px",
-                  border: "none",
-                  background: previewFormat === k ? "var(--blue)" : "var(--bg2)",
-                  color: previewFormat === k ? "#fff" : "var(--dim)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  fontFamily: "inherit",
-                  fontWeight: previewFormat === k ? 600 : 400,
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {previewFormat === "80mm" ? (
-            <div
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: 8,
-                background: "var(--hover)",
-                padding: 12,
-                marginBottom: 12,
-                display: "flex",
-                justifyContent: "center",
-              }}
-            >
-              <iframe
-                title="80mm preview"
-                srcDoc={thermalHtml}
-                style={{
-                  width: 302,
-                  height: 600,
-                  border: "1px solid var(--line)",
-                  background: "#fff",
-                  borderRadius: 4,
-                }}
-              />
-            </div>
-          ) : (
+          {/* 80mm preview */}
           <div
             style={{
               border: "1px solid var(--line)",
               borderRadius: 8,
-              overflow: "hidden",
+              background: "var(--hover)",
+              padding: 12,
               marginBottom: 12,
+              display: "flex",
+              justifyContent: "center",
             }}
           >
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead>
-                <tr
-                  style={{
-                    background: "var(--bg)",
-                    borderBottom: "1px solid var(--line)",
-                  }}
-                >
-                  {["#", "ยี่ห้อ", "หมวด", "สินค้า", "จำนวน", "ลูกค้า"].map((h, i) => (
-                    <th
-                      key={i}
-                      style={{
-                        padding: "8px 12px",
-                        textAlign: i === 4 ? "right" : "left",
-                        fontWeight: 500,
-                        color: "var(--dim)",
-                        fontSize: 12,
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pickList.map((e, i) => (
-                  <tr key={e.productId} style={{ borderBottom: "1px solid var(--line)" }}>
-                    <td style={{ padding: "8px 12px", color: "var(--dim)" }}>
-                      {i + 1}
-                    </td>
-                    <td
-                      style={{
-                        padding: "8px 12px",
-                        fontSize: 12,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {e.brand || "—"}
-                    </td>
-                    <td
-                      style={{
-                        padding: "8px 12px",
-                        fontSize: 12,
-                        color: "var(--dim)",
-                      }}
-                    >
-                      {e.catName}
-                      {e.subName ? ` · ${e.subName}` : ""}
-                    </td>
-                    <td style={{ padding: "8px 12px", fontWeight: 500 }}>
-                      {e.name}
-                    </td>
-                    <td
-                      style={{
-                        padding: "8px 12px",
-                        textAlign: "right",
-                        fontWeight: 700,
-                        fontSize: 15,
-                      }}
-                    >
-                      {e.totalQty}
-                    </td>
-                    <td
-                      style={{
-                        padding: "8px 12px",
-                        fontSize: 11,
-                        color: "var(--dim)",
-                      }}
-                      title={(e.customers || []).join(", ")}
-                    >
-                      {(e.customers || []).join(", ") || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <iframe
+              title="80mm preview"
+              srcDoc={thermalHtml}
+              style={{
+                width: 302,
+                height: 600,
+                border: "1px solid var(--line)",
+                background: "#fff",
+                borderRadius: 4,
+              }}
+            />
           </div>
-          )}
           {/* ePOS direct printing to the networked Epson */}
           <div
             style={{
@@ -2141,7 +2028,7 @@ export default function DeliveryPlanningPage({ sh }) {
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
             <button
-              onClick={() => previewFormat === "80mm" ? printThermal() : window.print()}
+              onClick={printThermal}
               style={{
                 padding: "8px 18px",
                 borderRadius: 7,
@@ -2153,7 +2040,7 @@ export default function DeliveryPlanningPage({ sh }) {
                 fontWeight: 600,
               }}
             >
-              พิมพ์ผ่านเบราว์เซอร์ ({previewFormat === "80mm" ? '80mm' : 'A4'})
+              พิมพ์ผ่านเบราว์เซอร์ (80mm)
             </button>
             <button
               onClick={cM}
