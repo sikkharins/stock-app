@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { IB } from "../utils/constants.js";
 import { useMediaQuery } from "../utils/useMediaQuery.js";
 import { roadKmSync, prefetchRoadDistances } from "../utils/roadDistance.js";
+import { drawReceiptCanvas, printViaEpos } from "../utils/eposPrint.js";
 import {
   fmt,
   todayStr,
@@ -518,6 +519,13 @@ export default function DeliveryPlanningPage({ sh }) {
   const [warnMsg, setWarnMsg] = useState(null);
   const [runHelperIds, setRunHelperIds] = useState([]);
   const [previewFormat, setPreviewFormat] = useState("a4"); // "a4" | "80mm"
+  const [eposIp, setEposIp] = useState(
+    () => localStorage.getItem("v3_epos_printer_ip") || "192.168.1.131"
+  );
+  const [eposStatus, setEposStatus] = useState(null); // { ok, message } | "sending" | null
+  useEffect(() => {
+    if (modal !== "pickList") setEposStatus(null);
+  }, [modal]);
 
   // Helper-pool CRUD form
   const emptyHelper = { id: null, name: "", phone: "", isActive: true };
@@ -1075,6 +1083,31 @@ export default function DeliveryPlanningPage({ sh }) {
     w.document.open();
     w.document.write(printDoc);
     w.document.close();
+  };
+
+  // Print directly to the networked Epson via ePOS-Print (raster image). Avoids
+  // the browser/OS print pipeline entirely — exact 80mm on desktop + mobile.
+  const printEpos = async () => {
+    if (pickList.length === 0) return;
+    const ip = eposIp.trim();
+    localStorage.setItem("v3_epos_printer_ip", ip);
+    setEposStatus("sending");
+    const totalQty = pickList.reduce((s, e) => s + e.totalQty, 0);
+    const canvas = drawReceiptCanvas({
+      title: "ใบจัดของ",
+      dateStr: toBE(date),
+      truckLine: (truck?.name || "—") + (truck?.driverName ? " · " + truck.driverName : ""),
+      summaryLine: totalQty + " ชิ้น · " + pickList.length + " รายการ · " + pickedRows.length + " SO",
+      footer: "พิมพ์ " + nowStr(),
+      rows: pickList.map((e) => ({
+        brand: e.brand || "—",
+        catName: e.catName + (e.subName ? " · " + e.subName : ""),
+        name: e.name,
+        totalQty: e.totalQty,
+      })),
+    });
+    const result = await printViaEpos(ip, canvas);
+    setEposStatus(result);
   };
 
   // --- Render ---
@@ -2055,21 +2088,72 @@ export default function DeliveryPlanningPage({ sh }) {
             </table>
           </div>
           )}
+          {/* ePOS direct printing to the networked Epson */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+              padding: "10px 12px",
+              marginBottom: 10,
+              background: "var(--bg)",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+            }}
+          >
+            <span style={{ fontSize: 12, color: "var(--dim)" }}>เครื่องพิมพ์ IP</span>
+            <input
+              value={eposIp}
+              onChange={(e) => setEposIp(e.target.value)}
+              placeholder="192.168.1.131"
+              style={{ ...IB, width: 150, padding: "5px 10px", fontSize: 13 }}
+            />
+            <button
+              onClick={printEpos}
+              disabled={eposStatus === "sending"}
+              style={{
+                padding: "7px 16px",
+                borderRadius: 7,
+                border: "1px solid var(--green)",
+                background: eposStatus === "sending" ? "var(--hover2)" : "rgba(52,199,89,0.12)",
+                color: eposStatus === "sending" ? "var(--dim)" : "var(--green)",
+                cursor: eposStatus === "sending" ? "wait" : "pointer",
+                fontFamily: "inherit",
+                fontWeight: 600,
+                fontSize: 13,
+              }}
+            >
+              {eposStatus === "sending" ? "กำลังส่ง..." : "พิมพ์เข้าเครื่อง (ePOS)"}
+            </button>
+            {eposStatus && eposStatus !== "sending" && (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: eposStatus.ok ? "var(--green)" : "var(--red)",
+                  flex: "1 1 100%",
+                }}
+              >
+                {eposStatus.ok ? "✓ " : "✕ "}
+                {eposStatus.message}
+              </span>
+            )}
+          </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={() => previewFormat === "80mm" ? printThermal() : window.print()}
               style={{
                 padding: "8px 18px",
                 borderRadius: 7,
-                border: "1px solid var(--blue)",
-                background: "var(--blue)",
-                color: "#fff",
+                border: "1px solid var(--line)",
+                background: "var(--bg2)",
+                color: "var(--text)",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 fontWeight: 600,
               }}
             >
-              พิมพ์ {previewFormat === "80mm" ? '80mm' : 'A4'}
+              พิมพ์ผ่านเบราว์เซอร์ ({previewFormat === "80mm" ? '80mm' : 'A4'})
             </button>
             <button
               onClick={cM}
