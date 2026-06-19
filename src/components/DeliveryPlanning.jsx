@@ -1055,14 +1055,12 @@ export default function DeliveryPlanningPage({ sh }) {
     );
   }, [thermalInner]);
 
-  // Print the 80mm receipt. Epson TM Print Assistant renders the page as an
-  // A4 PDF (ignores @page/viewport) and then scales it to 80mm paper — so a
-  // fixed-mm body comes out tiny. Counter it: the print document fills the
-  // FULL page width (100%) with oversized fonts, so when the A4 page is scaled
-  // down to 80mm the receipt fills the paper and stays readable. (The on-screen
-  // modal preview keeps the true-size styling.)
+  // Print the 80mm receipt in its own top-level window (document = only the
+  // receipt) and auto-fire print. On desktop with the Epson roll driver this
+  // prints true-size at 80mm; whatever a mobile print service captures is also
+  // just the receipt.
   const printThermal = () => {
-    if (!thermalInner) return;
+    if (!thermalHtml) return;
     const w = window.open("", "_blank");
     if (!w) {
       setWarnMsg(
@@ -1070,27 +1068,12 @@ export default function DeliveryPlanningPage({ sh }) {
       );
       return;
     }
-    const css =
-      "*{box-sizing:border-box;margin:0;padding:0}" +
-      "body{width:100%;background:#fff;color:#000;font-family:'Sarabun','Tahoma',sans-serif;padding:0 6px;line-height:1.25}" +
-      ".tr-hdr{text-align:center;font-weight:700;font-size:42px;margin-bottom:6px}" +
-      ".tr-sub{text-align:center;font-size:26px}" +
-      ".tr-tot{text-align:center;font-size:28px;font-weight:700;margin:10px 0}" +
-      ".tr-sep{border-top:2px dashed #000;margin:10px 0}" +
-      ".tr-row{padding:10px 0;border-bottom:2px dashed #555}" +
-      ".tr-row:last-child{border-bottom:none}" +
-      ".tr-row-top{display:flex;align-items:baseline;gap:8px}" +
-      ".tr-brand{font-weight:700;flex:1;min-width:0;font-size:30px;word-break:break-word}" +
-      ".tr-qty{font-weight:800;font-size:56px;margin-left:auto;white-space:nowrap}" +
-      ".tr-cat{font-size:24px;color:#000}" +
-      ".tr-name{font-weight:700;font-size:38px;word-break:break-word}";
-    const doc =
-      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>ใบจัดของ</title>" +
-      "<style>@page{size:auto;margin:0}" + css + "</style></head><body>" +
-      thermalInner +
-      "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},300);};</scr" + "ipt></body></html>";
+    const printDoc = thermalHtml.replace(
+      "</body>",
+      "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},300);};</scr" + "ipt></body>"
+    );
     w.document.open();
-    w.document.write(doc);
+    w.document.write(printDoc);
     w.document.close();
   };
 
