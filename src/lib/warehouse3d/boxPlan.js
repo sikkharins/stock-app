@@ -1,0 +1,43 @@
+// Pure box-placement + colour helpers for the 3D warehouse scene.
+// No three.js / DOM here so this stays unit-testable (WebGL screenshots time out).
+
+// Per-SKU safety valve: stock above this renders as one aggregated "pile" instead of
+// per-unit boxes. Raised from 200 -> 5000 so the real 300-3,000/zone range draws real boxes.
+export const REP_THRESHOLD = 5000;
+
+// Plan how one product's `stock` units pack inside a zone. Lengths in metres.
+//   box:  { w, l, h }            one unit's dimensions
+//   zone: { innerW, innerL, ceilingH }
+//   opts: { stock, gap=0.04, repThreshold=REP_THRESHOLD, manualCols=null }
+// Footprint is always clamped to the zone, so any excess stacks UPWARD (overflow=true
+// when the stack rises past the ceiling) rather than spilling sideways.
+export function planBoxes(box, zone, opts = {}) {
+  const { stock = 0, gap = 0.04, repThreshold = REP_THRESHOLD, manualCols = null } = opts;
+  const layersMax = Math.max(1, Math.floor(zone.ceilingH / box.h));
+
+  if (stock <= 0) {
+    return { usePile: false, cols: 0, rows: 0, layers: 0, perLayer: 0, layersMax, footW: 0, footL: 0, overflow: false };
+  }
+  if (stock > repThreshold) {
+    return { usePile: true, cols: 0, rows: 0, layers: 0, perLayer: 0, layersMax, footW: 0, footL: 0, overflow: false };
+  }
+
+  const pitchX = box.w + gap, pitchZ = box.l + gap;
+  const maxCols = Math.max(1, Math.floor(zone.innerW / pitchX));
+  const maxRows = Math.max(1, Math.floor(zone.innerL / pitchZ));
+
+  const itemsPerLayer = Math.ceil(stock / layersMax);
+  let cols = Math.max(1, Math.round(Math.sqrt(itemsPerLayer)));
+  cols = Math.min(cols, maxCols);
+  if (manualCols) cols = Math.min(Math.max(1, manualCols), maxCols);
+
+  let rows = Math.ceil(itemsPerLayer / cols);
+  rows = Math.min(rows, maxRows);
+
+  const perLayer = cols * rows;
+  const layers = Math.ceil(stock / perLayer); // UNCAPPED -> may exceed layersMax = vertical overflow
+  const footW = cols * pitchX, footL = rows * pitchZ;
+  const overflow = layers > layersMax;
+
+  return { usePile: false, cols, rows, layers, perLayer, layersMax, footW, footL, overflow };
+}
