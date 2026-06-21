@@ -41,3 +41,17 @@ export function planBoxes(box, zone, opts = {}) {
 
   return { usePile: false, cols, rows, layers, perLayer, layersMax, footW, footL, overflow };
 }
+
+// Distinct, readable swatch colours for per-SKU box tinting (blended with cardboard in the scene).
+export const PRODUCT_PALETTE = [
+  "#d98b4a", "#e0c14a", "#7bbf5a", "#4aab9b", "#4a86d9",
+  "#8a6ad9", "#d05a9b", "#c0573a", "#5a9bd0", "#9bbf3a",
+];
+
+// Stable colour per product id (same id -> same colour across zones/renders). FNV-1a hash.
+export function productColor(id) {
+  const s = String(id);
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return PRODUCT_PALETTE[Math.abs(h) % PRODUCT_PALETTE.length];
+}

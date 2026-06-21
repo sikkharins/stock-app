@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, REP_THRESHOLD } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -45,5 +45,21 @@ describe("planBoxes", () => {
 
   it("REP_THRESHOLD ถูกดันขึ้นเป็น 5000", () => {
     expect(REP_THRESHOLD).toBe(5000);
+  });
+});
+
+describe("productColor", () => {
+  it("deterministic — id เดิมได้สีเดิมเสมอ", () => {
+    expect(productColor("sku-123")).toBe(productColor("sku-123"));
+  });
+  it("คืนสีที่อยู่ใน palette", () => {
+    expect(PRODUCT_PALETTE).toContain(productColor("anything"));
+  });
+  it("id ต่างกันกระจายได้หลายสี (ไม่ใช่สีเดียวทั้งหมด)", () => {
+    const colors = new Set(Array.from({ length: 30 }, (_, i) => productColor("p" + i)));
+    expect(colors.size).toBeGreaterThan(1);
+  });
+  it("รับ id ที่เป็นตัวเลขได้ (cast เป็น string)", () => {
+    expect(productColor(42)).toBe(productColor("42"));
   });
 });
