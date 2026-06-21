@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useCallback } from "react";
 import { buildWarehouseData, claudeDesignZones } from "../utils/warehouse3d.js";
 import { createWarehouseScene } from "../lib/warehouse3d/scene.js";
+import { getRelayUrl, cctvSnapshotUrl } from "../utils/cameraCapture.ts";
 
 // 3D warehouse tab: renders real products/zones at scale, lets editors arrange boxes
 // and capture per-zone CCTV camera angles (persisted to warehouse_layout), and exports
@@ -53,6 +54,8 @@ export default function Warehouse3DPage({ sh }) {
       canEdit,
       onSaveLayout: canEdit ? onSaveLayout : null,
       onSaveCamera: canEdit ? onSaveCamera : null,
+      // closure reads the latest relay URL on every click + cache-busts with Date.now()
+      snapshotUrl: (token) => cctvSnapshotUrl(getRelayUrl(), token, Date.now()),
     });
     return () => scene.dispose();
     // rebuildKey/canEdit fully capture when a rebuild is needed; callbacks are stable.
