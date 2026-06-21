@@ -93,6 +93,9 @@ const CSS = `
 .wh3d .cc-drop:hover { border-color:var(--w3-accent); color:var(--w3-text); }
 .wh3d .cc-drop svg { opacity:.5; }
 .wh3d .cc-foot { padding:10px 16px; border-top:1px solid var(--w3-line); font-size:11px; color:var(--w3-muted); display:flex; gap:8px; align-items:center; }
+.wh3d .cc-bar { padding:8px 16px; border-bottom:1px solid var(--w3-line); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.wh3d .cc-bar .cc-lbl { font-size:11px; color:var(--w3-muted); margin-right:2px; }
+.wh3d .cc-err { position:absolute; left:16px; right:16px; bottom:8px; font-size:11px; color:#ff8e7e; text-align:center; display:none; }
 .wh3d #hint { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); font-size:11px; color:var(--w3-muted);
   background:var(--w3-panel); border:1px solid var(--w3-line); padding:6px 12px; border-radius:20px; pointer-events:none; opacity:.9; }
 .wh3d #movePanel { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); width:360px; padding:13px 15px; display:none; }
@@ -157,8 +160,10 @@ const TEMPLATE = `
       <div><div class="t">ภาพกล้องวงจรปิด (CCTV)</div><div class="s" id="ccZoneName">—</div></div>
       <button class="tbtn" id="ccClose">ปิด</button>
     </div>
+    <div class="cc-bar" id="ccLiveBar"></div>
     <div class="cc-stage">
       <img id="cctvImg" alt="CCTV" />
+      <div class="cc-err" id="ccErr"></div>
       <div class="cc-drop" id="ccDrop">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <div>ลาก/คลิกเพื่ออัปโหลดภาพถ่ายจากกล้องวงจรจริง<br>เพื่อทาบเทียบกับมุม 3D ทางซ้าย</div>
@@ -175,6 +180,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   const canEdit = opts.canEdit !== false;
   const onSaveLayout = typeof opts.onSaveLayout === "function" ? opts.onSaveLayout : null;
   const onSaveCamera = typeof opts.onSaveCamera === "function" ? opts.onSaveCamera : null;
+  const snapshotUrl = typeof opts.snapshotUrl === "function" ? opts.snapshotUrl : null;
 
   // ---- inject scoped stylesheet once ----
   if (!document.getElementById(STYLE_ID)) {
@@ -672,6 +678,7 @@ export function createWarehouseScene(container, data, opts = {}) {
     const cfg = z.camera || { position: DEFAULT_VIEW.position, target: [z.origin.x + z.size.w / 2, 1, z.origin.z + z.size.l / 2], fov: 55 };
     tweenTo({ position: cfg.position.slice(), target: cfg.target.slice(), fov: cfg.fov || 55 });
     gid("ccZoneName").textContent = z.name + " · มุมกล้องเลียนแบบ CCTV";
+    renderLiveBar(z);
   }
   // capture current orbit camera as a persistable preset
   function captureCamera() {
@@ -759,6 +766,32 @@ export function createWarehouseScene(container, data, opts = {}) {
   }
   ccFile.addEventListener("change", (e) => loadCCTV(e.target.files[0]));
   ["dragover", "drop"].forEach((ev) => ccDrop.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop") loadCCTV(e.dataTransfer.files[0]); }));
+
+  const ccErr = gid("ccErr");
+  function showLiveCCTV(url) {
+    if (ccErr) ccErr.style.display = "none";
+    ccImg.onerror = () => {
+      ccImg.style.display = "none";
+      ccDrop.style.display = "";
+      if (ccErr) { ccErr.textContent = "relay ไม่ตอบ — เปิดโปรแกรม relay หรือใช้ลากไฟล์"; ccErr.style.display = "block"; }
+    };
+    ccImg.src = url;
+    ccImg.style.display = "block";
+    ccDrop.style.display = "none";
+  }
+  function renderLiveBar(z) {
+    const bar = gid("ccLiveBar");
+    if (!bar) return;
+    if (!snapshotUrl) { bar.style.display = "none"; return; }
+    bar.style.display = "";
+    const presets = Array.isArray(z.presets) ? z.presets : [];
+    bar.innerHTML = `<span class="cc-lbl">ดึงภาพสด:</span>` + (presets.length
+      ? presets.map((p) => `<button class="tbtn" data-tok="${String(p.token)}">${p.name}</button>`).join("")
+      : `<button class="tbtn" data-tok="">มุมปัจจุบัน</button>`);
+    bar.querySelectorAll("button[data-tok]").forEach((b) => b.addEventListener("click", () => {
+      showLiveCCTV(snapshotUrl(b.getAttribute("data-tok") || null));
+    }));
+  }
 
   // ---- click -> product popup ----
   const raycaster = new THREE.Raycaster();
