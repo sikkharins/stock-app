@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes } from "./boxPlan.js";
+import { planBoxes, productColor } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -464,7 +464,7 @@ export function createWarehouseScene(container, data, opts = {}) {
         fw = side; fl = side;
 
         const pile = new THREE.Mesh(new THREE.BoxGeometry(side, ph, side),
-          new THREE.MeshLambertMaterial({ color: mix(CARDBOARD, zone.color, 0.30) }));
+          new THREE.MeshLambertMaterial({ color: mix(CARDBOARD, productColor(p.id), 0.55) }));
         pile.position.set(side / 2, ph / 2 + 0.12, side / 2);
         pile.userData = { product: p, zoneId: zone.id, isPile: true, layersMax, volPer, pg, pid };
         pg.add(pile); st.meshes.push(pile); pickables.push(pile);
@@ -478,7 +478,7 @@ export function createWarehouseScene(container, data, opts = {}) {
         st.productMeta[pid] = { product: p, zoneId: zone.id, isPile: true, layersMax, volPer, pileSide: side };
       } else {
         const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(d.w, d.h, d.l),
-          new THREE.MeshLambertMaterial({ color: mix(CARDBOARD, zone.color, 0.28) }), p.stock);
+          new THREE.MeshLambertMaterial({ color: mix(CARDBOARD, productColor(p.id), 0.55) }), p.stock);
         const perLayer = cols * rows;
         for (let i = 0; i < p.stock; i++) {
           const layer = Math.floor(i / perLayer);
@@ -558,12 +558,12 @@ export function createWarehouseScene(container, data, opts = {}) {
   ZONES.forEach((zone) => {
     const st = zoneState[zone.id];
     const totalUnits = zone.productIds.reduce((s, pid) => s + (productById[pid]?.stock || 0), 0);
-    const boxColor = mix(CARDBOARD, zone.color, 0.28);
     const prodHtml = zone.productIds.map((pid) => {
       const p = productById[pid];
       if (!p) return "";
+      const sw = mix(CARDBOARD, productColor(p.id), 0.55);
       return `<div class="zp-item" data-pid="${pid}">
-        <span class="zp-sw" style="background:${boxColor}"></span>
+        <span class="zp-sw" style="background:${sw}"></span>
         <div class="zp-info">
           <div class="zp-name">${p.nameT}</div>
           <div class="zp-sub">${p.code} · ${p.widthCm}×${p.lengthCm}×${p.heightCm} ซม.${p.noLayDown ? " · ⚠ห้ามตะแคง" : ""}</div>
