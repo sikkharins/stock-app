@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
+    "@types/three": "^0.184.1",
     "dompurify": "^3.4.5",
     "html2pdf.js": "^0.14.0",
     "leaflet": "^1.9.4",
@@ -26,6 +27,7 @@
     "react-leaflet": "^5.0.0",
     "recharts": "^3.8.1",
     "sharp": "^0.34.5",
+    "three": "^0.184.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -15,6 +15,7 @@ const ProdPage = lazy(() => import("./components/Products.jsx"));
 const LogPage = lazy(() => import("./components/StockLog.jsx"));
 const StockCountPage = lazy(() => import("./components/StockCount.jsx"));
 const ZonePage = lazy(() => import("./components/Zones.jsx"));
+const Warehouse3DPage = lazy(() => import("./components/Warehouse3D.jsx"));
 const POPage = lazy(() => import("./components/PurchaseOrders.jsx"));
 const SalesPage = lazy(() => import("./components/Sales.jsx"));
 const PromosPage = lazy(() => import("./components/Promotions.jsx"));
@@ -31,9 +32,9 @@ const SalesOverviewPage = lazy(() => import("./components/SalesOverview.jsx"));
 const FinancialCalendarPage = lazy(() => import("./components/FinancialCalendar.jsx"));
 const DeliveryPlanningPage = lazy(() => import("./components/DeliveryPlanning.jsx"));
 
-const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",stock_count:"◉",purchase:"↓",sales:"↗",promos:"★",events:"◈",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙",delivery_planning:"▦",zones:"▣"};
+const NAV_ICONS={dashboard:"◇",products:"▤",stock_log:"⟳",stock_count:"◉",purchase:"↓",sales:"↗",promos:"★",events:"◈",finance:"$",reports:"◑",sales_overview:"◎",financial_calendar:"◫",suppliers:"⚙",customers:"♡",defective:"⚠",users:"⚙",delivery_planning:"▦",zones:"▣",warehouse_3d:"◰"};
 const NAV_SECTIONS=[
-  {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","stock_count","zones","purchase","sales","promos","events"]},
+  {label:{th:"พื้นที่ทำงาน",en:"Workspace"},tabs:["dashboard","products","stock_log","stock_count","zones","warehouse_3d","purchase","sales","promos","events"]},
   {label:{th:"การจัดการ",en:"Manage"},tabs:["finance","reports","sales_overview","defective","suppliers","customers"]},
   {label:{th:"วางแผน",en:"Planning"},tabs:["financial_calendar","delivery_planning"]},
   {label:{th:"ระบบ",en:"System"},tabs:["users"]},
@@ -83,6 +84,7 @@ export default function App(){
   const[trucks,setTrucks]=useState(initTrucks);const[deliveryRuns,setDeliveryRuns]=useState([]);const[deliveryHelpers,setDeliveryHelpers]=useState([]);const[zones,setZones]=useState([]);
   const[cats,setCats]=useState(initCats);const[cashCats,setCashCats]=useState(initCashCats);const[tagMappings,setTagMappings]=useState(initTagMappings);const[brands,setBrands]=useState(initBrands);
   const[soFormLayout,setSoFormLayout]=useState({});
+  const[warehouseLayout,setWarehouseLayout]=useState({});
   const[users,setUsers]=useState(initUsers);const[search,setSearch]=useState("");const[modal,setModal]=useState(null);
   const[actLogs,setActLogs]=useState([]);const[sess,setSess]=useState(null);
   const[loaded,setLoaded]=useState(false);const[saving,setSaving]=useState(false);const[showNotif,setShowNotif]=useState(false);const[showBackup,setShowBackup]=useState(false);const[quickCreate,setQuickCreate]=useState(null);const[pendingAdjust,setPendingAdjust]=useState(null);const[fabOpen,setFabOpen]=useState(false);const[showFabCustomizer,setShowFabCustomizer]=useState(false);
@@ -159,7 +161,7 @@ export default function App(){
 
   const RT_SETTERS=useRef(null);
   const getSetters=useCallback(()=>{
-    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents,trucks:setTrucks,delivery_runs:setDeliveryRuns,delivery_helpers:setDeliveryHelpers,zones:setZones,so_form_layout:setSoFormLayout};
+    if(!RT_SETTERS.current)RT_SETTERS.current={products:setProducts,contacts:setContacts,pos:setPOs,sales:setSales,cats:setCats,cashcats:setCashCats,tagmappings:setTagMappings,brands:setBrands,logs:setLogs,payments:setPayments,activity:setActLogs,quotes:setQuotes,targets:setTargets,audit:setAudit,pricehist:setPriceHist,cheques:setCheques,bankaccs:setBankAccs,banktxns:setBankTxns,cnotes:setCNotes,billings:setBillings,defectives:setDefectives,supcnotes:setSupCNotes,promos:setPromos,events:setEvents,trucks:setTrucks,delivery_runs:setDeliveryRuns,delivery_helpers:setDeliveryHelpers,zones:setZones,so_form_layout:setSoFormLayout,warehouse_layout:setWarehouseLayout};
     return RT_SETTERS.current;
   },[]);
 
@@ -211,6 +213,7 @@ export default function App(){
     out.sales=g("sales","v3_sales",initSales);setSales(out.sales);
     out.cats=g("cats","v3_cats",initCats);setCats(out.cats);
     out.so_form_layout=g("so_form_layout","v3_so_form_layout",{});setSoFormLayout(out.so_form_layout&&typeof out.so_form_layout==="object"?out.so_form_layout:{});
+    out.warehouse_layout=g("warehouse_layout","v3_warehouse_layout",{});setWarehouseLayout(out.warehouse_layout&&typeof out.warehouse_layout==="object"?out.warehouse_layout:{});
     out.cashcats=g("cashcats","v3_cashcats",initCashCats);setCashCats(out.cashcats);
     out.tagmappings=g("tagmappings","v3_tagmappings",initTagMappings);setTagMappings(out.tagmappings);
     out.brands=g("brands","v3_brands",initBrands);setBrands(out.brands);
@@ -333,7 +336,7 @@ export default function App(){
   // Autosave: write only the arrays that actually changed (diff vs last-synced),
   // each as an independent optimistic-locked row save with merge-on-conflict.
   useEffect(()=>{if(!loaded)return;
-    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events,trucks,delivery_runs:deliveryRuns,delivery_helpers:deliveryHelpers,zones,so_form_layout:soFormLayout};
+    const current={products,contacts,pos,sales,cats,cashcats:cashCats,tagmappings:tagMappings,brands,logs,payments,activity:actLogs,quotes,targets,audit,pricehist:priceHist,cheques,bankaccs:bankAccs,banktxns:bankTxns,cnotes,billings,defectives,supcnotes:supCNotes,promos,events,trucks,delivery_runs:deliveryRuns,delivery_helpers:deliveryHelpers,zones,so_form_layout:soFormLayout,warehouse_layout:warehouseLayout};
     setSaving(true);
     const tm=setTimeout(async()=>{
       const dirty=[];
@@ -352,7 +355,7 @@ export default function App(){
     // the 800ms timer every render → autosave would never fire. The deps below
     // are exactly what should trigger a new save (any tracked array changed).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,trucks,deliveryRuns,deliveryHelpers,zones,soFormLayout,loaded]);
+  },[products,contacts,pos,sales,cats,cashCats,tagMappings,brands,logs,payments,actLogs,quotes,targets,audit,priceHist,cheques,bankAccs,bankTxns,cnotes,billings,defectives,supCNotes,promos,events,trucks,deliveryRuns,deliveryHelpers,zones,soFormLayout,warehouseLayout,loaded]);
 
   const[staleWarn,setStaleWarn]=useState(false);
   // Same as doRefresh: reloadFromServer reads only refs, stable identity unneeded.
@@ -423,7 +426,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,soFormLayout,setSoFormLayout,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,zones,setZones,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null),pendingAdjust,setPendingAdjust,clearPendingAdjust:()=>setPendingAdjust(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,soFormLayout,setSoFormLayout,warehouseLayout,setWarehouseLayout,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,zones,setZones,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null),pendingAdjust,setPendingAdjust,clearPendingAdjust:()=>setPendingAdjust(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
@@ -519,6 +522,7 @@ export default function App(){
           {tab==="stock_log"&&<LogPage sh={sh}/>}
           {tab==="stock_count"&&<StockCountPage sh={sh}/>}
           {tab==="zones"&&<ZonePage sh={sh}/>}
+          {tab==="warehouse_3d"&&<Warehouse3DPage sh={sh}/>}
           {tab==="purchase"&&<POPage sh={sh}/>}
           {tab==="sales"&&<SalesPage sh={sh}/>}
           {tab==="promos"&&<PromosPage sh={sh}/>}
