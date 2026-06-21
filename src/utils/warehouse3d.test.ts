@@ -155,3 +155,16 @@ describe("buildWarehouseData — Claude Design seed (no app zones)", () => {
     expect(d.PRODUCTS).toEqual([]);
   });
 });
+
+describe("buildWarehouseData — zone.presets", () => {
+  test("พา zone.presets เข้า ZONES (default [])", () => {
+    const d = build([], [
+      { id: "z1", name: "z1", productIds: [], presets: [{ token: "1", name: "มุม A" }] },
+      { id: "z2", name: "z2", productIds: [] },
+    ], {});
+    const z1: any = d.ZONES.find((z: any) => z.id === "z1");
+    const z2: any = d.ZONES.find((z: any) => z.id === "z2");
+    expect(z1.presets).toEqual([{ token: "1", name: "มุม A" }]);
+    expect(z2.presets).toEqual([]);
+  });
+});
