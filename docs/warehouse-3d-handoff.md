@@ -1,69 +1,105 @@
-# Handoff — โกดัง 3D (warehouse_3d) ฟีเจอร์
+# Handoff — โกดัง 3D (`warehouse_3d`)
 
-อ่านไฟล์นี้ก่อนทำงานต่อกับฟีเจอร์โกดัง 3D เขียนให้เซสชันใหม่ที่ไม่มี context เดิม
+อ่านไฟล์นี้ไฟล์เดียวก็ทำงานต่อได้เลย เขียนให้เซสชันใหม่ที่ไม่มี context เดิม (cold start).
+memory `project_warehouse_3d.md` เป็น pointer ถาวร — ไฟล์นี้คือรายละเอียดเต็ม.
 
 ## สถานะ (2026-06-21)
 - **ขึ้น production แล้ว** — commit `8efb0ae` บน `master`, push แล้ว → Vercel auto-deploy
-- typecheck/lint สะอาด · `src/utils/warehouse3d.test.ts` 14/14 ผ่าน
-- ยังไม่เคยเห็น render **ในแอปจริง** (แอปต้อง login, ผู้ช่วยกรอกรหัสไม่ได้) — verify ผ่าน dev harness แทน (ดูหัวข้อ "วิธี verify")
+- typecheck/lint สะอาด · `src/utils/warehouse3d.test.ts` ผ่านครบ (`npx vitest run src/utils/warehouse3d.test.ts`)
+- **ยังไม่เคยเห็น render ในแอปจริง** — แอปต้อง login และผู้ช่วยกรอกรหัสเองไม่ได้ จึง verify ผ่าน dev harness แทน (ดูหัวข้อ "วิธี verify")
 
 ## ทำอะไรไป / ทำไม
-ต่อยอดจาก [[project-ai-stock-count]]: ทำโกดัง 3D สเกลจริงในแอป เพื่อเทียบผังกับภาพ CCTV ที่ AI ใช้นับ stock เริ่มจากให้ Claude Design สร้างไฟล์ standalone (`public/warehouse-3d.html`, prompt อยู่ใน `docs/warehouse-3d-prompt.md`) แล้วพอร์ตเข้าแอปเป็นแท็บ React + ต่อข้อมูลจริง
+ต่อยอดจาก AI stock count (memory `project_ai_stock_count.md`): ทำโกดัง 3D สเกลจริงฝังในแอป เพื่อเทียบผัง 3D กับภาพ CCTV ที่ AI ใช้นับ stock และเก็บมุมกล้อง CCTV ต่อโซนไว้ถาวร.
+flow การพัฒนา: ให้ Claude Design สร้างไฟล์ standalone (`public/warehouse-3d.html`, prompt อยู่ใน `docs/warehouse-3d-prompt.md`) → พอร์ตเอนจินเข้าแอปเป็น `src/lib/warehouse3d/scene.js` → ห่อด้วยแท็บ React + ต่อข้อมูลจริง.
 
 ## สถาปัตยกรรม + data flow
 ```
-sh.products + sh.zones + sh.warehouseLayout
-        │  buildWarehouseData()  (src/utils/warehouse3d.js)
+sh.products + sh.zones + sh.warehouseLayout            (App state, จาก Supabase app_data)
+        │  buildWarehouseData(products, zones, warehouseLayout)   ← src/utils/warehouse3d.js
         ▼
-{ WAREHOUSE, ZONES, PRODUCTS }
-        │  createWarehouseScene(container, data, opts)  (src/lib/warehouse3d/scene.js)
+{ WAREHOUSE, ZONES, PRODUCTS }                          (DATA shape เดียวกับ standalone HTML)
+        │  createWarehouseScene(container, DATA, { canEdit, onSaveLayout, onSaveCamera })  ← scene.js
         ▼
-   Three.js scene ใน <div ref> ของ Warehouse3D.jsx
+   Three.js scene ใน <div ref> ของ Warehouse3D.jsx → คืน { dispose }
+        │  (กดเซฟ) onSaveLayout / onSaveCamera  →  setWarehouseLayout(prev => …)  →  autosave → Supabase
+        ▲────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-- **โซนจริงว่าง → seed ผังสเก็ตช์อัตโนมัติ** (19 โซน). พอมีโซนจริงใน `sh.zones` จะ override seed
-- **geometry/มุมกล้อง/การจัดเรียง** เก็บถาวรใน config ใหม่ `warehouse_layout` (Supabase `app_data`, ทำตามแบบ `so_form_layout` เป๊ะ). ลำดับความสำคัญ: saved (warehouse_layout) > geometry ในตัว zone (seed/นำเข้า) > auto-place
-- **ผังจริงจากสเก็ตช์ผู้ใช้** (อยู่ใน `DESIGN_ZONES` ใน warehouse3d.js): โกดัง 54×30×10 ม.; คอลัมน์ X = 6/12/12/12/12; แถบ Z = บน8·way3·กลางบน4·กลางล่าง4·way3·ล่าง8; คอลัมน์ขวา (A/a/office) พิเศษ = A8/way3/a4/office15; b,f = กล่อง 9×4 มี way 3m ทางขวา; เส้นเหลืองตีพื้นรอบทุกโซน
 
-## ไฟล์
+ลำดับความสำคัญของ geometry แต่ละโซน (ใน `buildWarehouseData`):
+**saved (`warehouse_layout.zones[id]`) > geometry ในตัว zone (seed/นำเข้า) > slot template ตามผังสเก็ตช์ > auto-place กริด**
+- ถ้าแอป **ยังไม่มีโซนจริง** (`sh.zones` ว่าง) → seed ผังสเก็ตช์ 19 โซน (productIds ว่าง = ไม่มีกล่องสินค้า). พอมีโซนจริงใน `sh.zones` จะ override seed อัตโนมัติ และสินค้าจริงจึงโผล่
+- `WAREHOUSE` = `warehouse_layout.warehouse` ถ้ามี ไม่งั้น `DEFAULT_WAREHOUSE = {54, 30, 10}` (กว้าง×ยาว×สูง ม.)
+
+### ผังจริงจากสเก็ตช์ผู้ใช้ (`DESIGN_ZONES` ใน warehouse3d.js)
+โกดัง 54(X) × 30(Z) × 10(H) ม., 19 โซน:
+- คอลัมน์ X: `E/e/i/I`=0 (w6) · `D/d/h/H`=6 (w12) · `C/c/g/G`=18 (w12) · `B/b/f/F`=30 (w12) · `A/a/office`=42 (w12)
+- แถบ Z: บน 0–8 · WAY 8–11 (3m) · กลางบน 11–15 (4m) · กลางล่าง 15–19 (4m) · WAY 19–22 (3m) · ล่าง 22–30 (8m)
+- คอลัมน์ขวาพิเศษ: `A`(z0,l8) / way 3m / `a`(z11,l4) / `office`(z15,l15)
+- `b`,`f` = กล่อง 9×4 (เว้น WAY 3m ทางขวาในคอลัมน์ B)
+- เส้นเหลืองตีพื้นรอบทุกโซน (วาดใน scene.js)
+- หมายเหตุ: comment ใน `DESIGN_ZONES` เขียน H=8 แต่ `DEFAULT_WAREHOUSE.heightM=10` — ค่าจริงที่ใช้คือ 10
+
+## แผนที่ไฟล์
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `src/utils/warehouse3d.js` | bridge ข้อมูล: `buildWarehouseData`, `claudeDesignZones` (seed 19 โซน), `designSlots`, `autoPlaceZones`, `DEFAULT_WAREHOUSE` |
+| `src/utils/warehouse3d.js` | **bridge ข้อมูล** — `buildWarehouseData`, `claudeDesignZones` (seed 19 โซน), `designSlots`, `autoPlaceZones`, `mapProduct`, `DEFAULT_WAREHOUSE`, `DESIGN_ZONES` |
 | `src/utils/warehouse3d.test.ts` | unit test ของ util (vitest) |
-| `src/lib/warehouse3d/scene.js` | เอนจิน 3D `createWarehouseScene(container,{WAREHOUSE,ZONES,PRODUCTS},{canEdit,onSaveLayout,onSaveCamera})` คืน `{dispose}` |
-| `src/components/Warehouse3D.jsx` | React wrapper + toolbar (นำเข้า/export), เรียก scene, persist ผ่าน setWarehouseLayout |
-| `src/App.jsx` | lazy import, NAV_ICONS/SECTIONS, render `tab==="warehouse_3d"`, state+wiring `warehouseLayout` (5 จุดแบบ soFormLayout: state/getSetters/applyData/autosave+deps/sh) |
-| `src/utils/constants.js` | ALL_TABS + TAB_LABELS (`warehouse_3d`) |
-| `src/utils/storage.ts` | KEY_MAP เพิ่ม `v3_warehouse_layout: "warehouse_layout"` |
-| `vite.config.js` | manualChunks เพิ่ม `vendor-three` |
+| `src/lib/warehouse3d/scene.js` | **เอนจิน 3D** `createWarehouseScene(container, {WAREHOUSE,ZONES,PRODUCTS}, {canEdit,onSaveLayout,onSaveCamera})` → คืน `{dispose}`. มี toolbar, การ์ดโซน, โหมดจัดเรียง, จับมุมกล้อง, `ResizeObserver` |
+| `src/components/Warehouse3D.jsx` | **React wrapper** — สร้าง DATA, mount scene, toolbar (นำเข้าผัง / export JSON), persist ผ่าน `setWarehouseLayout`. คุม rebuild ด้วย `rebuildKey` |
+| `src/App.jsx` | lazy import; `NAV_ICONS.warehouse_3d="◰"`; แท็บใน SECTIONS "พื้นที่ทำงาน"; render `tab==="warehouse_3d"` (บรรทัด ~525); state+wiring `warehouseLayout` |
+| `src/utils/constants.js` | `ALL_TABS` + `TAB_LABELS` เพิ่ม `warehouse_3d` |
+| `src/utils/storage.ts` | `KEY_MAP` เพิ่ม `v3_warehouse_layout: "warehouse_layout"` |
+| `vite.config.js` | `manualChunks` เพิ่ม `vendor-three` (แยก bundle three.js) |
 | `public/warehouse-3d.html` | standalone (CDN three) ไว้ iterate กับ Claude Design |
+| `docs/warehouse-3d-prompt.md` | prompt ต้นทางที่ใช้สร้าง standalone |
 
-## วิธี verify (สำคัญ — แอป login ไม่ได้)
-1. `npm run dev` (Vite) — มี preview server อยู่แล้วในเครื่องมือ
-2. สร้างไฟล์ชั่วคราว `wh3d-dev.html` ที่ root:
+### persistence — config ใหม่ `warehouse_layout` (ทำตามแบบ `so_form_layout` เป๊ะ)
+รูปร่าง: `{ warehouse?: {widthM,lengthM,heightM}, zones: { [zoneId]: { origin?, size?, color?, camera?, layout? } } }`
+wiring 5 จุดใน `App.jsx` (เทียบกับ `soFormLayout` ได้ทุกจุด):
+1. **state**: `const [warehouseLayout, setWarehouseLayout] = useState({})` (~บรรทัด 87)
+2. **getSetters / sh**: ส่ง `warehouseLayout`, `setWarehouseLayout` (และ `canE`, `zones`, `setZones`, `products`) เข้า object `sh`
+3. **applyData (โหลด)**: `out.warehouse_layout = g("warehouse_layout","v3_warehouse_layout",{})` แล้ว `setWarehouseLayout(...)` (~บรรทัด 216)
+4. **autosave**: `warehouse_layout: warehouseLayout` ใน `current` (~339) + อยู่ใน deps array ของ effect autosave (~358)
+5. **KEY_MAP** (`storage.ts`): `v3_warehouse_layout → warehouse_layout`
+
+### rebuild / persist semantics (สำคัญ ถ้าจะแก้ Warehouse3D.jsx)
+- `rebuildKey` (useMemo) เปลี่ยนเฉพาะเมื่อ **catalog / zone membership / ขนาดโกดัง** เปลี่ยน → effect สร้าง scene ใหม่
+- **เซฟมุมกล้อง / เซฟการจัดเรียง ไม่ rebuild scene** (ตั้งใจ) — แค่ update state + persist ผ่าน functional update (`setWarehouseLayout(prev => …)`) เพื่อไม่ให้ฉากกระตุกตอนเซฟ
+- callbacks `onSaveLayout/onSaveCamera` ใช้ `useCallback` (identity คงที่) ถูก exclude จาก deps ของ mount effect โดยตั้งใจ (มี eslint-disable กำกับ)
+
+## วิธี verify (สำคัญ — แอป login ไม่ได้ + screenshot WebGL timeout)
+1. `npm run dev` (Vite) — ใช้ preview tool ที่มีอยู่ (`preview_start` แล้ว `preview_eval`/`preview_console_logs`/`preview_network`)
+2. สร้างไฟล์ชั่วคราว `wh3d-dev.html` ที่ root (เพื่อ mount scene โดยข้าม login):
    ```html
    <div id="host" style="position:fixed;inset:0"></div>
    <script type="module">
      import { buildWarehouseData } from "/src/utils/warehouse3d.js";
      import { createWarehouseScene } from "/src/lib/warehouse3d/scene.js";
-     const data = buildWarehouseData([], [], {}); // [] zones -> seed สเก็ตช์
+     const data = buildWarehouseData([], [], {}); // [] zones -> seed สเก็ตช์ 19 โซน
      window.__DATA = data;
-     createWarehouseScene(document.getElementById("host"), data, { canEdit:true, onSaveLayout:()=>{}, onSaveCamera:()=>{} });
+     createWarehouseScene(document.getElementById("host"), data,
+       { canEdit:true, onSaveLayout:()=>{}, onSaveCamera:()=>{} }); // stub callbacks = ไม่เขียน prod
    </script>
    ```
-3. เปิด `/wh3d-dev.html`. preview window มักเริ่มที่ 0×0 → force ขนาด: `document.getElementById('host').style.cssText='position:fixed;left:0;top:0;width:1200px;height:700px'; window.dispatchEvent(new Event('resize'))`
-4. ตรวจ `window.__DATA.ZONES` (พิกัด), `.zone-row` count, console errors. **ลบ `wh3d-dev.html` หลังเสร็จ** (ห้าม commit)
-- `preview_screenshot` ของ canvas WebGL **timeout เสมอ** (ข้อจำกัด tool) — อย่าเสียเวลา, ใช้ eval/console/__DATA แทน
-- `npm run typecheck` · `npx eslint <ไฟล์>` · `npx vitest run src/utils/warehouse3d.test.ts`
+3. เปิด `/wh3d-dev.html`. preview window มักเริ่มที่ 0×0 → force ขนาดด้วย `preview_eval`:
+   ```js
+   document.getElementById('host').style.cssText='position:fixed;left:0;top:0;width:1200px;height:700px';
+   window.dispatchEvent(new Event('resize'));
+   ```
+4. ตรวจผลแบบ text-based: `window.__DATA.ZONES` (พิกัด/สี), จำนวน `.zone-row`/การ์ดโซน, console errors, `host.querySelector('canvas')` มีจริง
+5. **ลบ `wh3d-dev.html` หลังเสร็จ — ห้าม commit**
+- ⚠ `preview_screenshot` ของ canvas WebGL **timeout เสมอ** (ข้อจำกัด tool) — อย่าเสียเวลาถ่ายภาพ ใช้ `preview_eval` / console / `window.__DATA` พิสูจน์แทน
+- คำสั่งตรวจอื่น: `npm run typecheck` · `npx eslint <ไฟล์>` · `npx vitest run src/utils/warehouse3d.test.ts`
 
-## ค้าง / ทำต่อได้ (เรียงความสำคัญ)
-1. **ลากย้าย/รีไซส์ตัวโซนใน 3D + เซฟ** — ตอนนี้โหมดจัดเรียงย้ายได้แค่กล่องสินค้าในโซน ตัวโซนปรับผ่าน data เท่านั้น
-2. **ผูกสินค้าจริงเข้าโซน** (แท็บ "โซน") แล้ว 3D จะโชว์กล่องตามจำนวนจริง (ตอนนี้โซน seed productIds ว่าง = ไม่มีกล่อง)
-3. **ความสูงเพดานต่อโซน** — ตอนนี้ค่าเดียวทั้งโกดัง (10 ม.)
-4. **ยืนยัน render ในแอปจริง** — ถ้า user login ในเซสชันหน้า ขับ preview เปิดแท็บ "โกดัง 3D" ตรวจ console/interaction
+## ค้าง / ทำต่อได้ (เรียงตามความสำคัญ)
+1. **ลากย้าย/รีไซส์ตัวโซนใน 3D แล้วเซฟ** — โหมดจัดเรียงตอนนี้ขยับได้แค่ "กล่องสินค้า" ในโซน; ตัวโซน (origin/size) ปรับผ่าน data เท่านั้น ยังลากใน 3D ไม่ได้
+2. **ผูกสินค้าจริงเข้าโซน** (ในแท็บ "โซน" → `zone.productIds`) เพื่อให้ 3D โชว์กล่องตามจำนวน stock จริง — ตอนนี้โซน seed มี `productIds` ว่าง = ไม่มีกล่อง
+3. **ความสูงเพดานต่อโซน** — ปัจจุบันใช้ค่าเดียวทั้งโกดัง (`heightM` ระดับ warehouse)
+4. **ยืนยัน render ในแอปจริง** — ถ้าเซสชันหน้า user login ได้ ให้ขับ preview เปิดแท็บ "โกดัง 3D" ตรวจ console + interaction (จัดเรียง/เซฟมุมกล้อง)
 
 ## Gotchas
-- **localhost = Supabase prod** ([[feedback-preview-writes-prod]]): กด "บันทึกมุมกล้อง/บันทึกการจัดเรียง/นำเข้าผังเป็นโซนจริง" = เขียน prod จริง — อย่ากดตอน verify ถ้าไม่ได้รับอนุญาต
-- ปุ่ม "นำเข้าผังเป็นโซนจริง" โผล่เฉพาะตอนแท็บโซนว่าง → `setZones(claudeDesignZones())` เขียน 19 โซนลง `zones`
-- **โค้ดเรนเดอร์ซ้ำ 2 ที่**: `src/lib/warehouse3d/scene.js` (แอป) กับ `public/warehouse-3d.html` (standalone) — แก้ logic 3D ต้องแก้ทั้งคู่
-- workflow ผู้ใช้ ([[feedback-branching]]): commit ตรง master, push = auto-deploy Vercel, ไม่มี branch/PR — commit/push เมื่อสั่งเท่านั้น
-- ผู้ใช้ตอบเป็นไทย, chat ห้าม emoji ([[feedback-no-emoji]])
+- **localhost = Supabase prod** (memory `feedback_preview_writes_prod`): กดปุ่ม "บันทึกมุมนี้ / บันทึกการจัดเรียง / นำเข้าผังเป็นโซนจริง" = เขียน prod จริง — **อย่ากดตอน verify ถ้าไม่ได้รับอนุญาต** (ใน dev harness ใช้ callback stub จึงปลอดภัย)
+- ปุ่ม **"นำเข้าผังเป็นโซนจริง (19 โซน)"** โผล่เฉพาะตอนแท็บโซนว่าง (`zones.length===0`) → `setZones(claudeDesignZones())` เขียน 19 โซนลง `zones`
+- **โค้ดเรนเดอร์ซ้ำ 2 ที่**: `src/lib/warehouse3d/scene.js` (ในแอป, import three ผ่าน bundler) กับ `public/warehouse-3d.html` (standalone, CDN three) — **แก้ logic 3D ใด ๆ ต้องแก้ทั้งสองที่**
+- **workflow commit/push** (memory `feedback_branching`): commit ตรง `master`, push = Vercel auto-deploy, **ไม่มี feature branch / PR** — commit & push เมื่อผู้ใช้สั่งเท่านั้น
+- ผู้ใช้สื่อสารเป็นไทย; ตอบ chat **ห้ามใช้ emoji** (memory `feedback_no_emoji`) — แต่ emoji ใน UI/โค้ดเดิม (✋ 💾 ↧ ⬇ ◰) คงไว้ตามเดิม
