@@ -539,6 +539,12 @@ export function createWarehouseScene(container, data, opts = {}) {
     const zoneVol = zone.size.w * zone.size.l * WAREHOUSE.heightM;
     st.fill = Math.min(999, (st.volProducts / zoneVol) * 100);
     st.zoneVol = zoneVol;
+    if (st.overflow || st.fill > 100) {
+      const RED = "#e0503a";
+      st.floorMat.color.set(mix(zone.color, RED, 0.7));
+      st.frameMat.color.set(RED);
+      st.baseOpacity = 0.28; st.floorMat.opacity = 0.28;
+    }
   });
 
   /* ===== UI / panels / legend / popup ===== */
