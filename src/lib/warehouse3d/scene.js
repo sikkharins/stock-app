@@ -10,6 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { planBoxes } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -190,7 +191,6 @@ export function createWarehouseScene(container, data, opts = {}) {
 
   // derived data
   const SIZECLASS_VOL = { S: 0.03, M: 0.125, L: 0.5, XL: 1.5 };
-  const REP_THRESHOLD = 200;
   const productById = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
 
   // ---- lifecycle bookkeeping (for dispose) ----
@@ -441,20 +441,14 @@ export function createWarehouseScene(container, data, opts = {}) {
       const d = boxDims(p);
       const volPer = volumeOf(p);
       st.volProducts += volPer * p.stock;
-      const layersMax = Math.max(1, Math.floor(WAREHOUSE.heightM / d.h));
-
       const manual = zone.layout && zone.layout[pid] ? zone.layout[pid] : null;
-
       const pitchX = d.w + GAP, pitchZ = d.l + GAP;
-      let itemsPerLayer = Math.ceil(p.stock / layersMax);
-      let cols = Math.max(1, Math.round(Math.sqrt(itemsPerLayer)));
-      cols = Math.min(cols, Math.max(1, Math.floor(innerW / pitchX)));
-      if (manual && manual.cols) cols = Math.max(1, manual.cols);
-      let rows = Math.ceil(itemsPerLayer / cols);
-      let layersUsed = Math.ceil(p.stock / (cols * rows));
-      const footW = cols * pitchX, footL = rows * pitchZ;
-
-      const usePile = p.stock > REP_THRESHOLD || (!manual && (layersUsed > layersMax || footW > innerW || footL > innerL));
+      const plan = planBoxes(d, { innerW, innerL, ceilingH: WAREHOUSE.heightM }, {
+        stock: p.stock, gap: GAP, manualCols: manual && manual.cols ? manual.cols : null,
+      });
+      const { usePile, cols, rows, layersMax, footW, footL } = plan;
+      const layersUsed = plan.layers; // uncapped -> stacks above ceiling when overflowing
+      if (plan.overflow) st.overflow = true;
 
       const pg = new THREE.Group();
       group.add(pg);
