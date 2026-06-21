@@ -27,3 +27,13 @@ export const getRelayUrl = (): string => {
 export const setRelayUrl = (u: string): void => {
   try { localStorage.setItem(RELAY_URL_KEY, u); } catch { /* ignore */ }
 };
+
+// Build a relay snapshot URL for live CCTV display via <img src> (no CORS, unlike fetch).
+// token -> move PTZ to that preset; omit/null -> current view. t -> cache-bust.
+export function cctvSnapshotUrl(base: string, token?: string | null, t?: number): string {
+  const q = new URLSearchParams();
+  if (token) q.set("preset", String(token));
+  if (t != null) q.set("t", String(t));
+  const qs = q.toString();
+  return `${base.replace(/\/+$/, "")}/snapshot${qs ? "?" + qs : ""}`;
+}

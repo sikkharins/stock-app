@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { pickCaptureTargets } from "./cameraCapture";
+import { pickCaptureTargets, cctvSnapshotUrl } from "./cameraCapture";
 
 const presets = [
   { token: "1", name: "ซ้าย" },
@@ -39,5 +39,23 @@ describe("pickCaptureTargets", () => {
 
   test("manual ไม่เลือกอะไร → []", () => {
     expect(pickCaptureTargets({ mode: "manual", selectedTokens: [], presets })).toEqual([]);
+  });
+});
+
+describe("cctvSnapshotUrl", () => {
+  test("ไม่มี token/t → /snapshot เฉย ๆ", () => {
+    expect(cctvSnapshotUrl("http://localhost:8765")).toBe("http://localhost:8765/snapshot");
+  });
+  test("มี token → ใส่ preset (encode)", () => {
+    expect(cctvSnapshotUrl("http://h:1", "a b")).toBe("http://h:1/snapshot?preset=a+b");
+  });
+  test("มี token + t → ใส่ทั้งคู่ (cache-bust)", () => {
+    expect(cctvSnapshotUrl("http://h:1", "x", 99)).toBe("http://h:1/snapshot?preset=x&t=99");
+  });
+  test("ตัด trailing slash ของ base", () => {
+    expect(cctvSnapshotUrl("http://h:1/", "x")).toBe("http://h:1/snapshot?preset=x");
+  });
+  test("token null + t → ไม่ใส่ preset", () => {
+    expect(cctvSnapshotUrl("http://h:1", null, 5)).toBe("http://h:1/snapshot?t=5");
   });
 });
