@@ -1,5 +1,5 @@
-// 3D warehouse scene — framework-agnostic. Ported from public/warehouse-3d.html
-// (Claude Design handoff) and adapted for embedding inside the React app:
+// 3D warehouse scene — framework-agnostic. Originally prototyped as a standalone
+// HTML page (Claude Design handoff), then adapted for embedding inside the React app:
 //   - CDN importmap  -> bundler imports (three + OrbitControls)
 //   - global document/window  -> scoped to a container element
 //   - "copy layout" textarea  -> opts.onSaveLayout(layoutByZone) callback

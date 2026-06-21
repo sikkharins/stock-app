@@ -1,6 +1,6 @@
 // Bridges app data (products, zones) + persisted warehouse_layout config into the
-// { WAREHOUSE, ZONES, PRODUCTS } shape consumed by the 3D scene (src/lib/warehouse3d/scene.js)
-// and the standalone public/warehouse-3d.html. Field names match the stock-app data model:
+// { WAREHOUSE, ZONES, PRODUCTS } shape consumed by the 3D scene (src/lib/warehouse3d/scene.js).
+// Field names match the stock-app data model:
 //   Product: id, code, name, nameT, brand, stock, widthCm, lengthCm, heightCm, cubicM, sizeClass, noLayDown, unit
 //   Zone (app): id, name, note, productIds   (no geometry/camera — those live in warehouse_layout)
 
