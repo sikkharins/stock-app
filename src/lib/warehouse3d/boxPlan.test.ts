@@ -86,3 +86,13 @@ describe("snapClampZoneRect", () => {
     expect(r).toEqual({ origin: { x: 42, z: 22 }, size: { w: 12, l: 8 } });
   });
 });
+
+import { clampZoneHeight } from "./boxPlan.js";
+
+describe("clampZoneHeight", () => {
+  it("snap 0.5", () => { expect(clampZoneHeight(3.3, { heightM: 10 })).toBe(3.5); });
+  it("ผ่านค่าพอดี", () => { expect(clampZoneHeight(3, { heightM: 10 })).toBe(3); });
+  it("clamp สูงสุด = เพดานโกดัง", () => { expect(clampZoneHeight(20, { heightM: 10 })).toBe(10); });
+  it("clamp ต่ำสุด = step", () => { expect(clampZoneHeight(0.1, { heightM: 10 })).toBe(0.5); });
+  it("ไม่มีค่า → fallback เพดานโกดัง", () => { expect(clampZoneHeight(undefined, { heightM: 10 })).toBe(10); });
+});

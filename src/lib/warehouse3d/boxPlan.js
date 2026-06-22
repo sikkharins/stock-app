@@ -66,3 +66,10 @@ export function snapClampZoneRect(origin, size, warehouse, step = 0.5) {
   const z = Math.min(Math.max(snap(origin.z), 0), L - l);
   return { origin: { x, z }, size: { w, l } };
 }
+
+// Snap a zone ceiling height to 0.5 m and clamp to (0.5 .. warehouse height]. Pure.
+export function clampZoneHeight(h, warehouse, step = 0.5) {
+  const max = warehouse.heightM;
+  const v = Math.round((Number(h) || max) / step) * step;
+  return Math.min(Math.max(v, step), max);
+}
