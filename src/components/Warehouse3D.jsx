@@ -18,6 +18,10 @@ export default function Warehouse3DPage({ sh }) {
     p: (products || []).map((p) => [p.id, p.stock, p.widthCm, p.lengthCm, p.heightCm, p.sizeClass, p.noLayDown, p.cubicM, p.nameT, p.name, p.code, p.unit, p.brand]),
     z: (zones || []).map((z) => [z.id, z.name, z.note, z.productIds]),
     w: (warehouseLayout && warehouseLayout.warehouse) || null,
+    // per-zone geometry: rebuild when origin/size changes (NOT on camera/layout saves)
+    g: (warehouseLayout && warehouseLayout.zones)
+      ? Object.entries(warehouseLayout.zones).map(([id, z]) => [id, z && z.origin, z && z.size])
+      : null,
   }), [products, zones, warehouseLayout]);
 
   // Persist with functional updates (no stale closure, stable identity).
@@ -43,6 +47,16 @@ export default function Warehouse3DPage({ sh }) {
     });
   }, [setWarehouseLayout]);
 
+  const onSaveZoneGeom = useCallback((zoneId, geom) => {
+    setWarehouseLayout((prev) => {
+      const next = { ...(prev || {}) };
+      const zonesL = { ...(next.zones || {}) };
+      zonesL[zoneId] = { ...(zonesL[zoneId] || {}), origin: geom.origin, size: geom.size };
+      next.zones = zonesL;
+      return next;
+    });
+  }, [setWarehouseLayout]);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -54,6 +68,7 @@ export default function Warehouse3DPage({ sh }) {
       canEdit,
       onSaveLayout: canEdit ? onSaveLayout : null,
       onSaveCamera: canEdit ? onSaveCamera : null,
+      onSaveZoneGeom: canEdit ? onSaveZoneGeom : null,
       // closure reads the latest relay URL on every click + cache-busts with Date.now()
       snapshotUrl: (token) => cctvSnapshotUrl(getRelayUrl(), token, Date.now()),
     });
