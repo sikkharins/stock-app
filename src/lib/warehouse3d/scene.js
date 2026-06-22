@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -93,6 +93,11 @@ const CSS = `
 .wh3d .cc-drop:hover { border-color:var(--w3-accent); color:var(--w3-text); }
 .wh3d .cc-drop svg { opacity:.5; }
 .wh3d .cc-foot { padding:10px 16px; border-top:1px solid var(--w3-line); font-size:11px; color:var(--w3-muted); display:flex; gap:8px; align-items:center; }
+.wh3d #zoneEditPanel { display:none; }
+.wh3d.zoneediting #zoneEditPanel { display:block; }
+.wh3d .ze-row { display:flex; gap:8px; margin:8px 0; }
+.wh3d .ze-row label { font-size:11px; color:var(--w3-muted); display:flex; flex-direction:column; gap:3px; flex:1; }
+.wh3d .ze-row input { width:100%; box-sizing:border-box; padding:5px 7px; border:1px solid var(--w3-line); border-radius:6px; background:#11151c; color:var(--w3-text); font-family:inherit; }
 .wh3d .cc-bar { padding:8px 16px; border-bottom:1px solid var(--w3-line); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .wh3d .cc-bar .cc-lbl { font-size:11px; color:var(--w3-muted); margin-right:2px; }
 .wh3d .cc-err { position:absolute; left:16px; right:16px; bottom:8px; font-size:11px; color:#ff8e7e; text-align:center; display:none; }
@@ -125,6 +130,7 @@ const TEMPLATE = `
       <button class="tbtn" id="btnOnly">เฉพาะโซนที่เลือก</button>
       <button class="tbtn" id="btnCompare">เทียบ CCTV</button>
       <button class="tbtn" id="btnMove">✋ จัดเรียง</button>
+      <button class="tbtn" id="btnZoneEdit">✥ แก้โซน</button>
       <button class="tbtn" id="btnReset">รีเซ็ตมุม</button>
     </div>
     <div id="zonePanel" class="panel">
@@ -154,6 +160,16 @@ const TEMPLATE = `
       </div>
       <button class="tbtn mp-copy" id="mpCopy">💾 บันทึกการจัดเรียงทั้งหมด</button>
     </div>
+    <div id="zoneEditPanel" class="panel">
+      <div class="mp-title">✥ แก้โซน</div>
+      <div class="mp-hint">คลิกเลือกโซน · ลากบนพื้น = ย้าย (snap 0.5ม.) · กรอกกว้าง/ยาว = รีไซซ์ · คลิกขวาค้าง = หมุนกล้อง</div>
+      <div id="zeSel" class="mp-sel">— ยังไม่ได้เลือกโซน —</div>
+      <div class="ze-row">
+        <label>กว้าง <input id="zeW" type="number" step="0.5" min="0.5" /></label>
+        <label>ยาว <input id="zeL" type="number" step="0.5" min="0.5" /></label>
+      </div>
+      <button class="tbtn mp-copy" id="zeSave" disabled>💾 บันทึกโซน</button>
+    </div>
   </div>
   <div id="cctvPane">
     <div class="cc-head">
@@ -181,6 +197,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   const onSaveLayout = typeof opts.onSaveLayout === "function" ? opts.onSaveLayout : null;
   const onSaveCamera = typeof opts.onSaveCamera === "function" ? opts.onSaveCamera : null;
   const snapshotUrl = typeof opts.snapshotUrl === "function" ? opts.snapshotUrl : null;
+  const onSaveZoneGeom = typeof opts.onSaveZoneGeom === "function" ? opts.onSaveZoneGeom : null;
 
   // ---- inject scoped stylesheet once ----
   if (!document.getElementById(STYLE_ID)) {
@@ -406,6 +423,7 @@ export function createWarehouseScene(container, data, opts = {}) {
 
   const zoneState = {};
   const pickables = [];
+  const zoneFloors = [];
   const UNITS = [];
   const OBSTACLES = [];
 
@@ -420,6 +438,7 @@ export function createWarehouseScene(container, data, opts = {}) {
     const zf = new THREE.Mesh(new THREE.PlaneGeometry(zone.size.w, zone.size.l),
       new THREE.MeshLambertMaterial({ color: zone.color, transparent: true, opacity: 0.16, depthWrite: false }));
     zf.rotation.x = -Math.PI / 2; zf.position.set(cx, 0.02, cz); zf.userData.zonePart = true; group.add(zf);
+    zf.userData.zoneId = zone.id; zoneFloors.push(zf);
 
     const fy = 0.04, ox = zone.origin.x, oz = zone.origin.z, w = zone.size.w, l = zone.size.l;
     const fg = new THREE.BufferGeometry();
@@ -865,6 +884,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   }
   function setMove(on) {
     moveMode = on;
+    if (on && typeof setZoneEdit === "function" && zoneEditMode) setZoneEdit(false);
     root.classList.toggle("moving", on);
     btnMove.classList.toggle("active", on);
     controls.mouseButtons = on
@@ -954,6 +974,55 @@ export function createWarehouseScene(container, data, opts = {}) {
     }
   });
   addWin("pointerup", () => { if (dragUnit || dragging) { dragUnit = null; dragging = null; renderer.domElement.style.cursor = ""; } });
+
+  // ===== zone-edit mode: move/resize a zone footprint, save to warehouse_layout =====
+  let zoneEditMode = false, zeId = null, zePending = null, zeDragging = false;
+  const zeOff = new THREE.Vector3();
+  const btnZoneEdit = gid("btnZoneEdit");
+  if (!canEdit || !onSaveZoneGeom) { btnZoneEdit.remove(); }
+
+  const zePreview = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: "#ffffff", transparent: true, depthTest: false }));
+  zePreview.renderOrder = 1000; zePreview.visible = false; scene.add(zePreview);
+  function setPreviewRect(ox, oz, w, l) {
+    const y = 0.12;
+    const pts = [ox, y, oz, ox + w, y, oz, ox + w, y, oz, ox + w, y, oz + l,
+      ox + w, y, oz + l, ox, y, oz + l, ox, y, oz + l, ox, y, oz];
+    zePreview.geometry.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    zePreview.geometry.computeBoundingSphere();
+    zePreview.visible = true;
+  }
+  function zeReadout() {
+    const sel = gid("zeSel"), save = gid("zeSave");
+    if (!zeId || !zePending) { sel.innerHTML = "— ยังไม่ได้เลือกโซน —"; save.disabled = true; return; }
+    const z = ZONES.find((z) => z.id === zeId);
+    const { origin: o, size: s } = zePending;
+    sel.innerHTML = `<b>โซน ${z ? z.name : zeId}</b><br>x ${o.x} · z ${o.z} ม. · กว้าง ${s.w} · ยาว ${s.l} ม.`;
+    save.disabled = false;
+  }
+  function selectZone(id) {
+    const z = ZONES.find((z) => z.id === id);
+    if (!z) return;
+    zeId = id;
+    zePending = snapClampZoneRect({ x: z.origin.x, z: z.origin.z }, { w: z.size.w, l: z.size.l }, WAREHOUSE);
+    setPreviewRect(zePending.origin.x, zePending.origin.z, zePending.size.w, zePending.size.l);
+    gid("zeW").value = zePending.size.w;
+    gid("zeL").value = zePending.size.l;
+    zeReadout();
+  }
+  function setZoneEdit(on) {
+    zoneEditMode = on;
+    root.classList.toggle("zoneediting", on);
+    btnZoneEdit.classList.toggle("active", on);
+    controls.mouseButtons = on
+      ? { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    if (on && moveMode) setMove(false);
+    if (!on) { zeId = null; zePending = null; zeDragging = false; zePreview.visible = false; zeReadout(); }
+    else { hidePopup(); }
+  }
+  if (canEdit && onSaveZoneGeom) btnZoneEdit.addEventListener("click", () => setZoneEdit(!zoneEditMode));
 
   // hover highlight
   let hovered = null;
