@@ -168,3 +168,14 @@ describe("buildWarehouseData — zone.presets", () => {
     expect(z2.presets).toEqual([]);
   });
 });
+
+describe("buildWarehouseData — zone.heightM", () => {
+  test("heightM: saved > intrinsic > fallback(warehouse)", () => {
+    const zones = [{ id: "z1", productIds: [] }, { id: "z2", productIds: [], heightM: 6 }];
+    const { ZONES } = build([], zones, { zones: { z1: { heightM: 4 } } });
+    expect(ZONES.find((z) => z.id === "z1").heightM).toBe(4);   // saved
+    expect(ZONES.find((z) => z.id === "z2").heightM).toBe(6);   // intrinsic
+    const { ZONES: Z2, WAREHOUSE: W2 } = build([], [{ id: "z3", productIds: [] }], {});
+    expect(Z2.find((z) => z.id === "z3").heightM).toBe(W2.heightM); // fallback
+  });
+});

@@ -152,6 +152,7 @@ export function buildWarehouseData(products = [], zones = [], warehouseLayout = 
       color: saved.color || z.color || (geom && geom.color) || ZONE_PALETTE[i % ZONE_PALETTE.length],
       productIds: Array.isArray(z.productIds) ? z.productIds : [],
       presets: Array.isArray(z.presets) ? z.presets : [],
+      heightM: Number(saved.heightM) || Number(z.heightM) || WAREHOUSE.heightM,
     };
     if (saved.camera || z.camera) out.camera = saved.camera || z.camera;
     if (saved.layout || z.layout) out.layout = saved.layout || z.layout;
