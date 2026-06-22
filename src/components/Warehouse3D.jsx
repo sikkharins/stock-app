@@ -20,7 +20,7 @@ export default function Warehouse3DPage({ sh }) {
     w: (warehouseLayout && warehouseLayout.warehouse) || null,
     // per-zone geometry: rebuild when origin/size changes (NOT on camera/layout saves)
     g: (warehouseLayout && warehouseLayout.zones)
-      ? Object.entries(warehouseLayout.zones).map(([id, z]) => [id, z && z.origin, z && z.size])
+      ? Object.entries(warehouseLayout.zones).map(([id, z]) => [id, z && z.origin, z && z.size, z && z.heightM])
       : null,
   }), [products, zones, warehouseLayout]);
 
@@ -52,6 +52,7 @@ export default function Warehouse3DPage({ sh }) {
       const next = { ...(prev || {}) };
       const zonesL = { ...(next.zones || {}) };
       zonesL[zoneId] = { ...(zonesL[zoneId] || {}), origin: geom.origin, size: geom.size };
+      if (geom.heightM != null) zonesL[zoneId].heightM = geom.heightM;
       next.zones = zonesL;
       return next;
     });
