@@ -135,9 +135,14 @@ describe("DeliveryPlanning", () => {
 
     // Modal opened — assert via its title (the trigger button also matches /พิมพ์/)
     expect(screen.getByText(/ใบจัดของ —/)).toBeInTheDocument();
-    expect(screen.getByText("ตู้เย็น")).toBeInTheDocument();
-    // Customer column now shows customer names instead of SO numbers
-    expect(screen.getByText(/A.*B|B.*A/)).toBeInTheDocument();
+
+    // The consolidated pick list renders into the 80mm receipt preview (iframe
+    // srcDoc), so assert against that document string rather than the main DOM.
+    const receipt = screen.getByTitle("80mm preview").getAttribute("srcdoc") || "";
+    expect(receipt).toContain("ตู้เย็น"); // SO-A + SO-B → one consolidated line item
+    expect(receipt).toContain("1 รายการ"); // same product across both SOs → 1 row
+    expect(receipt).toContain("5 ชิ้น"); // qty 2 + 3 merged
+    expect(receipt).toContain("2 SO"); // sourced from both SOs
   });
 
   test("manage trucks: add a truck via modal", async () => {
