@@ -33,6 +33,7 @@ const CSS = `
   font-size:12px; font-family:inherit; padding:7px 12px; border-radius:8px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
 .wh3d .tbtn:hover { background:rgba(255,255,255,0.10); }
 .wh3d .tbtn.active { background:var(--w3-accent); border-color:var(--w3-accent); color:#fff; }
+@media (pointer: coarse) { .wh3d .tbtn { min-height:38px; padding-top:9px; padding-bottom:9px; } .wh3d .ze-row input { min-height:36px; } }
 .wh3d #zonePanel { position:absolute; top:16px; right:16px; width:270px; padding:14px; max-height:calc(100% - 32px); overflow-y:auto; overflow-x:hidden; }
 .wh3d #zonePanel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.12em; color:var(--w3-muted); margin:0 0 10px; }
 .wh3d .zone-row { border:1px solid var(--w3-line); border-radius:10px; padding:10px 11px; margin-bottom:8px; cursor:pointer; transition:background .15s,border-color .15s; }
@@ -891,6 +892,9 @@ export function createWarehouseScene(container, data, opts = {}) {
     controls.mouseButtons = on
       ? { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
       : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = on
+      ? { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE }
+      : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     if (on) { captureHome(); hidePopup(); }
     else { dragging = null; dragUnit = null; selectedUD = null; selUnit = null; selMarker.visible = false; }
   }
@@ -1021,6 +1025,9 @@ export function createWarehouseScene(container, data, opts = {}) {
     controls.mouseButtons = on
       ? { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
       : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = on
+      ? { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE }
+      : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     if (on && moveMode) setMove(false);
     if (!on) { zeId = null; zePending = null; zeDragging = false; zePreview.visible = false; zeReadout(); }
     else { hidePopup(); }
