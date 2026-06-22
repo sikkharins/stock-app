@@ -1001,7 +1001,7 @@ export function createWarehouseScene(container, data, opts = {}) {
     sel.innerHTML = `<b>โซน ${z ? z.name : zeId}</b><br>x ${o.x} · z ${o.z} ม. · กว้าง ${s.w} · ยาว ${s.l} ม.`;
     save.disabled = false;
   }
-  function selectZone(id) {
+  function zeSelectZone(id) {
     const z = ZONES.find((z) => z.id === id);
     if (!z) return;
     zeId = id;
@@ -1023,6 +1023,45 @@ export function createWarehouseScene(container, data, opts = {}) {
     else { hidePopup(); }
   }
   if (canEdit && onSaveZoneGeom) btnZoneEdit.addEventListener("click", () => setZoneEdit(!zoneEditMode));
+
+  renderer.domElement.addEventListener("pointerdown", (e) => {
+    if (!zoneEditMode) return;
+    ndc(e); raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(zoneFloors.filter((m) => m.visible), false);
+    if (!hits.length) return;
+    const id = hits[0].object.userData.zoneId;
+    if (id !== zeId) zeSelectZone(id);
+    const fp = floorAt(e);
+    if (fp && zePending) { zeDragging = true; zeOff.set(fp.x - zePending.origin.x, 0, fp.z - zePending.origin.z); renderer.domElement.style.cursor = "grabbing"; }
+  });
+  renderer.domElement.addEventListener("pointermove", (e) => {
+    if (!zoneEditMode || !zeDragging || !zePending) return;
+    const fp = floorAt(e); if (!fp) return;
+    const snapped = snapClampZoneRect({ x: fp.x - zeOff.x, z: fp.z - zeOff.z }, zePending.size, WAREHOUSE);
+    zePending = snapped;
+    setPreviewRect(snapped.origin.x, snapped.origin.z, snapped.size.w, snapped.size.l);
+    zeReadout();
+  });
+  addWin("pointerup", () => { if (zeDragging) { zeDragging = false; renderer.domElement.style.cursor = ""; } });
+
+  function zeResize() {
+    if (!zePending) return;
+    const w = parseFloat(gid("zeW").value), l = parseFloat(gid("zeL").value);
+    if (!isFinite(w) || !isFinite(l)) return;
+    zePending = snapClampZoneRect(zePending.origin, { w, l }, WAREHOUSE);
+    setPreviewRect(zePending.origin.x, zePending.origin.z, zePending.size.w, zePending.size.l);
+    zeReadout();
+  }
+  if (canEdit && onSaveZoneGeom) {
+    gid("zeW").addEventListener("change", zeResize);
+    gid("zeL").addEventListener("change", zeResize);
+    gid("zeSave").addEventListener("click", () => {
+      if (!zeId || !zePending || !onSaveZoneGeom) return;
+      onSaveZoneGeom(zeId, snapClampZoneRect(zePending.origin, zePending.size, WAREHOUSE));
+      const b = gid("zeSave"); b.textContent = "✓ บันทึกแล้ว";
+      setT(() => { b.textContent = "💾 บันทึกโซน"; }, 1600);
+    });
+  }
 
   // hover highlight
   let hovered = null;
