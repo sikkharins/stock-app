@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -167,6 +167,7 @@ const TEMPLATE = `
       <div class="ze-row">
         <label>กว้าง <input id="zeW" type="number" step="0.5" min="0.5" /></label>
         <label>ยาว <input id="zeL" type="number" step="0.5" min="0.5" /></label>
+        <label>สูง <input id="zeH" type="number" step="0.5" min="0.5" /></label>
       </div>
       <button class="tbtn mp-copy" id="zeSave" disabled>💾 บันทึกโซน</button>
     </div>
@@ -468,7 +469,7 @@ export function createWarehouseScene(container, data, opts = {}) {
       st.volProducts += volPer * p.stock;
       const manual = zone.layout && zone.layout[pid] ? zone.layout[pid] : null;
       const pitchX = d.w + GAP, pitchZ = d.l + GAP;
-      const plan = planBoxes(d, { innerW, innerL, ceilingH: WAREHOUSE.heightM }, {
+      const plan = planBoxes(d, { innerW, innerL, ceilingH: zone.heightM }, {
         stock: p.stock, gap: GAP, manualCols: manual && manual.cols ? manual.cols : null,
       });
       const { usePile, cols, rows, layersMax, footW, footL } = plan;
@@ -481,11 +482,11 @@ export function createWarehouseScene(container, data, opts = {}) {
 
       if (usePile) {
         const totalVol = volPer * p.stock;
-        const targetH = Math.min(WAREHOUSE.heightM * 0.85, 3.2);
+        const targetH = Math.min(zone.heightM * 0.85, 3.2);
         let side = Math.sqrt(totalVol / targetH);
         side = Math.min(side, innerW * 0.92, innerL * 0.6);
         side = Math.max(side, 0.8);
-        const ph = Math.min(totalVol / (side * side), WAREHOUSE.heightM * 0.95);
+        const ph = Math.min(totalVol / (side * side), zone.heightM * 0.95);
         fw = side; fl = side;
 
         const pile = new THREE.Mesh(new THREE.BoxGeometry(side, ph, side),
@@ -561,7 +562,7 @@ export function createWarehouseScene(container, data, opts = {}) {
       if (bx < ox - 0.01 || bz < oz - 0.01 || bx + fw > ox + w + 0.01 || bz + fl > oz + l + 0.01) st.overflow = true;
     });
 
-    const zoneVol = zone.size.w * zone.size.l * WAREHOUSE.heightM;
+    const zoneVol = zone.size.w * zone.size.l * zone.heightM;
     st.fill = Math.min(999, (st.volProducts / zoneVol) * 100);
     st.zoneVol = zoneVol;
     if (st.overflow || st.fill > 100) {
@@ -842,7 +843,7 @@ export function createWarehouseScene(container, data, opts = {}) {
       ["ขนาด (กxยxส)", `${p.widthCm}×${p.lengthCm}×${p.heightCm} ซม.`],
       ["ปริมาตร/ชิ้น", `${vol.toFixed(3)} m³`],
       ["ปริมาตรรวม", `${(vol * p.stock).toFixed(2)} m³`],
-      ["ซ้อนได้สูงสุด", `${layers} ชั้น (เพดาน ${WAREHOUSE.heightM} ม.)`],
+      ["ซ้อนได้สูงสุด", `${layers} ชั้น (เพดาน ${(ZONES.find((z) => z.id === ud.zoneId) || {}).heightM || WAREHOUSE.heightM} ม.)`],
       ["การจัดเก็บ", ud.isPile ? "กอง/พาเลทตัวแทน" : `${ud.cols}×${ud.rows} ต่อชั้น`],
     ];
     gid("ppGrid").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
@@ -932,7 +933,7 @@ export function createWarehouseScene(container, data, opts = {}) {
     }
     for (const o of OBSTACLES) { if (overlapXZ(sx, sz, u.w, u.l, o.x, o.z, o.w, o.l)) return null; }
     const y = stackTop + u.h / 2;
-    if (y + u.h / 2 > WAREHOUSE.heightM + 0.02) return null;
+    if (y + u.h / 2 > ((ZONES.find((z) => z.id === u.zoneId) || {}).heightM || WAREHOUSE.heightM) + 0.02) return null;
     return { x: sx, y, z: sz };
   }
   function unitInfo(u, ok) {
@@ -998,7 +999,7 @@ export function createWarehouseScene(container, data, opts = {}) {
     if (!zeId || !zePending) { sel.innerHTML = "— ยังไม่ได้เลือกโซน —"; save.disabled = true; return; }
     const z = ZONES.find((z) => z.id === zeId);
     const { origin: o, size: s } = zePending;
-    sel.innerHTML = `<b>โซน ${z ? z.name : zeId}</b><br>x ${o.x} · z ${o.z} ม. · กว้าง ${s.w} · ยาว ${s.l} ม.`;
+    sel.innerHTML = `<b>โซน ${z ? z.name : zeId}</b><br>x ${o.x} · z ${o.z} · กว้าง ${s.w} · ยาว ${s.l} · สูง ${zePending.heightM} ม.`;
     save.disabled = false;
   }
   function zeSelectZone(id) {
@@ -1006,9 +1007,11 @@ export function createWarehouseScene(container, data, opts = {}) {
     if (!z) return;
     zeId = id;
     zePending = snapClampZoneRect({ x: z.origin.x, z: z.origin.z }, { w: z.size.w, l: z.size.l }, WAREHOUSE);
+    zePending.heightM = clampZoneHeight(z.heightM, WAREHOUSE);
     setPreviewRect(zePending.origin.x, zePending.origin.z, zePending.size.w, zePending.size.l);
     gid("zeW").value = zePending.size.w;
     gid("zeL").value = zePending.size.l;
+    gid("zeH").value = zePending.heightM;
     zeReadout();
   }
   function setZoneEdit(on) {
@@ -1047,17 +1050,21 @@ export function createWarehouseScene(container, data, opts = {}) {
   function zeResize() {
     if (!zePending) return;
     const w = parseFloat(gid("zeW").value), l = parseFloat(gid("zeL").value);
+    const h = parseFloat(gid("zeH").value);
     if (!isFinite(w) || !isFinite(l)) return;
+    const heightM = clampZoneHeight(isFinite(h) ? h : zePending.heightM, WAREHOUSE);
     zePending = snapClampZoneRect(zePending.origin, { w, l }, WAREHOUSE);
+    zePending.heightM = heightM;
     setPreviewRect(zePending.origin.x, zePending.origin.z, zePending.size.w, zePending.size.l);
     zeReadout();
   }
   if (canEdit && onSaveZoneGeom) {
     gid("zeW").addEventListener("change", zeResize);
     gid("zeL").addEventListener("change", zeResize);
+    gid("zeH").addEventListener("change", zeResize);
     gid("zeSave").addEventListener("click", () => {
       if (!zeId || !zePending || !onSaveZoneGeom) return;
-      onSaveZoneGeom(zeId, snapClampZoneRect(zePending.origin, zePending.size, WAREHOUSE));
+      onSaveZoneGeom(zeId, { ...snapClampZoneRect(zePending.origin, zePending.size, WAREHOUSE), heightM: clampZoneHeight(zePending.heightM, WAREHOUSE) });
       const b = gid("zeSave"); b.textContent = "✓ บันทึกแล้ว";
       setT(() => { b.textContent = "💾 บันทึกโซน"; }, 1600);
     });
