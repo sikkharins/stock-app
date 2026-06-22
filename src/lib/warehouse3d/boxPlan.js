@@ -55,3 +55,14 @@ export function productColor(id) {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return PRODUCT_PALETTE[Math.abs(h) % PRODUCT_PALETTE.length];
 }
+
+// Snap a zone footprint to a 0.5 m grid and clamp it inside the warehouse. Pure.
+export function snapClampZoneRect(origin, size, warehouse, step = 0.5) {
+  const snap = (v) => Math.round(v / step) * step;
+  const W = warehouse.widthM, L = warehouse.lengthM;
+  const w = Math.min(Math.max(snap(size.w), step), W);
+  const l = Math.min(Math.max(snap(size.l), step), L);
+  const x = Math.min(Math.max(snap(origin.x), 0), W - w);
+  const z = Math.min(Math.max(snap(origin.z), 0), L - l);
+  return { origin: { x, z }, size: { w, l } };
+}

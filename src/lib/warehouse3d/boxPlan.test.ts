@@ -63,3 +63,26 @@ describe("productColor", () => {
     expect(productColor(42)).toBe(productColor("42"));
   });
 });
+
+import { snapClampZoneRect } from "./boxPlan.js";
+
+const WH = { widthM: 54, lengthM: 30 };
+
+describe("snapClampZoneRect", () => {
+  it("snap origin + size เป็นทวีคูณ 0.5", () => {
+    const r = snapClampZoneRect({ x: 1.2, z: 2.7 }, { w: 11.3, l: 7.8 }, WH);
+    expect(r).toEqual({ origin: { x: 1, z: 2.5 }, size: { w: 11.5, l: 8 } });
+  });
+  it("clamp size ไม่เกินโกดัง และไม่ต่ำกว่า 0.5", () => {
+    expect(snapClampZoneRect({ x: 0, z: 0 }, { w: 100, l: 0.1 }, WH))
+      .toEqual({ origin: { x: 0, z: 0 }, size: { w: 54, l: 0.5 } });
+  });
+  it("clamp origin ไม่ให้ origin+size เลยขอบ", () => {
+    const r = snapClampZoneRect({ x: 50, z: 28 }, { w: 12, l: 8 }, WH);
+    expect(r.origin).toEqual({ x: 42, z: 22 });
+  });
+  it("ค่าพอดีขอบผ่านเหมือนเดิม", () => {
+    const r = snapClampZoneRect({ x: 42, z: 22 }, { w: 12, l: 8 }, WH);
+    expect(r).toEqual({ origin: { x: 42, z: 22 }, size: { w: 12, l: 8 } });
+  });
+});
