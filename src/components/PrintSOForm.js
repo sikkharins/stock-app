@@ -160,7 +160,7 @@ const TOTALS = {
   vat:      { x: 182, y: 256 },
   grand:    { x: 182, y: 264 },
 };
-const FONT = { size: 11, family: "'Sarabun', monospace" };
+const FONT = { size: 14, family: "'Cordia New','CordiaUPC',sans-serif" };
 
 const esc = (s) =>
   String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -248,7 +248,6 @@ export function buildSOFormHtml(so, products, contacts, cats, layout) {
   return `<!DOCTYPE html>
 <html lang="th"><head><meta charset="UTF-8">
 <title>${esc(head.docNo || "SO")}</title>
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:${FONT.family};font-size:${FONT.size}px;color:#000;background:#fff;}
@@ -271,6 +270,8 @@ body{font-family:${FONT.family};font-size:${FONT.size}px;color:#000;background:#
   <span id="selLabel" style="font-weight:600;color:#06f;min-width:120px;">ปรับทั้งใบ</span>
   <button onclick="_nudge(-0.5,0)" title="ซ้าย">◀</button><button onclick="_nudge(0.5,0)" title="ขวา">▶</button>
   <button onclick="_nudge(0,-0.5)" title="ขึ้น">▲</button><button onclick="_nudge(0,0.5)" title="ลง">▼</button>
+  <span style="margin-left:4px;">ขนาด</span><button onclick="_fontSize(-1)">−</button><span id="sizeVal" style="min-width:20px;display:inline-block;text-align:center;">14</span><button onclick="_fontSize(1)">+</button>
+  <label style="display:flex;align-items:center;gap:4px;"><input id="boldChk" type="checkbox" style="width:auto;" onchange="_bold(this.checked)"> ตัวหนา</label>
   <button onclick="_deselect()">ปรับทั้งใบ</button>
   <button onclick="_resetField()">รีเซ็ตช่องนี้</button>
   <button onclick="_resetAll()">รีเซ็ตทั้งหมด</button>
@@ -284,6 +285,7 @@ ${body}
 <script>
 (function(){
   var SAVED=${JSON.stringify(SAVED)};
+  var DEF_SIZE=${FONT.size};
   var DKEY="so_form_draft";
   function jget(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
   function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
@@ -305,17 +307,22 @@ ${body}
   function readout(){
     var parts=[];
     if(g.x||g.y)parts.push("ทั้งใบ X"+g.x+" Y"+g.y);
-    for(var k in fo){var o=fo[k];if(!o)continue;var dx=o.dx||0,dy=o.dy||0;if(!dx&&!dy)continue;parts.push((LABELS[k]||k)+(dx?" X"+dx:"")+(dy?" Y"+dy:""));}
+    for(var k in fo){var o=fo[k];if(!o)continue;var seg=[];if(o.dx)seg.push("X"+o.dx);if(o.dy)seg.push("Y"+o.dy);if(o.size)seg.push("ขนาด"+o.size);if(o.bold)seg.push("หนา");if(seg.length)parts.push((LABELS[k]||k)+" "+seg.join(" "));}
     var txt="ค่าปรับ "+new Date().toLocaleString("th-TH")+" : "+(parts.length?parts.join("  |  "):"— ยังไม่ปรับ —");
     var cs=document.querySelectorAll(".so-cal");for(var i=0;i<cs.length;i++)cs[i].textContent=txt;
   }
   function status(){var el=document.getElementById("saveStat");if(!el)return;var same=eq(g,baseG)&&eq(fo,baseFo);el.textContent=same?"● บันทึกแล้ว":"○ ยังไม่บันทึก";el.style.color=same?"#0a7":"#b00";}
-  function apply(){for(var i=0;i<els.length;i++){var o=offFor(els[i]);els[i].style.transform="translate("+o.x+"mm,"+o.y+"mm)";}readout();status();}
+  function styleFor(fid){var f=fo[fid]||{};return {size:f.size||DEF_SIZE,bold:!!f.bold};}
+  function syncControls(){var sv=document.getElementById("sizeVal"),bc=document.getElementById("boldChk");var f=sel?(fo[sel]||{}):{};if(sv)sv.textContent=f.size||DEF_SIZE;if(bc)bc.checked=!!f.bold;}
+  function apply(){for(var i=0;i<els.length;i++){var el=els[i];var o=offFor(el);el.style.transform="translate("+o.x+"mm,"+o.y+"mm)";var s=styleFor(el.getAttribute("data-fid"));el.style.fontSize=s.size+"px";el.style.fontWeight=s.bold?"700":"400";}readout();status();syncControls();}
   function hl(){for(var i=0;i<els.length;i++){els[i].style.outline=(sel&&els[i].getAttribute("data-fid")===sel)?"1.5px solid #06f":"";}}
   function label(){var el=document.getElementById("selLabel");if(!el)return;el.textContent=sel?("กำลังปรับ: "+(LABELS[sel]||sel)+(selIsRow?" (ขึ้น/ลง=ทั้งตาราง)":"")):"ปรับทั้งใบ";}
-  for(var i=0;i<els.length;i++){els[i].addEventListener("click",function(e){sel=this.getAttribute("data-fid");selIsRow=!!this.getAttribute("data-row");hl();label();e.stopPropagation();});}
+  for(var i=0;i<els.length;i++){els[i].addEventListener("click",function(e){sel=this.getAttribute("data-fid");selIsRow=!!this.getAttribute("data-row");hl();label();syncControls();e.stopPropagation();});}
   function r1(v){return Math.round(v*10)/10;}
   function saveDraft(){jset(DKEY,{g:g,fo:fo});}
+  function needSel(){if(!sel){alert("เลือกช่องก่อน (คลิกช่องในตัวอย่าง)");return false;}return true;}
+  window._fontSize=function(d){if(!needSel())return;fo[sel]=fo[sel]||{};var ns=(fo[sel].size||DEF_SIZE)+d;if(ns<6)ns=6;if(ns>48)ns=48;fo[sel].size=ns;saveDraft();apply();};
+  window._bold=function(on){if(!needSel()){syncControls();return;}fo[sel]=fo[sel]||{};fo[sel].bold=!!on;saveDraft();apply();};
   window._nudge=function(dx,dy){
     if(!sel){g.x=r1(g.x+dx);g.y=r1(g.y+dy);saveDraft();apply();return;}
     if(dx){fo[sel]=fo[sel]||{};fo[sel].dx=r1((fo[sel].dx||0)+dx);}

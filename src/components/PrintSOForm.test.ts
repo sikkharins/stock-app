@@ -141,6 +141,17 @@ describe("buildSOFormHtml", () => {
     expect(html).toContain("บันทึกเป็นค่ากลาง");
     expect(html).toContain("so_form_layout_save");
     expect(html).toContain('class="so-cal"');
+    // font = Cordia New + per-field size/bold controls
+    expect(html).toContain("Cordia New");
+    expect(html).toContain("_fontSize");
+    expect(html).toContain("_bold");
+    expect(html).toContain("ตัวหนา");
+  });
+
+  test("ฝัง size/bold ต่อฟิลด์ใน layout ได้", () => {
+    const layout = { g: { x: 0, y: 0 }, fo: { grand: { size: 18, bold: true } } };
+    const html = buildSOFormHtml(baseSO, products, contacts, cats, layout);
+    expect(html).toContain('"grand":{"size":18,"bold":true}');
   });
 
   test("ฝังค่ากลางที่บันทึกไว้ (layout) เป็นจุดเริ่ม", () => {
