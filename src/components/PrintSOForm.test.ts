@@ -146,6 +146,10 @@ describe("buildSOFormHtml", () => {
     expect(html).toContain("_fontSize");
     expect(html).toContain("_bold");
     expect(html).toContain("ตัวหนา");
+    // row-spacing control + row index tagging
+    expect(html).toContain("_rowHeight");
+    expect(html).toContain("ระยะบรรทัด");
+    expect(html).toContain('data-ri="0"');
   });
 
   test("ฝัง size/bold ต่อฟิลด์ใน layout ได้", () => {
