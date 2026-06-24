@@ -58,6 +58,9 @@ export default defineConfig(({ mode }) => {
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,woff2}'],
+        // สถานีพิมพ์เป็นหน้า standalone — อย่าให้ SW precache หรือ fallback เป็น index.html
+        globIgnores: ['**/print-station.html'],
+        navigateFallbackDenylist: [/^\/print-station\.html/, /^\/api\//],
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
