@@ -34,7 +34,7 @@ import DeliveryMap from "./DeliveryMap.jsx";
 // Single run row in the history modal. Behavior depends on status:
 //   out_for_delivery → expandable card with per-SO checkboxes + Confirm/Cancel.
 //   completed/cancelled → readonly summary.
-function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
+function RunCard({ run, status, onConfirm, onCancel, onDelete, onEditLoaded, activeTrucks, activeHelpers, availableSOs, soMeta, maxHelpers, ed, cd }) {
   const allSoNums = run.soNums || [];
   // Default-checked = SOs that ended up delivered (for completed runs) or all
   // (for runs about to be confirmed).
@@ -46,6 +46,51 @@ function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
   const [expanded, setExpanded] = useState(status === "out_for_delivery");
   const [confirmAction, setConfirmAction] = useState(null); // "confirm" | "cancel" | "delete" | null
   const [editMode, setEditMode] = useState(false);
+
+  // Admin edit of a loaded run (truck/date/helpers/SO membership).
+  const [loadedEditMode, setLoadedEditMode] = useState(false);
+  const [editTruckId, setEditTruckId] = useState(run.truckId ?? null);
+  const [editDate, setEditDate] = useState(run.date);
+  const [editHelperIds, setEditHelperIds] = useState(run.helperIds || []);
+  const [editSoNums, setEditSoNums] = useState(run.soNums || []);
+
+  const enterLoadedEdit = () => {
+    setEditTruckId(run.truckId ?? null);
+    setEditDate(run.date);
+    setEditHelperIds([...(run.helperIds || [])]);
+    setEditSoNums([...(run.soNums || [])]);
+    setLoadedEditMode(true);
+  };
+
+  // Per-SO lookups merged from this run's SOs (soMeta) + the pending pool (availableSOs).
+  const availMap = useMemo(() => {
+    const m = {};
+    (availableSOs || []).forEach((o) => {
+      m[o.soNum] = o;
+    });
+    return m;
+  }, [availableSOs]);
+  const custOf = (sn) => (soMeta && soMeta[sn]?.custName) || availMap[sn]?.custName || "";
+  const volOf = (sn) => (soMeta && soMeta[sn]?.volM3) ?? availMap[sn]?.volM3 ?? 0;
+
+  const editTruck = (activeTrucks || []).find((t) => t.id === editTruckId) || null;
+  const editCap = editTruck?.capacityM3 || 0;
+  const editVol = editSoNums.reduce((s, sn) => s + volOf(sn), 0);
+  const overCap = editCap > 0 && editVol > editCap;
+  const addOptions = (availableSOs || [])
+    .filter((o) => !editSoNums.includes(o.soNum))
+    .map((o) => ({ value: o.soNum, label: `${o.soNum} — ${o.custName}`, searchText: o.custName }));
+
+  const saveLoadedEdit = () => {
+    if (editSoNums.length === 0) return;
+    onEditLoaded(run.id, {
+      truckId: editTruckId,
+      date: editDate,
+      soNums: editSoNums,
+      helperIds: editHelperIds,
+    });
+    setLoadedEditMode(false);
+  };
 
   // Clear inline state when status changes from loaded → final.
   useEffect(() => {
@@ -142,6 +187,7 @@ function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
           )}
 
           {/* SO list */}
+          {!loadedEditMode && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
             {allSoNums.map((sn, i) => {
               const custName = (run.customerNames || [])[i] || "";
@@ -182,9 +228,10 @@ function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
               );
             })}
           </div>
+          )}
 
           {/* Actions — only for loaded runs */}
-          {isLoaded && ed && !confirmAction && (
+          {isLoaded && ed && !confirmAction && !loadedEditMode && (
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button
                 onClick={() => setConfirmAction("cancel")}
@@ -202,6 +249,21 @@ function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
                 ✕ ยกเลิกรอบ
               </button>
               <button
+                onClick={enterLoadedEdit}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 7,
+                  border: "1px solid var(--line)",
+                  background: "var(--bg2)",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                }}
+              >
+                แก้ไข
+              </button>
+              <button
                 onClick={() => setConfirmAction("confirm")}
                 style={{
                   padding: "6px 16px",
@@ -217,6 +279,161 @@ function RunCard({ run, status, onConfirm, onCancel, onDelete, ed, cd }) {
               >
                 ✓ ยืนยันส่งเสร็จ ({checked.size}/{allSoNums.length})
               </button>
+            </div>
+          )}
+
+          {/* Admin edit form for a loaded run */}
+          {loadedEditMode && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 4 }}>รถ/คนขับ</div>
+                <CustomSelect
+                  value={String(editTruckId ?? "")}
+                  onChange={(v) => setEditTruckId(+v)}
+                  options={(activeTrucks || []).map((t) => ({
+                    value: String(t.id),
+                    label: `${t.name} — ${t.capacityM3} m³`,
+                  }))}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 4 }}>วันที่จัดส่ง</div>
+                <ThaiDateInput value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 4 }}>
+                  ผู้ช่วย ({editHelperIds.length}/{maxHelpers})
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(activeHelpers || []).map((h) => {
+                    const picked = editHelperIds.includes(h.id);
+                    const atMax = !picked && editHelperIds.length >= maxHelpers;
+                    return (
+                      <button
+                        key={h.id}
+                        disabled={atMax}
+                        onClick={() =>
+                          setEditHelperIds((prev) =>
+                            picked ? prev.filter((x) => x !== h.id) : [...prev, h.id]
+                          )
+                        }
+                        style={{
+                          padding: "5px 12px",
+                          borderRadius: 99,
+                          border: "1px solid",
+                          borderColor: picked ? "var(--blue)" : "var(--line)",
+                          background: picked ? "var(--blue)" : atMax ? "var(--hover2)" : "var(--bg2)",
+                          color: picked ? "#fff" : atMax ? "var(--faint)" : "var(--text)",
+                          cursor: atMax ? "not-allowed" : "pointer",
+                          fontSize: 12,
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {picked ? "✓ " : ""}
+                        {h.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 4 }}>
+                  รายชื่อ SO ({editSoNums.length})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }}>
+                  {editSoNums.map((sn) => (
+                    <div
+                      key={sn}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "6px 10px",
+                        background: "var(--bg)",
+                        border: "1px solid var(--line)",
+                        borderRadius: 6,
+                        fontSize: 13,
+                      }}
+                    >
+                      <span style={{ fontWeight: 600, color: "var(--blue)" }}>{sn}</span>
+                      <span style={{ color: "var(--dim)", flex: 1 }}>{custOf(sn)}</span>
+                      <button
+                        aria-label={`ถอด ${sn}`}
+                        onClick={() => setEditSoNums((prev) => prev.filter((x) => x !== sn))}
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: 5,
+                          border: "1px solid var(--red)",
+                          background: "rgba(255,59,48,0.10)",
+                          color: "var(--red)",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {addOptions.length > 0 && (
+                  <CustomSelect
+                    searchable
+                    value=""
+                    onChange={(v) =>
+                      v && setEditSoNums((prev) => (prev.includes(v) ? prev : [...prev, v]))
+                    }
+                    options={[{ value: "", label: "+ เพิ่ม SO…" }, ...addOptions]}
+                  />
+                )}
+              </div>
+
+              <div style={{ fontSize: 12, color: overCap ? "var(--red)" : "var(--dim)" }}>
+                ปริมาตรรวม {editVol.toFixed(2)} / {editCap} m³{overCap ? " — เกินความจุรถ" : ""}
+              </div>
+              {editSoNums.length === 0 && (
+                <div style={{ fontSize: 12, color: "var(--red)" }}>
+                  ต้องมีอย่างน้อย 1 SO — ถ้าจะยกเลิกทั้งรอบ ใช้ปุ่ม "ยกเลิกรอบ"
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button
+                  onClick={() => setLoadedEditMode(false)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 7,
+                    border: "1px solid var(--line)",
+                    background: "var(--bg2)",
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                  }}
+                >
+                  ยกเลิกแก้ไข
+                </button>
+                <button
+                  onClick={saveLoadedEdit}
+                  disabled={editSoNums.length === 0}
+                  style={{
+                    padding: "6px 16px",
+                    borderRadius: 7,
+                    border: "none",
+                    background: editSoNums.length === 0 ? "var(--hover2)" : "var(--blue)",
+                    color: editSoNums.length === 0 ? "var(--dim)" : "#fff",
+                    cursor: editSoNums.length === 0 ? "not-allowed" : "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  บันทึก
+                </button>
+              </div>
             </div>
           )}
 
