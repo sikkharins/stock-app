@@ -12,6 +12,7 @@ import {
   soVolumeM3,
   soRevenue,
   consolidatePickList,
+  recomputeRunRecord,
   soItemsByCategory,
   mkLog,
   PROXIMITY_RADIUS_KM,
@@ -745,6 +746,49 @@ export default function DeliveryPlanningPage({ sh }) {
   // For mistaken/duplicate entries. Admin-only.
   const deleteRun = (runId) => {
     setDeliveryRuns((prev) => (prev || []).filter((r) => r.id !== runId));
+  };
+
+  // Admin edit of a loaded (out_for_delivery) run: change truck/date/helpers and SO
+  // membership. Stock is untouched (it only moves on delivery confirm) — we just flip
+  // SO status for added/removed SOs and recompute the run's denormalized totals.
+  const editLoadedRun = (runId, patch) => {
+    const run = (deliveryRuns || []).find((r) => r.id === runId);
+    if (!run || run.status !== "out_for_delivery") return;
+    const newSoNums = patch.soNums || [];
+    if (newSoNums.length === 0) return; // empty guarded in the UI
+
+    const oldSet = new Set(run.soNums || []);
+    const newSet = new Set(newSoNums);
+    const added = newSoNums.filter((sn) => !oldSet.has(sn));
+    const removed = (run.soNums || []).filter((sn) => !newSet.has(sn));
+
+    if (added.length || removed.length) {
+      setSales((prev) =>
+        (prev || []).map((s) => {
+          if (added.includes(s.soNum)) return { ...s, status: "out_for_delivery" };
+          if (removed.includes(s.soNum)) return { ...s, status: "pending_delivery" };
+          return s;
+        })
+      );
+    }
+
+    const newTruck = (trucks || []).find((t) => t.id === patch.truckId) || null;
+    const totals = recomputeRunRecord({
+      soNums: newSoNums,
+      truck: newTruck,
+      helperIds: patch.helperIds || [],
+      helpers: deliveryHelpers || [],
+      sales,
+      contacts,
+      products,
+      cN,
+    });
+
+    setDeliveryRuns((prev) =>
+      (prev || []).map((r) =>
+        r.id === runId ? { ...r, date: patch.date, soNums: [...newSoNums], ...totals } : r
+      )
+    );
   };
 
   const emptyTruck = {
@@ -2363,36 +2407,60 @@ export default function DeliveryPlanningPage({ sh }) {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 600, overflowY: "auto" }}>
-              {(deliveryRuns || [])
-                .slice()
-                .sort((a, b) => b.createdAt - a.createdAt)
-                .map((r) => {
-                  // Legacy runs (created before status field) → treat as completed.
-                  const status = r.status || "completed";
-                  // Resolve per-SO customer names at render time so legacy runs
-                  // whose stored customerNames was deduped still display each SO's
-                  // customer correctly.
-                  const resolvedNames = (r.soNums || []).map((sn, i) => {
-                    const cached = (r.customerNames || [])[i];
-                    if (cached) return cached;
-                    const so = (sales || []).find((s) => s.soNum === sn);
-                    if (!so) return "";
-                    const cust = (contacts || []).find((c) => c.id === so.customerId);
-                    return cust ? cN(cust) : "";
+              {(() => {
+                const availableSOs = pendingSOs.map((so) => {
+                  const cust = (contacts || []).find((c) => c.id === so.customerId);
+                  return {
+                    soNum: so.soNum,
+                    custName: cust ? cN(cust) : "—",
+                    volM3: soVolumeM3(so, products),
+                  };
+                });
+                return (deliveryRuns || [])
+                  .slice()
+                  .sort((a, b) => b.createdAt - a.createdAt)
+                  .map((r) => {
+                    // Legacy runs (created before status field) → treat as completed.
+                    const status = r.status || "completed";
+                    // Resolve per-SO customer names at render time so legacy runs
+                    // whose stored customerNames was deduped still display each SO's
+                    // customer correctly.
+                    const resolvedNames = (r.soNums || []).map((sn, i) => {
+                      const cached = (r.customerNames || [])[i];
+                      if (cached) return cached;
+                      const so = (sales || []).find((s) => s.soNum === sn);
+                      if (!so) return "";
+                      const cust = (contacts || []).find((c) => c.id === so.customerId);
+                      return cust ? cN(cust) : "";
+                    });
+                    const soMeta = {};
+                    (r.soNums || []).forEach((sn, i) => {
+                      const so = (sales || []).find((s) => s.soNum === sn);
+                      soMeta[sn] = {
+                        custName: resolvedNames[i] || "",
+                        volM3: so ? soVolumeM3(so, products) : 0,
+                      };
+                    });
+                    return (
+                      <RunCard
+                        key={r.id}
+                        run={{ ...r, customerNames: resolvedNames }}
+                        status={status}
+                        onConfirm={(deliveredSoNums) => confirmRunDelivery(r.id, deliveredSoNums)}
+                        onCancel={() => cancelRun(r.id)}
+                        onDelete={() => deleteRun(r.id)}
+                        onEditLoaded={editLoadedRun}
+                        activeTrucks={activeTrucks}
+                        activeHelpers={activeHelpers}
+                        availableSOs={availableSOs}
+                        soMeta={soMeta}
+                        maxHelpers={MAX_HELPERS_PER_RUN}
+                        ed={ed}
+                        cd={cd}
+                      />
+                    );
                   });
-                  return (
-                    <RunCard
-                      key={r.id}
-                      run={{ ...r, customerNames: resolvedNames }}
-                      status={status}
-                      onConfirm={(deliveredSoNums) => confirmRunDelivery(r.id, deliveredSoNums)}
-                      onCancel={() => cancelRun(r.id)}
-                      onDelete={() => deleteRun(r.id)}
-                      ed={ed}
-                      cd={cd}
-                    />
-                  );
-                })}
+              })()}
             </div>
           )}
         </Modal>
