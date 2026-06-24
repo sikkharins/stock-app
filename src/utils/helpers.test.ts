@@ -14,6 +14,7 @@ import {
   soVolumeM3,
   soRevenue,
   consolidatePickList,
+  recomputeRunRecord,
   scoreSO,
   parseGmapsUrl,
   soItemsByCategory,
@@ -1313,5 +1314,59 @@ describe("poEditViolation", () => {
         { productId: 9, qty: 3 },
       ] as never)
     ).toBeNull();
+  });
+});
+
+describe("recomputeRunRecord", () => {
+  const products = [{ id: 1, name: "Fridge", sizeClass: "L", price: 10000 }]; // 1.0 m³
+  const contacts = [
+    { id: 1, name: "ลูกค้า A" },
+    { id: 2, name: "ลูกค้า B" },
+  ];
+  const sales = [
+    { soNum: "SO-A", customerId: 1, items: [{ productId: 1, qty: 2, price: 10000 }] },
+    { soNum: "SO-B", customerId: 2, items: [{ productId: 1, qty: 3, price: 10000 }] },
+  ];
+  const cN = (c: any) => c.name;
+
+  test("totals + customerNames parallel to soNums", () => {
+    const r = recomputeRunRecord({
+      soNums: ["SO-A", "SO-B"],
+      truck: { id: 7, name: "รถ 7", driverName: "สมชาย" },
+      helperIds: [11],
+      helpers: [{ id: 11, name: "ผู้ช่วย 1" }, { id: 12, name: "ผู้ช่วย 2" }],
+      sales: sales as never,
+      contacts: contacts as never,
+      products: products as never,
+      cN,
+    });
+    expect(r.customerNames).toEqual(["ลูกค้า A", "ลูกค้า B"]);
+    expect(r.truckId).toBe(7);
+    expect(r.truckName).toBe("รถ 7");
+    expect(r.driverName).toBe("สมชาย");
+    expect(r.helperIds).toEqual([11]);
+    expect(r.helperNames).toEqual(["ผู้ช่วย 1"]);
+    expect(r.revenue).toBe(50000); // (2 + 3) × 10000
+    expect(r.volumeM3).toBeCloseTo(5.0); // 5 × 1.0 m³ (sizeClass L)
+  });
+
+  test("dropping an SO recomputes totals; unknown SO yields empty name", () => {
+    const r = recomputeRunRecord({
+      soNums: ["SO-A", "SO-X"],
+      truck: null,
+      helperIds: [],
+      helpers: [],
+      sales: sales as never,
+      contacts: contacts as never,
+      products: products as never,
+      cN,
+    });
+    expect(r.customerNames).toEqual(["ลูกค้า A", ""]); // SO-X not found
+    expect(r.revenue).toBe(20000); // only SO-A (2 × 10000)
+    expect(r.volumeM3).toBeCloseTo(2.0);
+    expect(r.truckId).toBeNull();
+    expect(r.truckName).toBe("");
+    expect(r.driverName).toBe("");
+    expect(r.helperNames).toEqual([]);
   });
 });

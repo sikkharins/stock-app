@@ -1255,6 +1255,75 @@ export const consolidatePickList = (
   return Array.from(acc.values()).sort((a, b) => a.name.localeCompare(b.name));
 };
 
+export interface RecomputedRun {
+  truckId: number | string | null;
+  truckName: string;
+  driverName: string;
+  helperIds: (number | string)[];
+  helperNames: string[];
+  customerNames: string[];
+  revenue: number;
+  volumeM3: number;
+}
+
+// Recompute a delivery run's denormalized fields for a new SO membership / truck /
+// helpers. Pure — no stock or status side effects (the caller flips SO status).
+// customerNames is built parallel to soNums (one entry per SO, never deduped) — see
+// the warning in DeliveryPlanning.commitRun.
+export const recomputeRunRecord = ({
+  soNums,
+  truck,
+  helperIds,
+  helpers,
+  sales,
+  contacts,
+  products,
+  cN,
+}: {
+  soNums: string[];
+  truck: { id: number | string; name?: string; driverName?: string } | null;
+  helperIds: (number | string)[];
+  helpers: { id: number | string; name: string }[];
+  sales: Sale[] | null | undefined;
+  contacts: Contact[] | null | undefined;
+  products: Product[] | null | undefined;
+  cN: (c: Contact) => string;
+}): RecomputedRun => {
+  const soByNum = new Map((sales || []).map((s) => [s.soNum, s]));
+  const custById = new Map((contacts || []).map((c) => [c.id, c]));
+  const helperById = new Map((helpers || []).map((h) => [h.id, h]));
+
+  const customerNames: string[] = [];
+  let revenue = 0;
+  let volumeM3 = 0;
+  for (const sn of soNums) {
+    const so = soByNum.get(sn);
+    if (!so) {
+      customerNames.push("");
+      continue;
+    }
+    const cust = so.customerId != null ? custById.get(so.customerId) : null;
+    customerNames.push(cust ? cN(cust) : "—");
+    revenue += soRevenue(so);
+    volumeM3 += soVolumeM3(so, products);
+  }
+
+  const helperNames = (helperIds || [])
+    .map((id) => helperById.get(id)?.name)
+    .filter((n): n is string => Boolean(n));
+
+  return {
+    truckId: truck?.id ?? null,
+    truckName: truck?.name || "",
+    driverName: truck?.driverName || "",
+    helperIds: [...(helperIds || [])],
+    helperNames,
+    customerNames,
+    revenue,
+    volumeM3,
+  };
+};
+
 // Bell-curve-ish score: peak at 0.15–0.25, drops outside 0.05..0.6
 const capacityFitScore = (ratio: number): number => {
   if (ratio <= 0 || ratio > 1) return 0;
