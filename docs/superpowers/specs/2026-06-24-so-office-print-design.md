@@ -80,6 +80,9 @@ create index if not exists print_jobs_status_idx on print_jobs (status, created_
 -- เปิด RLS แบบไม่มี policy = บล็อก anon/authenticated ทั้งหมด
 -- (service role bypass RLS อยู่แล้ว — มีแต่ฝั่ง server ที่แตะตารางนี้)
 alter table print_jobs enable row level security;
+
+-- โปรเจกต์นี้ไม่ auto-grant ตารางใหม่ให้ service_role ต้อง grant เอง
+grant all on table print_jobs to service_role;
 ```
 
 รูปเก็บใน bucket `line-images` เดิม (public-read อยู่แล้ว) ใช้ prefix `print/`
