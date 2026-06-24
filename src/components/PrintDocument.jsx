@@ -1,3 +1,5 @@
+import { buildOfficeMessage } from "../utils/officeMessage.js";
+
 const CO = {
   nameTH:  "หจก ที เอส อีเลคโทรนิค (1992)",
   nameEN:  "TS Electronics (1992) Limited Partnership",
@@ -24,6 +26,7 @@ export function printDoc(type, data, products, contacts, opts = {}) {
     po: { th:"ใบสั่งซื้อ",    en:"Purchase Order",  num:data.poNum },
   };
   const t = titles[type];
+  const officeMessage = type === "so" ? buildOfficeMessage(t.th, t.num, data, products, contacts) : "";
   const priceKey = type === "po" ? "cost" : "price";
 
   // Items rows. Items with `parts` (e.g. AC = hot + cold) render as N separate
@@ -143,7 +146,7 @@ body{font-family:'Sarabun',system-ui,sans-serif;font-size:14px;color:#111;backgr
 <div class="no-print" style="margin-bottom:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
   <button onclick="window.print()" style="padding:9px 22px;background:#111;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">พิมพ์ / Save as PDF</button>
   <button onclick="saveAsImage()" style="padding:9px 18px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">💾 บันทึกเป็นรูปภาพ</button>
-  <button onclick="sendToLine()" style="padding:9px 18px;background:#06C755;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">📤 ส่งเข้า LINE</button>
+  ${isExclusive ? `<button onclick="sendToOffice()" style="padding:9px 18px;background:#06C755;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">📤 ส่งไปพิมพ์ที่ออฟฟิศ</button>` : ""}
   <button onclick="window.close()" style="padding:9px 16px;background:transparent;color:#666;border:1px solid #ccc;border-radius:7px;font-size:14px;cursor:pointer;font-family:inherit;">ปิด</button>
   <span style="font-size:12px;color:#aaa;">เลือก "Save as PDF" ใน dialog ของ browser เพื่อบันทึก PDF</span>
 </div>
@@ -252,6 +255,10 @@ ${isExclusive ? "" : type==="po" ? `
 `}
 
 <script>
+var OFFICE_MSG = ${JSON.stringify(officeMessage)};
+var DOC_NUM = ${JSON.stringify(t.num)};
+var API_ORIGIN = ${JSON.stringify(apiOrigin)};
+var VAT_MODE = ${JSON.stringify(vatMode)};
 function saveAsImage() {
   var toolbar = document.querySelector('.no-print');
   if (toolbar) toolbar.style.display = 'none';
@@ -289,12 +296,12 @@ function saveAsImage() {
     });
 }
 
-async function sendToLine() {
+async function sendToOffice() {
   if (typeof html2canvas !== 'function') {
     alert('ยังโหลด html2canvas ไม่เสร็จ ลองอีกครั้งใน 1-2 วินาที');
     return;
   }
-  if (!confirm('ส่งรูปนี้เข้ากลุ่ม LINE?')) return;
+  if (!confirm('ส่งฟอร์มจัดของขึ้นรถนี้ไปพิมพ์ที่ออฟฟิศ?')) return;
 
   var toolbar = document.querySelector('.no-print');
   if (toolbar) toolbar.style.display = 'none';
@@ -303,7 +310,7 @@ async function sendToLine() {
     if (toolbar) toolbar.style.display = '';
 
     var finalCanvas = canvas;
-    if (${JSON.stringify(vatMode)} === 'exclusive') {
+    if (VAT_MODE === 'exclusive') {
       var cropped = document.createElement('canvas');
       cropped.width = canvas.width;
       cropped.height = Math.floor(canvas.height / 2);
@@ -315,19 +322,15 @@ async function sendToLine() {
     }
 
     var dataUrl = finalCanvas.toDataURL('image/png');
-    var resp = await fetch(${JSON.stringify(apiOrigin)} + '/api/line-send', {
+    var resp = await fetch(API_ORIGIN + '/api/print-and-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        imageDataUrl: dataUrl,
-        docNum: ${JSON.stringify(t.num)},
-        message: ${JSON.stringify(t.th + ' ' + t.num)},
-      }),
+      body: JSON.stringify({ imageDataUrl: dataUrl, docNum: DOC_NUM, message: OFFICE_MSG }),
     });
 
     var result = await resp.json().catch(function() { return { error: 'Invalid JSON response' }; });
     if (resp.ok && result.success) {
-      alert('✅ ส่งเข้า LINE สำเร็จ');
+      alert('✅ ส่งเข้าคิวพิมพ์ที่ออฟฟิศแล้ว' + (result.lineSent ? ' (แจ้ง LINE แล้ว)' : ' — LINE ไม่ออก: ' + (result.lineError || '')));
     } else {
       alert('❌ ส่งไม่สำเร็จ: ' + (result.error || ('HTTP ' + resp.status)));
     }
