@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>สถานีพิมพ์ออฟฟิศ</title>
+<style>
+  body{font-family:system-ui,'Sarabun',sans-serif;margin:0;padding:16px;background:#111;color:#eee}
+  h1{font-size:18px;margin:0 0 8px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  button{padding:8px 14px;border:1px solid #444;border-radius:8px;background:#222;color:#eee;cursor:pointer;font-size:14px}
+  button.on{background:#1d9e75;border-color:#1d9e75;color:#fff}
+  .status{font-size:13px;color:#9ad}
+  .status.err{color:#f77}
+  .job{display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid #333;font-size:14px}
+  .job .num{font-weight:600;min-width:150px}
+  .muted{color:#888}
+  #frame{position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0}
+</style>
+</head>
+<body>
+<h1>สถานีพิมพ์ออฟฟิศ</h1>
+<div class="row">
+  <button id="toggle" class="on">● พิมพ์อัตโนมัติ: เปิด</button>
+  <button id="clear">ล้างคิวที่ค้าง</button>
+  <span class="status" id="status">เริ่มต้น…</span>
+</div>
+<div class="row"><strong>รอพิมพ์ (<span id="pcount">0</span>)</strong></div>
+<div id="pending"></div>
+<div class="row" style="margin-top:14px"><strong>พิมพ์แล้วล่าสุด</strong></div>
+<div id="printed"></div>
+<iframe id="frame"></iframe>
+<script>
+(function(){
+  var params = new URLSearchParams(location.search);
+  var TOKEN = params.get('token') || '';
+  var POLL_MS = 8000;
+  var auto = true, busy = false;
+  var statusEl = document.getElementById('status');
+  function setStatus(t, isErr){ statusEl.textContent = t; statusEl.className = 'status' + (isErr ? ' err' : ''); }
+
+  function api(path, opts){
+    return fetch(path, opts).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      });
+    });
+  }
+  function getJobs(status){ return api('/api/print-jobs?token=' + encodeURIComponent(TOKEN) + '&status=' + status); }
+  function post(body){ return api('/api/print-jobs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(Object.assign({ token: TOKEN }, body)) }); }
+
+  function printImage(url){
+    return new Promise(function(resolve){
+      var frame = document.getElementById('frame');
+      var html = '<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:8mm}html,body{margin:0}img{width:100%;display:block}</style></head><body><img src="' + url + '"><scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();parent.postMessage({printed:true},"*");},150);}</scr' + 'ipt></body></html>';
+      function onMsg(e){ if (e.data && e.data.printed){ window.removeEventListener('message', onMsg); resolve(); } }
+      window.addEventListener('message', onMsg);
+      frame.srcdoc = html;
+    });
+  }
+
+  function renderList(el, jobs, withReprint){
+    el.innerHTML = '';
+    jobs.forEach(function(j){
+      var d = document.createElement('div'); d.className = 'job';
+      var num = document.createElement('span'); num.className = 'num'; num.textContent = j.docNum || ('#' + j.id); d.appendChild(num);
+      var t = document.createElement('span'); t.className = 'muted'; t.textContent = new Date(j.createdAt).toLocaleString('th-TH'); d.appendChild(t);
+      if (withReprint){ var b = document.createElement('button'); b.textContent = 'พิมพ์ซ้ำ'; b.onclick = function(){ printImage(j.imageUrl); }; d.appendChild(b); }
+      el.appendChild(d);
+    });
+  }
+
+  async function tick(){
+    try{
+      var pend = (await getJobs('pending')).jobs || [];
+      document.getElementById('pcount').textContent = pend.length;
+      renderList(document.getElementById('pending'), pend, false);
+      if (auto && !busy && pend.length){
+        busy = true;
+        var job = pend[0];
+        setStatus('กำลังพิมพ์ ' + (job.docNum || job.id) + '…');
+        await post({ id: job.id, status: 'printing' });
+        try { await printImage(job.imageUrl); await post({ id: job.id, status: 'printed' }); }
+        catch (err) { await post({ id: job.id, status: 'error' }); }
+        busy = false;
+      }
+      var printed = (await getJobs('printed')).jobs || [];
+      renderList(document.getElementById('printed'), printed, true);
+      setStatus('อัปเดต ' + new Date().toLocaleTimeString('th-TH') + ' · รอพิมพ์ ' + pend.length);
+    } catch (err){ setStatus('ผิดพลาด: ' + err.message, true); busy = false; }
+  }
+
+  document.getElementById('toggle').onclick = function(){
+    auto = !auto; this.className = auto ? 'on' : '';
+    this.textContent = '● พิมพ์อัตโนมัติ: ' + (auto ? 'เปิด' : 'ปิด');
+  };
+  document.getElementById('clear').onclick = function(){
+    if (confirm('ล้างคิวที่ค้างทั้งหมด (ไม่พิมพ์)?')) post({ status: 'cleared' }).then(tick);
+  };
+
+  if (!TOKEN){ setStatus('ไม่มี token ใน URL (ต้องเปิดด้วย ?token=...)', true); return; }
+  // เริ่มต้น: คืนงาน orphaned printing -> pending แล้วค่อย poll
+  post({ status: 'pending' }).catch(function(){}).then(function(){ tick(); setInterval(tick, POLL_MS); });
+})();
+</script>
+</body>
+</html>
