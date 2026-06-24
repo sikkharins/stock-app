@@ -166,4 +166,81 @@ describe("DeliveryPlanning", () => {
     await user.click(screen.getByRole("button", { name: /จัดการรถ/ }));
     expect(screen.getByText("รถ 4")).toBeInTheDocument();
   });
+
+  test("admin edits a loaded run: remove an SO and save", async () => {
+    const user = userEvent.setup();
+
+    function EditHarness() {
+      const [sales, setSales] = useState<any[]>([
+        { soNum: "SO-A", customerId: 1, status: "out_for_delivery", items: [{ productId: 1, qty: 2, price: 10000 }] },
+        { soNum: "SO-B", customerId: 2, status: "out_for_delivery", items: [{ productId: 1, qty: 3, price: 10000 }] },
+      ]);
+      const [deliveryRuns, setDeliveryRuns] = useState<any[]>([
+        {
+          id: 1,
+          status: "out_for_delivery",
+          date: "2026-06-24",
+          truckId: 1,
+          truckName: "รถ 1",
+          driverName: "",
+          helperIds: [],
+          helperNames: [],
+          soNums: ["SO-A", "SO-B"],
+          customerNames: ["ลูกค้า A", "ลูกค้า B"],
+          revenue: 50000,
+          volumeM3: 5,
+          createdAt: 1000,
+        },
+      ]);
+      const [modal, setModal] = useState<string | null>("runHistory");
+      const sh: any = {
+        cN: (c: any) => c?.name ?? "—",
+        pN: (p: any) => p?.name ?? "—",
+        contacts: [
+          { id: 1, name: "ลูกค้า A", lat: 13.75, lng: 100.5 },
+          { id: 2, name: "ลูกค้า B", lat: 13.76, lng: 100.51 },
+        ],
+        sales,
+        setSales,
+        products: [{ id: 1, name: "Fridge", sizeClass: "L" }],
+        setProducts: () => {},
+        addLog: () => {},
+        cats: [],
+        trucks: [{ id: 1, name: "รถ 1", capacityM3: 8, isActive: true }],
+        setTrucks: () => {},
+        deliveryRuns,
+        setDeliveryRuns,
+        deliveryHelpers: [],
+        setDeliveryHelpers: () => {},
+        canE: () => true,
+        canD: () => true,
+        cu: { username: "admin" },
+        modal,
+        oM: (n: string) => setModal(n),
+        cM: () => setModal(null),
+      };
+      const runSoNums = (deliveryRuns[0]?.soNums || []).join(",");
+      const soBStatus = sales.find((s) => s.soNum === "SO-B")?.status;
+      return (
+        <>
+          <DeliveryPlanningPage sh={sh} />
+          <div data-testid="run-soNums">{runSoNums}</div>
+          <div data-testid="so-b-status">{soBStatus}</div>
+        </>
+      );
+    }
+
+    render(<EditHarness />);
+
+    // History modal is open; the loaded run auto-expands. Enter edit mode.
+    await user.click(screen.getByRole("button", { name: "แก้ไข" }));
+
+    // Remove SO-B, then save.
+    await user.click(screen.getByRole("button", { name: "ถอด SO-B" }));
+    await user.click(screen.getByRole("button", { name: "บันทึก" }));
+
+    // Run record now holds only SO-A; SO-B returned to pending_delivery.
+    expect(screen.getByTestId("run-soNums").textContent).toBe("SO-A");
+    expect(screen.getByTestId("so-b-status").textContent).toBe("pending_delivery");
+  });
 });
