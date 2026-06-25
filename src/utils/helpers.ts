@@ -1467,3 +1467,74 @@ export const parseGmapsUrl = (
   if (m) return { lat: +m[1], lng: +m[2] };
   return null;
 };
+
+// --- AR payment matcher: find subsets of outstanding SOs summing near a target -
+// Pure subset-sum over ONE customer's outstanding SOs (small N). Works in integer
+// satang to avoid float drift. Used by ARAP "รับชำระรวม" auto-match.
+export interface ComboSO {
+  soNum: string;
+  remaining: number; // baht
+  date?: string;
+}
+
+export interface SOCombo {
+  soNums: string[];
+  sumSatang: number;
+  diffSatang: number; // signed: sum - target
+}
+
+export const findSOCombos = (
+  sos: ComboSO[],
+  targetSatang: number,
+  tolSatang: number,
+  maxResults = 5,
+): SOCombo[] => {
+  // positive remaining only, integer satang, sorted desc for branch-and-bound
+  const items = sos
+    .filter((s) => s.remaining > 0)
+    .map((s) => ({
+      soNum: s.soNum,
+      sat: Math.round(s.remaining * 100),
+      date: s.date || "",
+    }))
+    .sort((a, b) => b.sat - a.sat);
+
+  const hi = targetSatang + tolSatang;
+  const found: { soNums: string[]; sat: number; date: string }[] = [];
+  let nodes = 0;
+  const NODE_CAP = 200000;
+
+  const dfs = (i: number, sumSat: number, picked: number[]) => {
+    if (nodes++ > NODE_CAP) return;
+    if (sumSat > hi) return; // all items positive -> adding more only grows sum
+    if (picked.length > 0 && Math.abs(sumSat - targetSatang) <= tolSatang) {
+      found.push({
+        soNums: picked.map((idx) => items[idx].soNum),
+        sat: sumSat,
+        date: picked.reduce(
+          (m, idx) => (items[idx].date > m ? items[idx].date : m),
+          "",
+        ),
+      });
+    }
+    for (let j = i; j < items.length; j++) {
+      dfs(j + 1, sumSat + items[j].sat, [...picked, j]);
+    }
+  };
+  dfs(0, 0, []);
+
+  found.sort((a, b) => {
+    const da = Math.abs(a.sat - targetSatang);
+    const db = Math.abs(b.sat - targetSatang);
+    if (da !== db) return da - db; // closest first
+    if (a.soNums.length !== b.soNums.length)
+      return a.soNums.length - b.soNums.length; // fewer SOs first
+    return b.date.localeCompare(a.date); // more recent first
+  });
+
+  return found.slice(0, maxResults).map((c) => ({
+    soNums: c.soNums,
+    sumSatang: c.sat,
+    diffSatang: c.sat - targetSatang,
+  }));
+};

@@ -16,6 +16,7 @@ import {
   consolidatePickList,
   recomputeRunRecord,
   scoreSO,
+  findSOCombos,
   parseGmapsUrl,
   soItemsByCategory,
   snapshotItemParts,
@@ -1368,5 +1369,54 @@ describe("recomputeRunRecord", () => {
     expect(r.truckName).toBe("");
     expect(r.driverName).toBe("");
     expect(r.helperNames).toEqual([]);
+  });
+});
+
+describe("findSOCombos", () => {
+  const sos = [
+    { soNum: "A", remaining: 1000, date: "2026-01-01" },
+    { soNum: "B", remaining: 2000, date: "2026-01-02" },
+    { soNum: "C", remaining: 3000, date: "2026-01-03" },
+  ];
+
+  test("exact match — fewer SOs ranked first on equal diff", () => {
+    const r = findSOCombos(sos, 300000, 0); // target 3000.00 baht
+    // {C}=3000 and {A,B}=3000 both diff 0 -> {C} (1 SO) ranks first
+    expect(r[0].soNums).toEqual(["C"]);
+    expect(r[0].diffSatang).toBe(0);
+    expect(r.some((c) => [...c.soNums].sort().join() === "A,B")).toBe(true);
+  });
+
+  test("tolerance — finds combos within ± tol of target", () => {
+    const r = findSOCombos(sos, 305000, 5000); // target 3050, tol 50 -> 3000 is within
+    expect(r.length).toBeGreaterThan(0);
+    expect(r[0].soNums).toEqual(["C"]);
+    expect(r[0].diffSatang).toBe(-5000);
+  });
+
+  test("date tiebreak — more recent SO ranked first on equal diff & size", () => {
+    const two = [
+      { soNum: "OLD", remaining: 1000, date: "2026-01-01" },
+      { soNum: "NEW", remaining: 1000, date: "2026-02-01" },
+    ];
+    const r = findSOCombos(two, 100000, 0); // target 1000
+    expect(r[0].soNums).toEqual(["NEW"]);
+  });
+
+  test("no match within tolerance returns empty array", () => {
+    const r = findSOCombos(sos, 999900, 0); // 9999 baht — no subset sums to it
+    expect(r).toEqual([]);
+  });
+
+  test("all SOs combined matches the grand total", () => {
+    const r = findSOCombos(sos, 600000, 0); // 6000 = A+B+C
+    expect([...r[0].soNums].sort()).toEqual(["A", "B", "C"]);
+    expect(r[0].diffSatang).toBe(0);
+  });
+
+  test("ignores fully-paid SOs (remaining <= 0)", () => {
+    const withPaid = [...sos, { soNum: "PAID", remaining: 0, date: "2026-01-04" }];
+    const r = findSOCombos(withPaid, 300000, 0);
+    expect(r.every((c) => !c.soNums.includes("PAID"))).toBe(true);
   });
 });
