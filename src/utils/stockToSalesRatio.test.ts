@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shiftISO, stockUnitsAt, periodBounds, listPeriods } from "./stockToSalesRatio.ts";
+import { shiftISO, stockUnitsAt, periodBounds, listPeriods, computeStockToSales } from "./stockToSalesRatio";
 
 describe("shiftISO", () => {
   it("ลบข้ามเดือน", () => expect(shiftISO("2026-06-01", -1)).toBe("2026-05-31"));
@@ -53,4 +53,56 @@ describe("listPeriods", () => {
   });
   it("ปี — 5 งวด", () =>
     expect(listPeriods("year", ref)).toEqual(["2026", "2025", "2024", "2023", "2022"]));
+});
+
+describe("computeStockToSales", () => {
+  const products = [
+    { id: 1, brand: "Sony", categoryId: 10, price: 100, stock: 10 },
+    { id: 2, brand: "LG", categoryId: 10, price: 200, stock: 5 },
+    { id: 3, brand: "Sony", categoryId: 20, price: 50, stock: 0 },
+  ];
+  const cats = [{ id: 10, name: "ทีวี" }, { id: 20, name: "สายไฟ" }];
+  // p1: ต้นงวด(31 พ.ค.)=qtyBefore 14, ปลายงวด(30 มิ.ย.)=qtyAfter 10 → เฉลี่ย 12 → 12*100=1200
+  const logs = [{ productId: 1, date: "2026-06-15", qtyBefore: 14, qtyAfter: 10 }];
+  // p2 ไม่มี log → 5*200=1000 ; p3 → 0
+  const sales = [
+    { status: "confirmed", date: "2026-06-10", items: [{ productId: 1, qty: 2, price: 120 }, { productId: 2, qty: 1, price: 210 }] },
+    { status: "cancelled", date: "2026-06-12", items: [{ productId: 1, qty: 99, price: 100 }] }, // ตัดทิ้ง
+    { status: "confirmed", date: "2026-05-30", items: [{ productId: 1, qty: 5, price: 100 }] },   // นอกงวด
+  ];
+  const res = computeStockToSales(products, logs, sales, cats, { granularity: "month", periodKey: "2026-06" });
+
+  it("รวม: avgStock 2200, sales 450, ratio ~4.889", () => {
+    expect(res.total.avgStock).toBe(2200);
+    expect(res.total.sales).toBe(450);
+    expect(res.total.ratio).toBeCloseTo(2200 / 450, 4);
+  });
+  it("byBrand เรียงมาก→น้อย: Sony 5.0 แล้ว LG ~4.762", () => {
+    expect(res.byBrand.map((b) => b.label)).toEqual(["Sony", "LG"]);
+    expect(res.byBrand[0].ratio).toBeCloseTo(5.0, 4); // 1200/240
+    expect(res.byBrand[1].ratio).toBeCloseTo(1000 / 210, 4);
+  });
+  it("byCat: ตัดสายไฟ (ยอดขาย 0) เหลือแต่ทีวี", () => {
+    expect(res.byCat.map((c) => c.label)).toEqual(["ทีวี"]);
+    expect(res.byCat[0].ratio).toBeCloseTo(2200 / 450, 4);
+  });
+  it("byCatBrand: รูปสำหรับ grouped bar ถูก", () => {
+    expect(res.byCatBrand.cats).toEqual(["ทีวี"]);
+    expect(res.byCatBrand.brands).toEqual(["Sony", "LG"]); // เรียงตามยอดขาย desc (240>210)
+    expect(res.byCatBrand.rows[0].category).toBe("ทีวี");
+    expect(res.byCatBrand.rows[0].Sony).toBeCloseTo(5.0, 4);
+    expect(res.byCatBrand.rows[0].LG).toBeCloseTo(1000 / 210, 4);
+  });
+  it("period.label = มิ.ย. 2026", () => expect(res.period.label).toBe("มิ.ย. 2026"));
+});
+
+describe("computeStockToSales — ไม่ระบุ", () => {
+  const products = [{ id: 9, brand: "", categoryId: 999, price: 10, stock: 4 }];
+  const sales = [{ status: "confirmed", date: "2026-06-05", items: [{ productId: 9, qty: 1, price: 100 }] }];
+  const res = computeStockToSales(products, [], sales, [], { granularity: "month", periodKey: "2026-06" });
+  it("brand/หมวด ว่าง → ไม่ระบุ", () => {
+    expect(res.byBrand[0].label).toBe("ไม่ระบุ");
+    expect(res.byCat[0].label).toBe("ไม่ระบุ");
+    expect(res.byBrand[0].ratio).toBeCloseTo(40 / 100, 4); // avg 4*10=40, sales 100
+  });
 });
