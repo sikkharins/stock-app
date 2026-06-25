@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { IB } from "../../utils/constants.js";
-import { fmt, todayStr, toBE, shipmentTotals } from "../../utils/helpers.js";
+import { fmt, todayStr, toBE, shipmentTotals, findSOCombos, round2 } from "../../utils/helpers.js";
 import { Modal, MBtns } from "../ui/Modal.jsx";
 import StatCard from "../ui/StatCard.jsx";
 import Field from "../ui/Field.jsx";
@@ -40,6 +40,10 @@ export default function ARAP({sh, sub, setSub, arList, autoTag, cN, search, setS
   const[batchCust,setBatchCust]=useState("");
   const[batchSOs,setBatchSOs]=useState([]);
   const[batchLines,setBatchLines]=useState([{method:"เช็ค",amount:"",accId:bankAccs[0]?.id||1,chequeNo:"",chequeBank:"",chequeDue:"",date:todayStr()}]);
+  const[recvAmount,setRecvAmount]=useState("");
+  const[recvTol,setRecvTol]=useState("50");
+  const[matchResults,setMatchResults]=useState([]);
+  const[matchMsg,setMatchMsg]=useState("");
   const[bapSup,setBapSup]=useState("");const[bapPOs,setBapPOs]=useState([]);const[bapCNs,setBapCNs]=useState([]);
   const[bapMethod,setBapMethod]=useState("โอนเงินออก");const[bapAccId,setBapAccId]=useState(bankAccs[0]?.id||1);const[bapDate,setBapDate]=useState(todayStr());const[bapNote,setBapNote]=useState("");
 
@@ -69,8 +73,28 @@ export default function ARAP({sh, sub, setSub, arList, autoTag, cN, search, setS
   const stB=s=>s==="paid"?<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(52,199,89,0.12)",color:"var(--green)"}}>ชำระแล้ว</span>:s==="partial"?<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"var(--blue-bg)",color:"var(--blue)"}}>บางส่วน</span>:s==="cn_credit"?<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(175,82,222,0.12)",color:"var(--purple)"}}>หักCN</span>:<span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"rgba(255,149,0,0.14)",color:"var(--orange)"}}>รอชำระ</span>;
 
   // batchPay (AR) handlers
-  const openBatch=()=>{setBatchCust("");setBatchSOs([]);setBatchLines([{method:"เช็ค",amount:"",accId:bankAccs[0]?.id||1,chequeNo:"",chequeBank:"",chequeDue:"",date:todayStr()}]);oM("batchPay");};
+  const openBatch=()=>{setBatchCust("");setBatchSOs([]);setBatchLines([{method:"เช็ค",amount:"",accId:bankAccs[0]?.id||1,chequeNo:"",chequeBank:"",chequeDue:"",date:todayStr()}]);setRecvAmount("");setRecvTol("50");setMatchResults([]);setMatchMsg("");oM("batchPay");};
   const toggleBatchSO=soNum=>setBatchSOs(prev=>prev.includes(soNum)?prev.filter(x=>x!==soNum):[...prev,soNum]);
+  const applyCombo=combo=>{
+    setBatchSOs(combo.soNums);
+    const total=combo.soNums.reduce((s,n)=>{const so=batchSOList.find(x=>x.soNum===n);return s+(so?Math.max(0,so.remaining):0);},0);
+    setBatchLines(p=>p.map((l,i)=>i===0?{...l,amount:String(round2(total))}:l));
+    setMatchResults([]);setMatchMsg("");
+  };
+  const runMatch=()=>{
+    const amt=+recvAmount;if(!amt||amt<=0){setMatchResults([]);setMatchMsg("");return;}
+    const tol=Math.max(0,+recvTol||0);
+    const target=Math.round(amt*100);const tolSat=Math.round(tol*100);
+    const sos=batchSOList.map(so=>({soNum:so.soNum,remaining:Math.max(0,so.remaining),date:so.date}));
+    const combos=findSOCombos(sos,target,tolSat);
+    if(combos.length===1){applyCombo(combos[0]);}
+    else if(combos.length>1){setMatchResults(combos);setMatchMsg("");}
+    else{
+      const near=findSOCombos(sos,target,Math.max(tolSat*10,10000));
+      setMatchResults([]);
+      setMatchMsg(near.length?("ไม่เจอชุดที่รวมได้พอดี — ชุดที่ใกล้สุด: "+near[0].soNums.join(", ")+" (฿"+fmt(near[0].sumSatang/100)+")"):"ไม่เจอชุดที่รวมได้ใกล้ยอดนี้");
+    }
+  };
   const addBatchLine=()=>setBatchLines(p=>[...p,{method:"เช็ค",amount:"",accId:bankAccs[0]?.id||1,chequeNo:"",chequeBank:"",chequeDue:"",date:todayStr()}]);
   const updBatchLine=(idx,k,v)=>setBatchLines(p=>p.map((l,i)=>i===idx?{...l,[k]:v}:l));
   const rmBatchLine=idx=>setBatchLines(p=>p.filter((_,i)=>i!==idx));
@@ -230,6 +254,20 @@ export default function ARAP({sh, sub, setSub, arList, autoTag, cN, search, setS
         <Field label="ลูกค้า"><CustomSelect searchable value={batchCust} onChange={v=>{setBatchCust(v);setBatchSOs([]);}} options={[{value:"",label:"— เลือกลูกค้า —"},...contacts.filter(c=>c.type==="customer").map(c=>({value:c.id,label:cN(c)}))]}/></Field>
       </div>
       {batchCust&&<>
+        {/* auto-match by received amount */}
+        <div style={{display:"flex",gap:8,alignItems:"flex-end",marginBottom:matchMsg||matchResults.length>1?8:14,flexWrap:"wrap"}}>
+          <Field label="ยอดเงินที่ได้รับ"><input type="number" value={recvAmount} onChange={e=>setRecvAmount(e.target.value)} placeholder="ยอดที่ได้รับ" style={{...IB,width:160}}/></Field>
+          <Field label="± บาท"><input type="number" value={recvTol} onChange={e=>setRecvTol(e.target.value)} style={{...IB,width:80}}/></Field>
+          <button onClick={runMatch} disabled={!recvAmount} style={{padding:"7px 14px",fontSize:12,borderRadius:7,border:"none",background:recvAmount?"var(--blue)":"var(--line)",color:"#fff",cursor:recvAmount?"pointer":"default",fontFamily:"inherit",fontWeight:500}}>หา SO ที่ตรงยอด</button>
+        </div>
+        {matchMsg&&<div style={{fontSize:12,color:"var(--dim)",marginBottom:14}}>{matchMsg}</div>}
+        {matchResults.length>1&&<div style={{border:"1px solid var(--line)",borderRadius:8,marginBottom:14,overflow:"hidden"}}>
+          <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",padding:"8px 12px",background:"var(--bg)"}}>{"เจอ "+matchResults.length+" ชุดที่เป็นไปได้ — เลือกชุด"}</div>
+          {matchResults.map((combo,i)=><div key={i} onClick={()=>applyCombo(combo)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"8px 12px",borderTop:"1px solid var(--line)",cursor:"pointer"}}>
+            <span style={{fontSize:12}}>{combo.soNums.join(", ")}<span style={{color:"var(--dim)",marginLeft:6}}>{"("+combo.soNums.length+" ใบ)"}</span></span>
+            <span style={{fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{"฿"+fmt(combo.sumSatang/100)}{combo.diffSatang!==0&&<span style={{fontSize:11,color:"var(--orange)",marginLeft:6}}>{(combo.diffSatang>0?"+":"")+fmt(combo.diffSatang/100)}</span>}</span>
+          </div>)}
+        </div>}
         <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:6}}>SO ค้างชำระ</div>
         {batchSOList.length===0?<div style={{padding:"12px",fontSize:13,color:"var(--faint)",background:"var(--bg)",borderRadius:8,marginBottom:14}}>ไม่มี SO ค้างชำระ</div>:
         <div style={{maxHeight:180,overflowY:"auto",border:"1px solid var(--line)",borderRadius:8,marginBottom:14}}>

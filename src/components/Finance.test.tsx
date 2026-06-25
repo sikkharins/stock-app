@@ -136,3 +136,87 @@ describe("Finance — modal hub & savePay validation", () => {
     expect(screen.queryByText(/กรุณากรอก/)).not.toBeInTheDocument();
   });
 });
+
+describe("รับชำระรวม — auto-match by received amount", () => {
+  function MultiSOHarness() {
+    const [modal, setModal] = useState<string | null>(null);
+    const [payments, setPayments] = useState<any[]>([]);
+    const [cheques, setCheques] = useState<any[]>([]);
+    const [bankTxns, setBankTxns] = useState<any[]>([]);
+    const [contacts, setContacts] = useState<any[]>([
+      { id: "c1", name: "ABC Co", type: "customer" },
+    ]);
+    const [supCNotes, setSupCNotes] = useState<any[]>([]);
+    const mkSO = (n: string, price: number, date: string) => ({
+      soNum: n,
+      customerId: "c1",
+      status: "completed",
+      items: [{ productId: "p1", qty: 1, price }],
+      discountAmt: 0,
+      date,
+      payType: "cash",
+      creditDays: 0,
+    });
+    const sh: any = {
+      cN: (c: any) => c?.name ?? "",
+      pN: (p: any) => p?.name ?? "",
+      contacts,
+      setContacts,
+      sales: [
+        mkSO("SO-001", 1000, "2026-01-01"),
+        mkSO("SO-002", 2000, "2026-01-02"),
+        mkSO("SO-003", 3000, "2026-01-03"),
+      ],
+      pos: [],
+      quotes: [],
+      payments,
+      setPayments,
+      products: [{ id: "p1", name: "Widget" }],
+      canE: () => true,
+      canD: () => true,
+      modal,
+      oM: (name: string) => setModal(name),
+      cM: () => setModal(null),
+      setCheques,
+      cheques,
+      bankAccs: [
+        {
+          id: 1,
+          name: "บัญชี 1",
+          bank: "กสิกร",
+          isCash: false,
+          perms: { receive: true, transferOut: true, payEPP: true },
+        },
+      ],
+      setBankTxns,
+      bankTxns,
+      cnotes: [],
+      billings: [],
+      supCNotes,
+      setSupCNotes,
+      tagMappings: [],
+    };
+    return <FinPage sh={sh} />;
+  }
+
+  test("typing received amount + กดหา auto-ticks the unique matching SO set", async () => {
+    const user = userEvent.setup();
+    render(<MultiSOHarness />);
+
+    await user.click(screen.getByText("เก็บเงินลูกค้า"));
+    await user.click(screen.getByText("รับชำระรวม"));
+
+    // select customer in the searchable CustomSelect.
+    // "ABC Co" also appears in the AR table behind the modal, so target the
+    // dropdown option (rendered via portal -> last in DOM order).
+    await user.click(screen.getByText("— เลือกลูกค้า —"));
+    const custOpts = screen.getAllByText("ABC Co");
+    await user.click(custOpts[custOpts.length - 1]);
+
+    // 6000 = SO-001 + SO-002 + SO-003, the only subset summing to it
+    await user.type(screen.getByPlaceholderText("ยอดที่ได้รับ"), "6000");
+    await user.click(screen.getByRole("button", { name: "หา SO ที่ตรงยอด" }));
+
+    expect(screen.getByText(/ยอดรวมที่เลือก: ฿6,000/)).toBeInTheDocument();
+  });
+});
