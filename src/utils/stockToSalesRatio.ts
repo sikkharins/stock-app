@@ -35,3 +35,60 @@ export const stockUnitsAt = (logs: Log[], isoDate: string, currentStock: number)
   }
   return last ? last.qtyAfter : logs[0].qtyBefore;
 };
+
+const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+const lastDay = (year: number, month1to12: number): number => new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
+
+export const periodBounds = (
+  granularity: Granularity,
+  periodKey: string
+): { startDate: string; endDate: string; label: string } => {
+  if (granularity === "year") {
+    const y = Number(periodKey);
+    return { startDate: `${y}-01-01`, endDate: `${y}-12-31`, label: String(y) };
+  }
+  if (granularity === "quarter") {
+    const [ys, qs] = periodKey.split("-Q");
+    const y = Number(ys), q = Number(qs);
+    const startM = (q - 1) * 3 + 1;
+    const endM = q * 3;
+    return {
+      startDate: `${y}-${pad2(startM)}-01`,
+      endDate: `${y}-${pad2(endM)}-${pad2(lastDay(y, endM))}`,
+      label: `Q${q} ${y}`,
+    };
+  }
+  const [ys, ms] = periodKey.split("-");
+  const y = Number(ys), m = Number(ms);
+  return {
+    startDate: `${y}-${pad2(m)}-01`,
+    endDate: `${y}-${pad2(m)}-${pad2(lastDay(y, m))}`,
+    label: `${TH_MONTHS[m - 1]} ${y}`,
+  };
+};
+
+/** คืน periodKey เรียงล่าสุดก่อน; index 0 = งวดปัจจุบัน (ยังไม่จบ). ใช้เวลา local ให้ตรงนาฬิกาผู้ใช้. */
+export const listPeriods = (granularity: Granularity, ref: Date = new Date()): string[] => {
+  const y = ref.getFullYear();
+  const m = ref.getMonth() + 1; // 1-12
+  const out: string[] = [];
+  if (granularity === "year") {
+    for (let i = 0; i < 5; i++) out.push(String(y - i));
+    return out;
+  }
+  if (granularity === "quarter") {
+    let cy = y, cq = Math.floor((m - 1) / 3) + 1;
+    for (let i = 0; i < 8; i++) {
+      out.push(`${cy}-Q${cq}`);
+      cq--; if (cq < 1) { cq = 4; cy--; }
+    }
+    return out;
+  }
+  let cy = y, cm = m;
+  for (let i = 0; i < 12; i++) {
+    out.push(`${cy}-${pad2(cm)}`);
+    cm--; if (cm < 1) { cm = 12; cy--; }
+  }
+  return out;
+};
