@@ -93,6 +93,32 @@ export const listPeriods = (granularity: Granularity, ref: Date = new Date()): s
   return out;
 };
 
+const periodKeyOf = (iso: string, granularity: Granularity): string => {
+  const d = dayKey(iso);
+  const y = d.slice(0, 4);
+  if (granularity === "year") return y;
+  if (granularity === "quarter") return `${y}-Q${Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1}`;
+  return d.slice(0, 7);
+};
+
+/**
+ * จาก periods (เรียงล่าสุดก่อน) คืน periodKey ล่าสุดที่มียอดขายจริง (SO ไม่ถูกยกเลิก + มี items)
+ * ใช้เลือก default งวดให้เปิดมาเห็นข้อมูลทันที. ไม่มีงวดไหนมีขาย → null (ให้ caller fallback เอง).
+ */
+export const latestPeriodWithSales = (
+  periods: string[],
+  sales: Sale[],
+  granularity: Granularity
+): string | null => {
+  const has = new Set<string>();
+  for (const so of sales) {
+    if (so.status === "cancelled") continue;
+    if (!so.items || !so.items.length) continue;
+    has.add(periodKeyOf(so.date, granularity));
+  }
+  return periods.find((pk) => has.has(pk)) ?? null;
+};
+
 const SEP = String.fromCharCode(0); // ตัวคั่น key หมวด/ยี่ห้อ — null char ไม่มีทางชนชื่อจริง
 
 const ratioOf = (avg: number, sales: number): number | null => (sales > 0 ? avg / sales : null);

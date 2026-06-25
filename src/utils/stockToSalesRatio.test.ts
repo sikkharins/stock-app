@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shiftISO, stockUnitsAt, periodBounds, listPeriods, computeStockToSales } from "./stockToSalesRatio";
+import { shiftISO, stockUnitsAt, periodBounds, listPeriods, computeStockToSales, latestPeriodWithSales } from "./stockToSalesRatio";
 
 describe("shiftISO", () => {
   it("ลบข้ามเดือน", () => expect(shiftISO("2026-06-01", -1)).toBe("2026-05-31"));
@@ -94,6 +94,21 @@ describe("computeStockToSales", () => {
     expect(res.byCatBrand.rows[0].LG).toBeCloseTo(1000 / 210, 4);
   });
   it("period.label = มิ.ย. 2026", () => expect(res.period.label).toBe("มิ.ย. 2026"));
+});
+
+describe("latestPeriodWithSales", () => {
+  const sales = [
+    { status: "completed", date: "2026-06-02", items: [{ productId: 1, qty: 1, price: 10 }] },
+    { status: "cancelled", date: "2026-05-10", items: [{ productId: 1, qty: 1, price: 10 }] },
+  ];
+  it("คืนงวดล่าสุดที่มีขาย (ข้าม cancelled)", () =>
+    expect(latestPeriodWithSales(["2026-06", "2026-05", "2026-04"], sales, "month")).toBe("2026-06"));
+  it("ไม่มีงวดไหนมีขายใน list → null", () =>
+    expect(latestPeriodWithSales(["2026-04", "2026-03"], sales, "month")).toBe(null));
+  it("รองรับ quarter key", () =>
+    expect(latestPeriodWithSales(["2026-Q2", "2026-Q1"], sales, "quarter")).toBe("2026-Q2"));
+  it("รองรับ year key", () =>
+    expect(latestPeriodWithSales(["2026", "2025"], sales, "year")).toBe("2026"));
 });
 
 describe("computeStockToSales — ไม่ระบุ", () => {

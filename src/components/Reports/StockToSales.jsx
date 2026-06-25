@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { fmt } from "../../utils/helpers.js";
-import { computeStockToSales, listPeriods, periodBounds } from "../../utils/stockToSalesRatio.ts";
+import { computeStockToSales, listPeriods, periodBounds, latestPeriodWithSales } from "../../utils/stockToSalesRatio.ts";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 
 const COLORS = ["#34c759", "#007aff", "#ff9500", "#af52de", "#ff3b30", "#5ac8fa", "#ffcc00", "#ff2d55", "#64d2ff", "#30d158", "#bf5af2", "#ff6482"];
@@ -34,10 +34,15 @@ function RatioTip({ active, payload, label }) {
 
 export default function StockToSales({ products, sales, logs, cats }) {
   const [gran, setGran] = useState("month");
+  const [userPicked, setUserPicked] = useState(null); // { gran, key } เมื่อผู้ใช้เลือกงวดเอง
   const periods = useMemo(() => listPeriods(gran), [gran]);
-  const defaultKey = periods[1] || periods[0];
-  const [periodKey, setPeriodKey] = useState(defaultKey);
-  const activeKey = periods.includes(periodKey) ? periodKey : defaultKey;
+  // default = งวดล่าสุดที่มียอดขายจริง (ถ้าไม่มีเลย → งวดที่จบล่าสุด)
+  const smartDefault = useMemo(
+    () => latestPeriodWithSales(periods, sales || [], gran) ?? (periods[1] || periods[0]),
+    [periods, sales, gran]
+  );
+  const activeKey =
+    userPicked && userPicked.gran === gran && periods.includes(userPicked.key) ? userPicked.key : smartDefault;
 
   const res = useMemo(
     () => computeStockToSales(products || [], logs || [], sales || [], cats || [], { granularity: gran, periodKey: activeKey }),
@@ -46,8 +51,7 @@ export default function StockToSales({ products, sales, logs, cats }) {
 
   const changeGran = (g) => {
     setGran(g);
-    const ps = listPeriods(g);
-    setPeriodKey(ps[1] || ps[0]);
+    setUserPicked(null); // ให้ smartDefault ของ granularity ใหม่ทำงาน
   };
 
   const singleChart = (title, data) => (
@@ -86,7 +90,7 @@ export default function StockToSales({ products, sales, logs, cats }) {
             </button>
           ))}
         </div>
-        <select value={activeKey} onChange={(e) => setPeriodKey(e.target.value)}
+        <select value={activeKey} onChange={(e) => setUserPicked({ gran, key: e.target.value })}
           style={{ padding: "7px 12px", fontSize: 13, borderRadius: 8, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--text)", fontFamily: "inherit" }}>
           {periods.map((pk, i) => (
             <option key={pk} value={pk}>{periodBounds(gran, pk).label + (i === 0 ? " (ยังไม่จบ)" : "")}</option>
