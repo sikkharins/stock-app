@@ -10,6 +10,19 @@ const numIB = { width: 46, boxSizing: "border-box", background: "var(--bg)", bor
 const arrowBtn = (disabled) => ({ width: 22, height: 22, borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: disabled ? "var(--line2)" : "var(--blue)", cursor: disabled ? "default" : "pointer", fontFamily: "inherit", fontSize: 14, lineHeight: "18px", padding: 0 });
 const orientBtn = { minWidth: 40, height: 22, padding: "0 6px", borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--blue)", cursor: "pointer", fontFamily: "inherit", fontSize: 11, lineHeight: "20px" };
 
+export function replaceProductId(zone, oldId, newId) {
+  if (newId == null) return zone;
+  if (String(newId) === String(oldId)) return zone;
+  if ((zone.productIds || []).some((x) => String(x) === String(newId))) return zone;
+  const productIds = (zone.productIds || []).map((x) => (String(x) === String(oldId) ? newId : x));
+  const boxConfig = { ...(zone.boxConfig || {}) };
+  if (boxConfig[String(oldId)]) {
+    boxConfig[String(newId)] = boxConfig[String(oldId)];
+    delete boxConfig[String(oldId)];
+  }
+  return { ...zone, productIds, boxConfig };
+}
+
 export default function ZonePage({ sh }) {
   const { zones, setZones, products, pN, canE } = sh;
   const ed = canE("zones");

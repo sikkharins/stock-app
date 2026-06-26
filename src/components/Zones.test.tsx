@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import ZonePage from "./Zones.jsx";
+import ZonePage, { replaceProductId } from "./Zones.jsx";
 
 function Harness({ initialZones }: { initialZones: any[] }) {
   const [zones, setZones] = useState<any[]>(initialZones);
@@ -75,5 +75,29 @@ describe("ZonePage editor — ordered product rows", () => {
     expect(btn.textContent).toBe("กว้าง");       // -> wide
     await user.click(btn);
     expect(btn.textContent).toBe("ยาว");        // -> back to default (key cleared)
+  });
+});
+
+describe("replaceProductId", () => {
+  const zone = { id: "z1", productIds: [1, 2, 3], boxConfig: { 2: { cols: 3, layers: 5, orient: "wide" } } };
+
+  it("แทนที่ในตำแหน่งเดิม + ย้าย boxConfig ไป id ใหม่", () => {
+    const z = replaceProductId(zone, 2, 9);
+    expect(z.productIds).toEqual([1, 9, 3]);
+    expect(z.boxConfig).toEqual({ 9: { cols: 3, layers: 5, orient: "wide" } });
+  });
+
+  it("newId ซ้ำกับที่มีอยู่ในโซน -> คืนค่าเดิม", () => {
+    expect(replaceProductId(zone, 2, 3)).toBe(zone);
+  });
+
+  it("newId == oldId -> คืนค่าเดิม", () => {
+    expect(replaceProductId(zone, 2, 2)).toBe(zone);
+  });
+
+  it("id เดิมไม่มี boxConfig -> เปลี่ยนแค่ productIds", () => {
+    const z = replaceProductId(zone, 1, 7);
+    expect(z.productIds).toEqual([7, 2, 3]);
+    expect(z.boxConfig).toEqual({ 2: { cols: 3, layers: 5, orient: "wide" } });
   });
 });
