@@ -179,3 +179,16 @@ describe("buildWarehouseData — zone.heightM", () => {
     expect(Z2.find((z) => z.id === "z3").heightM).toBe(W2.heightM); // fallback
   });
 });
+
+describe("buildWarehouseData — boxConfig passthrough", () => {
+  test("carries boxConfig from the app zone into the scene zone", () => {
+    const z = [{ id: "z1", productIds: [1], boxConfig: { 1: { cols: 3, layers: 2 } } }];
+    const { ZONES } = build([product()], z, {});
+    expect(ZONES[0].boxConfig).toEqual({ 1: { cols: 3, layers: 2 } });
+  });
+
+  test("omits boxConfig when the zone has none", () => {
+    const { ZONES } = build([product()], [{ id: "z1", productIds: [1] }], {});
+    expect(ZONES[0].boxConfig).toBeUndefined();
+  });
+});
