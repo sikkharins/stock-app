@@ -691,6 +691,7 @@ export function createWarehouseScene(container, data, opts = {}) {
       st.frameMat.opacity = dim ? 0.25 : 1; st.frameMat.transparent = true;
       st.meshes.forEach((m) => {
         if (m.isSprite) { m.material.opacity = dim ? 0.18 : 1; return; }
+        if (m.userData.isEdge) { m.material.transparent = true; m.material.opacity = dim ? 0.08 : EDGE_OP; return; }
         if (m.material) { m.material.transparent = op < 1; m.material.opacity = op; }
       });
       st.label.material.opacity = dim ? 0.25 : 1;
