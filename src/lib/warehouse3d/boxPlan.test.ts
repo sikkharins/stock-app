@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -143,5 +143,27 @@ describe("orientBoxDims", () => {
   it("คง h เสมอ", () => {
     expect(orientBoxDims(d, "wide").h).toBe(1.2);
     expect(orientBoxDims(d, "long").h).toBe(1.2);
+  });
+});
+
+describe("mergeEdgePositions", () => {
+  // one segment template: (0,0,0)->(1,0,0)
+  const TPL = [0, 0, 0, 1, 0, 0];
+
+  it("centers ว่าง -> Float32Array ว่าง", () => {
+    const out = mergeEdgePositions(TPL, []);
+    expect(out).toBeInstanceOf(Float32Array);
+    expect(out.length).toBe(0);
+  });
+
+  it("วาง template ที่ทุก center พร้อมบวก offset", () => {
+    const out = mergeEdgePositions(TPL, [{ x: 10, y: 0, z: 0 }, { x: 0, y: 5, z: 2 }]);
+    expect(Array.from(out)).toEqual([10, 0, 0, 11, 0, 0, 0, 5, 2, 1, 5, 2]);
+  });
+
+  it("ความยาวผลลัพธ์ = tpl.length * จำนวน center", () => {
+    const tpl = new Array(72).fill(0); // 12 edges * 2 verts * 3
+    const out = mergeEdgePositions(tpl, [{ x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2 }]);
+    expect(out.length).toBe(72 * 3);
   });
 });

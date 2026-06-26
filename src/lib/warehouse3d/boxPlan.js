@@ -90,3 +90,21 @@ export function clampZoneHeight(h, warehouse, step = 0.5) {
   const v = Math.round((Number(h) || max) / step) * step;
   return Math.min(Math.max(v, step), max);
 }
+
+// Merge one box's edge-line template across many box centres (local space).
+//   tpl:     flat [x,y,z, x,y,z, ...] of the box-edge LineSegments (length = n*3)
+//   centers: [{ x, y, z }] one entry per box; each box = tpl translated by its centre
+// Returns a Float32Array suitable for a LineSegments "position" attribute.
+export function mergeEdgePositions(tpl, centers) {
+  const n = tpl.length;
+  const out = new Float32Array(n * centers.length);
+  let o = 0;
+  for (const c of centers) {
+    for (let i = 0; i < n; i += 3) {
+      out[o++] = tpl[i] + c.x;
+      out[o++] = tpl[i + 1] + c.y;
+      out[o++] = tpl[i + 2] + c.z;
+    }
+  }
+  return out;
+}
