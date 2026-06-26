@@ -5,6 +5,7 @@ memory `project_warehouse_3d.md` เป็น pointer ถาวร — ไฟล
 
 ## สถานะ (2026-06-22)
 - **ขึ้น production ครบทุกเฟส A→E2** บน `master` (ล่าสุด `a8da90d`), push แล้ว → Vercel auto-deploy
+- **(2026-06-27) เส้นขอบกล่อง (box-edges)** บน `master` (`0c48dad`), push/deploy แล้ว — กล่องทุกใบมีเส้นขอบ 12 เส้นสีเข้มโปร่งแสง (`#2a2018`/op 0.35) ให้เห็นแต่ละกล่อง/ชั้นที่ซ้อน อ่านความสูงได้; pile ตีกรอบ 1 อัน. spec/plan `2026-06-27-warehouse-3d-box-edges`
 - roadmap "ทำหมดเลย": **A** ลบ standalone · **B** กล่องจริงต่อ SKU + overflow + สีต่อ SKU · **C** CCTV live overlay · **D** แก้ตัวโซนใน 3D + บ้าน geometry · **E1** เพดานต่อโซน · **E2** touch/tablet — **เสร็จหมดแล้ว**
 - typecheck/eslint สะอาด · vitest ผ่าน (ยกเว้น `DeliveryPlanning > Pick List` ที่แดงจากงาน picklist ของ agent อื่น — **ไม่เกี่ยวกับ warehouse_3d**)
 - spec/plan ทุกเฟสอยู่ใน `docs/superpowers/specs/` และ `docs/superpowers/plans/` (ไฟล์ `2026-06-21-warehouse-3d-*`)
@@ -26,7 +27,7 @@ sh.products + sh.zones + sh.warehouseLayout            (App state, จาก Sup
         │  (กดเซฟ) onSaveLayout/onSaveCamera/onSaveZoneGeom → setWarehouseLayout(prev=>…) → autosave → Supabase
         ▲────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-ฟีเจอร์ใน scene (หลัง B–E2): กล่องจริงต่อ SKU (`planBoxes`/`productColor`, InstancedMesh) · overflow ซ้อนทะลุเพดาน + โซนแดง · pile fallback เมื่อ stock > `REP_THRESHOLD`(5000) · แผงเทียบ CCTV ("เทียบ CCTV") ดึงเฟรมสดผ่าน `snapshotUrl` ตาม `zone.presets` + drag/drop fallback · โหมด "✥ แก้โซน" ลากย้าย/กรอก w·l·h รีไซซ์ → `onSaveZoneGeom` · เพดานต่อโซน (`zone.heightM`) · touch (`controls.touches` ในโหมดแก้).
+ฟีเจอร์ใน scene (หลัง B–E2): กล่องจริงต่อ SKU (`planBoxes`/`productColor`, InstancedMesh) · overflow ซ้อนทะลุเพดาน + โซนแดง · pile fallback เมื่อ stock > `REP_THRESHOLD`(5000) · แผงเทียบ CCTV ("เทียบ CCTV") ดึงเฟรมสดผ่าน `snapshotUrl` ตาม `zone.presets` + drag/drop fallback · โหมด "✥ แก้โซน" ลากย้าย/กรอก w·l·h รีไซซ์ → `onSaveZoneGeom` · เพดานต่อโซน (`zone.heightM`) · touch (`controls.touches` ในโหมดแก้) · เส้นขอบกล่อง (`boxEdges` ใน scene.js + `mergeEdgePositions` ใน boxPlan.js, `LineSegments` merge ก้อนเดียวต่อ SKU เป็นลูก `pg`, `userData.isEdge` → dim ตามโซนใน `applyVisibility`, rebuild ที่ `pointerup` ตอนย้ายกล่องเดี่ยว).
 
 ลำดับความสำคัญ geometry แต่ละโซน (`buildWarehouseData`):
 **saved (`warehouse_layout.zones[id]`) > geometry ในตัว zone (seed/นำเข้า) > slot template ผังสเก็ตช์ > auto-place กริด**
@@ -44,7 +45,7 @@ sh.products + sh.zones + sh.warehouseLayout            (App state, จาก Sup
 | ไฟล์ | หน้าที่ |
 |---|---|
 | `src/utils/warehouse3d.js` (+test) | **bridge** — `buildWarehouseData` (ZONES พา origin/size/color/productIds/**presets/heightM**), `claudeDesignZones`, `designSlots`, `autoPlaceZones`, `mapProduct`, `DEFAULT_WAREHOUSE`, `DESIGN_ZONES` |
-| `src/lib/warehouse3d/boxPlan.js` (+test) | **pure helpers** (unit-test ได้) — `planBoxes` (packing+overflow แนวตั้ง), `productColor`/`PRODUCT_PALETTE` (สีต่อ SKU), `snapClampZoneRect` (footprint snap/clamp), `clampZoneHeight`, `REP_THRESHOLD`=5000 |
+| `src/lib/warehouse3d/boxPlan.js` (+test) | **pure helpers** (unit-test ได้) — `planBoxes` (packing+overflow แนวตั้ง), `productColor`/`PRODUCT_PALETTE` (สีต่อ SKU), `snapClampZoneRect` (footprint snap/clamp), `clampZoneHeight`, `REP_THRESHOLD`=5000, `mergeEdgePositions` (merge box-edge template ตาม centers → Float32Array สำหรับเส้นขอบกล่อง) |
 | `src/lib/warehouse3d/scene.js` | **เอนจิน 3D** `createWarehouseScene(container, DATA, {canEdit,onSaveLayout,onSaveCamera,onSaveZoneGeom,snapshotUrl})` → `{dispose}`. toolbar, การ์ดโซน, โหมดจัดเรียงกล่อง (✋), โหมดแก้โซน (✥), แผงเทียบ CCTV, มุมกล้อง, `ResizeObserver`, touch (`controls.touches`) |
 | `src/components/Warehouse3D.jsx` | **React wrapper** — สร้าง DATA, mount scene, ส่ง opts/callbacks (onSave*, `snapshotUrl`=`cctvSnapshotUrl(getRelayUrl(),…)`), persist `setWarehouseLayout`, คุม `rebuildKey` |
 | `src/utils/cameraCapture.ts` (+test) | relay กล้อง: `getRelayUrl`/`setRelayUrl`, `pickCaptureTargets`, **`cctvSnapshotUrl(base,token?,t?)`** (สร้าง URL `<img src>` ดึงเฟรม `/snapshot?preset=`) |
