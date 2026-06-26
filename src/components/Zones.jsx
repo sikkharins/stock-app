@@ -8,6 +8,7 @@ const blank = () => ({ id: Date.now(), name: "", note: "", productIds: [] });
 
 const numIB = { width: 46, boxSizing: "border-box", background: "var(--bg)", border: "1px solid var(--line2)", borderRadius: 6, padding: "4px 6px", fontSize: 12, color: "var(--text)", fontFamily: "inherit" };
 const arrowBtn = (disabled) => ({ width: 22, height: 22, borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: disabled ? "var(--line2)" : "var(--blue)", cursor: disabled ? "default" : "pointer", fontFamily: "inherit", fontSize: 14, lineHeight: "18px", padding: 0 });
+const orientBtn = { minWidth: 40, height: 22, padding: "0 6px", borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--blue)", cursor: "pointer", fontFamily: "inherit", fontSize: 11, lineHeight: "20px" };
 
 export default function ZonePage({ sh }) {
   const { zones, setZones, products, pN, canE } = sh;
@@ -63,6 +64,15 @@ export default function ZonePage({ sh }) {
     else delete cur[String(id)];
     return { ...z, boxConfig: cur };
   });
+  const toggleOrient = (id) => setEditing((z) => {
+    const cur = { ...(z.boxConfig || {}) };
+    const entry = { ...(cur[String(id)] || {}) };
+    if (entry.orient === "wide") delete entry.orient; // back to default "long"
+    else entry.orient = "wide";
+    if (Object.keys(entry).length) cur[String(id)] = entry;
+    else delete cur[String(id)];
+    return { ...z, boxConfig: cur };
+  });
 
   const save = () => {
     const z = { ...editing, name: (editing.name || "").trim() || "โซนใหม่" };
@@ -112,6 +122,7 @@ export default function ZonePage({ sh }) {
                     ชั้น
                     <input type="number" min="1" value={cfg.layers ?? ""} placeholder="auto" onChange={(e) => setBoxCfg(id, "layers", e.target.value)} style={numIB} />
                   </label>
+                  <button onClick={() => toggleOrient(id)} title="ด้านที่ขนานกำแพง" style={orientBtn}>{cfg.orient === "wide" ? "กว้าง" : "ยาว"}</button>
                   <button onClick={() => removeProduct(id)} title="ลบ" style={{ width: 20, height: 20, borderRadius: 10, border: "none", background: "var(--line2)", color: "var(--text)", cursor: "pointer", fontSize: 13, lineHeight: "20px", padding: 0, flexShrink: 0 }}>×</button>
                 </div>
               );

@@ -63,4 +63,17 @@ describe("ZonePage editor — ordered product rows", () => {
     await user.type(inputs[0], "3");
     expect(inputs[0].value).toBe("3");
   });
+
+  test("orientation toggle defaults to ยาว and flips to กว้าง", async () => {
+    const user = userEvent.setup();
+    render(<Harness initialZones={[{ id: "z1", name: "Z1", productIds: [1] }]} />);
+    await openEditor(user);
+
+    const btn = screen.getByTitle("ด้านที่ขนานกำแพง") as HTMLButtonElement;
+    expect(btn.textContent).toBe("ยาว");        // default long
+    await user.click(btn);
+    expect(btn.textContent).toBe("กว้าง");       // -> wide
+    await user.click(btn);
+    expect(btn.textContent).toBe("ยาว");        // -> back to default (key cleared)
+  });
 });
