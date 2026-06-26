@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -465,11 +465,11 @@ export function createWarehouseScene(container, data, opts = {}) {
     zone.productIds.forEach((pid) => {
       const p = productById[pid];
       if (!p) return;
-      const d = boxDims(p);
+      const cfg = zone.boxConfig && zone.boxConfig[pid] ? zone.boxConfig[pid] : null;
+      const d = orientBoxDims(boxDims(p), cfg && cfg.orient ? cfg.orient : "long");
       const volPer = volumeOf(p);
       st.volProducts += volPer * p.stock;
       const manual = zone.layout && zone.layout[pid] ? zone.layout[pid] : null;
-      const cfg = zone.boxConfig && zone.boxConfig[pid] ? zone.boxConfig[pid] : null;
       const pitchX = d.w + GAP, pitchZ = d.l + GAP;
       const plan = planBoxes(d, { innerW, innerL, ceilingH: zone.heightM }, {
         stock: p.stock, gap: GAP,
