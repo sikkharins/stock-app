@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -127,4 +127,21 @@ describe("clampZoneHeight", () => {
   it("clamp สูงสุด = เพดานโกดัง", () => { expect(clampZoneHeight(20, { heightM: 10 })).toBe(10); });
   it("clamp ต่ำสุด = step", () => { expect(clampZoneHeight(0.1, { heightM: 10 })).toBe(0.5); });
   it("ไม่มีค่า → fallback เพดานโกดัง", () => { expect(clampZoneHeight(undefined, { heightM: 10 })).toBe(10); });
+});
+
+describe("orientBoxDims", () => {
+  const d = { w: 0.4, l: 0.8, h: 1.2 };
+  it('"long" (default) วางยาวขนานกำแพง -> สลับ w/l', () => {
+    expect(orientBoxDims(d, "long")).toEqual({ w: 0.8, l: 0.4, h: 1.2 });
+  });
+  it("ไม่ระบุ orient -> default long (สลับ)", () => {
+    expect(orientBoxDims(d, undefined)).toEqual({ w: 0.8, l: 0.4, h: 1.2 });
+  });
+  it('"wide" -> คงเดิม (กว้างขนานกำแพง)', () => {
+    expect(orientBoxDims(d, "wide")).toEqual({ w: 0.4, l: 0.8, h: 1.2 });
+  });
+  it("คง h เสมอ", () => {
+    expect(orientBoxDims(d, "wide").h).toBe(1.2);
+    expect(orientBoxDims(d, "long").h).toBe(1.2);
+  });
 });

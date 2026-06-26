@@ -51,6 +51,14 @@ export function planBoxes(box, zone, opts = {}) {
   return { usePile: false, cols, rows, layers, perLayer, layersMax, footW, footL, overflow };
 }
 
+// Orient a box footprint relative to the wall (X = along the wall, Z = depth).
+//   "long"  (default): ยาว (l) runs along the wall  -> swap w/l
+//   "wide"           : กว้าง (w) runs along the wall -> unchanged
+export function orientBoxDims(d, orient) {
+  if (orient === "wide") return { w: d.w, l: d.l, h: d.h };
+  return { w: d.l, l: d.w, h: d.h };
+}
+
 // Distinct, readable swatch colours for per-SKU box tinting (blended with cardboard in the scene).
 export const PRODUCT_PALETTE = [
   "#d98b4a", "#e0c14a", "#7bbf5a", "#4aab9b", "#4a86d9",
