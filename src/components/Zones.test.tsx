@@ -76,6 +76,24 @@ describe("ZonePage editor — ordered product rows", () => {
     await user.click(btn);
     expect(btn.textContent).toBe("ยาว");        // -> back to default (key cleared)
   });
+
+  test("clicking a product name enters replace mode (extra picker shown, แถว/ชั้น hidden)", async () => {
+    const user = userEvent.setup();
+    render(<Harness initialZones={[{ id: "z1", name: "Z1", productIds: [1], boxConfig: { 1: { cols: 3 } } }]} />);
+    await openEditor(user);
+
+    const search = "ค้นหาสินค้า (ชื่อ/ยี่ห้อ/รหัส)...";
+    expect(screen.getAllByPlaceholderText("auto").length).toBe(2);   // แถว + ชั้น visible
+    expect(screen.getAllByPlaceholderText(search).length).toBe(1);   // only the bottom add picker
+
+    await user.click(screen.getByTitle("คลิกเพื่อเปลี่ยนสินค้า"));
+    expect(screen.getAllByPlaceholderText(search).length).toBe(2);   // inline replace picker added
+    expect(screen.queryAllByPlaceholderText("auto").length).toBe(0); // row controls hidden in replace mode
+
+    await user.click(screen.getByTitle("ยกเลิก"));
+    expect(screen.getAllByPlaceholderText("auto").length).toBe(2);   // restored
+    expect(screen.getAllByPlaceholderText(search).length).toBe(1);
+  });
 });
 
 describe("replaceProductId", () => {

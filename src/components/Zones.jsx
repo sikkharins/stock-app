@@ -9,6 +9,7 @@ const blank = () => ({ id: Date.now(), name: "", note: "", productIds: [] });
 const numIB = { width: 46, boxSizing: "border-box", background: "var(--bg)", border: "1px solid var(--line2)", borderRadius: 6, padding: "4px 6px", fontSize: 12, color: "var(--text)", fontFamily: "inherit" };
 const arrowBtn = (disabled) => ({ width: 22, height: 22, borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: disabled ? "var(--line2)" : "var(--blue)", cursor: disabled ? "default" : "pointer", fontFamily: "inherit", fontSize: 14, lineHeight: "18px", padding: 0 });
 const orientBtn = { minWidth: 40, height: 22, padding: "0 6px", borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--blue)", cursor: "pointer", fontFamily: "inherit", fontSize: 11, lineHeight: "20px" };
+const nameBtn = { flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, color: "var(--text)", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
 export function replaceProductId(zone, oldId, newId) {
   if (newId == null) return zone;
@@ -28,6 +29,7 @@ export default function ZonePage({ sh }) {
   const ed = canE("zones");
   const [editing, setEditing] = useState(null); // draft zone หรือ null
   const [pick, setPick] = useState(null);
+  const [replacing, setReplacing] = useState(null);
   const [camPresets, setCamPresets] = useState([]);
   const [presetErr, setPresetErr] = useState("");
 
@@ -46,9 +48,9 @@ export default function ZonePage({ sh }) {
     return { ...z, presets: has ? (z.presets || []).filter((x) => String(x.token) !== String(p.token)) : [...(z.presets || []), { token: p.token, name: p.name }] };
   });
 
-  const startAdd = () => { setEditing(blank()); setPick(null); };
-  const startEdit = (z) => { setEditing({ ...z, productIds: [...(z.productIds || [])] }); setPick(null); };
-  const cancel = () => { setEditing(null); setPick(null); };
+  const startAdd = () => { setEditing(blank()); setPick(null); setReplacing(null); };
+  const startEdit = (z) => { setEditing({ ...z, productIds: [...(z.productIds || [])] }); setPick(null); setReplacing(null); };
+  const cancel = () => { setEditing(null); setPick(null); setReplacing(null); };
 
   const addProduct = (id) => {
     if (id == null) return;
@@ -86,11 +88,20 @@ export default function ZonePage({ sh }) {
     else delete cur[String(id)];
     return { ...z, boxConfig: cur };
   });
+  const replaceProduct = (oldId, newId) => {
+    if (newId != null && String(newId) !== String(oldId)
+        && editing.productIds.some((x) => String(x) === String(newId))) {
+      window.alert("สินค้านี้อยู่ในโซนนี้แล้ว");
+      return; // keep the picker open so they can choose another
+    }
+    setEditing((z) => replaceProductId(z, oldId, newId));
+    setReplacing(null);
+  };
 
   const save = () => {
     const z = { ...editing, name: (editing.name || "").trim() || "โซนใหม่" };
     setZones((prev) => (prev.some((x) => x.id === z.id) ? prev.map((x) => (x.id === z.id ? z : x)) : [...prev, z]));
-    setEditing(null); setPick(null);
+    setEditing(null); setPick(null); setReplacing(null);
   };
   const del = (id) => { if (window.confirm("ลบโซนนี้?")) setZones((prev) => prev.filter((z) => z.id !== id)); };
 
@@ -126,17 +137,28 @@ export default function ZonePage({ sh }) {
                     <button onClick={() => moveProduct(idx, 1)} disabled={idx === editing.productIds.length - 1} title="เลื่อนขวา" style={arrowBtn(idx === editing.productIds.length - 1)}>›</button>
                   </div>
                   <span style={{ fontSize: 12, color: "var(--dim)", width: 24, textAlign: "center", flexShrink: 0 }}>#{idx + 1}</span>
-                  <span style={{ flex: 1, fontSize: 12.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(id)}</span>
-                  <label style={{ fontSize: 11, color: "var(--dim)", display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-                    แถว
-                    <input type="number" min="1" value={cfg.cols ?? ""} placeholder="auto" onChange={(e) => setBoxCfg(id, "cols", e.target.value)} style={numIB} />
-                  </label>
-                  <label style={{ fontSize: 11, color: "var(--dim)", display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-                    ชั้น
-                    <input type="number" min="1" value={cfg.layers ?? ""} placeholder="auto" onChange={(e) => setBoxCfg(id, "layers", e.target.value)} style={numIB} />
-                  </label>
-                  <button onClick={() => toggleOrient(id)} title="ด้านที่ขนานกำแพง" style={orientBtn}>{cfg.orient === "wide" ? "กว้าง" : "ยาว"}</button>
-                  <button onClick={() => removeProduct(id)} title="ลบ" style={{ width: 20, height: 20, borderRadius: 10, border: "none", background: "var(--line2)", color: "var(--text)", cursor: "pointer", fontSize: 13, lineHeight: "20px", padding: 0, flexShrink: 0 }}>×</button>
+                  {replacing === id ? (
+                    <>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <ProductPicker value={id} onChange={(nid) => replaceProduct(id, nid)} products={products} pName={pN} getAvail={(pid) => { const p = products.find((x) => String(x.id) === String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
+                      </div>
+                      <button onClick={() => setReplacing(null)} title="ยกเลิก" style={orientBtn}>ยกเลิก</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => setReplacing(id)} title="คลิกเพื่อเปลี่ยนสินค้า" style={nameBtn}>{nameOf(id)}</button>
+                      <label style={{ fontSize: 11, color: "var(--dim)", display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                        แถว
+                        <input type="number" min="1" value={cfg.cols ?? ""} placeholder="auto" onChange={(e) => setBoxCfg(id, "cols", e.target.value)} style={numIB} />
+                      </label>
+                      <label style={{ fontSize: 11, color: "var(--dim)", display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                        ชั้น
+                        <input type="number" min="1" value={cfg.layers ?? ""} placeholder="auto" onChange={(e) => setBoxCfg(id, "layers", e.target.value)} style={numIB} />
+                      </label>
+                      <button onClick={() => toggleOrient(id)} title="ด้านที่ขนานกำแพง" style={orientBtn}>{cfg.orient === "wide" ? "กว้าง" : "ยาว"}</button>
+                      <button onClick={() => removeProduct(id)} title="ลบ" style={{ width: 20, height: 20, borderRadius: 10, border: "none", background: "var(--line2)", color: "var(--text)", cursor: "pointer", fontSize: 13, lineHeight: "20px", padding: 0, flexShrink: 0 }}>×</button>
+                    </>
+                  )}
                 </div>
               );
             })}
