@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -401,6 +401,21 @@ export function createWarehouseScene(container, data, opts = {}) {
     return { w: s, l: s, h: s };
   }
 
+  const EDGE_COLOR = "#2a2018", EDGE_OP = 0.35;
+  // One merged LineSegments outlining every box at `centers` (local), each sized dim {w,l,h}.
+  function boxEdges(centers, dim) {
+    if (!centers.length) return null;
+    const tmpl = new THREE.EdgesGeometry(new THREE.BoxGeometry(dim.w, dim.h, dim.l)); // same param order as the solid box
+    const merged = mergeEdgePositions(tmpl.attributes.position.array, centers);
+    tmpl.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(merged, 3));
+    g.computeBoundingSphere();
+    const ls = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: EDGE_OP }));
+    ls.userData.isEdge = true;
+    return ls;
+  }
+
   const CARDBOARD = "#c79a5e";
   const GAP = 0.04;
   const MARGIN = 0.35;
@@ -499,6 +514,11 @@ export function createWarehouseScene(container, data, opts = {}) {
         pile.userData = { product: p, zoneId: zone.id, isPile: true, layersMax, volPer, pg, pid };
         pg.add(pile); st.meshes.push(pile); pickables.push(pile);
 
+        const pe = new THREE.LineSegments(new THREE.EdgesGeometry(pile.geometry),
+          new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: EDGE_OP }));
+        pe.position.copy(pile.position); pe.userData.isEdge = true;
+        pg.add(pe); st.meshes.push(pe);
+
         const pal = new THREE.Mesh(new THREE.BoxGeometry(side * 1.02, 0.12, side * 1.02), new THREE.MeshLambertMaterial({ color: "#8a6a3f" }));
         pal.position.set(side / 2, 0.06, side / 2); pal.userData.zonePart = true; pg.add(pal); st.meshes.push(pal);
 
@@ -510,11 +530,14 @@ export function createWarehouseScene(container, data, opts = {}) {
         const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(d.w, d.h, d.l),
           new THREE.MeshLambertMaterial({ color: mix(CARDBOARD, productColor(p.id), 0.55) }), p.stock);
         const perLayer = cols * rows;
+        const centers = [];
         for (let i = 0; i < p.stock; i++) {
           const layer = Math.floor(i / perLayer);
           const rem = i % perLayer;
           const r = Math.floor(rem / cols), cc = rem % cols;
-          dummy.position.set(cc * pitchX + d.w / 2, layer * d.h + d.h / 2 + 0.005, r * pitchZ + d.l / 2);
+          const px = cc * pitchX + d.w / 2, py = layer * d.h + d.h / 2 + 0.005, pz = r * pitchZ + d.l / 2;
+          centers.push({ x: px, y: py, z: pz });
+          dummy.position.set(px, py, pz);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           inst.setMatrixAt(i, dummy.matrix);
@@ -523,7 +546,9 @@ export function createWarehouseScene(container, data, opts = {}) {
         inst.userData = { product: p, zoneId: zone.id, isPile: false, layersMax, volPer, cols, rows, layersUsed, pg, pid };
         fw = footW; fl = footL;
         pg.add(inst); st.meshes.push(inst); pickables.push(inst);
-        st.productMeta[pid] = { product: p, zoneId: zone.id, isPile: false, layersMax, volPer, cols, rows, layersUsed, inst, dW: d.w, dL: d.l, dH: d.h, pitchX, pitchZ, perLayer };
+        const edges = boxEdges(centers, { w: d.w, l: d.l, h: d.h });
+        if (edges) { pg.add(edges); st.meshes.push(edges); }
+        st.productMeta[pid] = { product: p, zoneId: zone.id, isPile: false, layersMax, volPer, cols, rows, layersUsed, inst, dW: d.w, dL: d.l, dH: d.h, pitchX, pitchZ, perLayer, edges };
       }
 
       let bx, bz, rotDeg = 0;
