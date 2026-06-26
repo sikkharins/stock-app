@@ -469,9 +469,12 @@ export function createWarehouseScene(container, data, opts = {}) {
       const volPer = volumeOf(p);
       st.volProducts += volPer * p.stock;
       const manual = zone.layout && zone.layout[pid] ? zone.layout[pid] : null;
+      const cfg = zone.boxConfig && zone.boxConfig[pid] ? zone.boxConfig[pid] : null;
       const pitchX = d.w + GAP, pitchZ = d.l + GAP;
       const plan = planBoxes(d, { innerW, innerL, ceilingH: zone.heightM }, {
-        stock: p.stock, gap: GAP, manualCols: manual && manual.cols ? manual.cols : null,
+        stock: p.stock, gap: GAP,
+        manualCols: cfg && cfg.cols ? cfg.cols : null,
+        manualLayers: cfg && cfg.layers ? cfg.layers : null,
       });
       const { usePile, cols, rows, layersMax, footW, footL } = plan;
       const layersUsed = plan.layers; // uncapped -> stacks above ceiling when overflowing
