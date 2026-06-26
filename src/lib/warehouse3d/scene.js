@@ -949,6 +949,23 @@ export function createWarehouseScene(container, data, opts = {}) {
     u.inst.setMatrixAt(u.idx, dummy.matrix);
     u.inst.instanceMatrix.needsUpdate = true;
   }
+  function rebuildEdges(zoneId, pid) {
+    const st = zoneState[zoneId]; if (!st) return;
+    const meta = st.productMeta[pid]; if (!meta || !meta.edges || !meta.inst) return;
+    const pg = meta.pg; pg.updateMatrixWorld();
+    const units = meta.inst.userData.units || [];
+    const centers = units.map((u) => {
+      const lp = pg.worldToLocal(new THREE.Vector3(u.x, u.y, u.z));
+      return { x: lp.x, y: lp.y, z: lp.z };
+    });
+    pg.remove(meta.edges);
+    meta.edges.geometry.dispose();
+    meta.edges.material.dispose();
+    const idx = st.meshes.indexOf(meta.edges); if (idx >= 0) st.meshes.splice(idx, 1);
+    const edges = boxEdges(centers, { w: meta.dW, l: meta.dL, h: meta.dH });
+    if (edges) { pg.add(edges); st.meshes.push(edges); }
+    meta.edges = edges;
+  }
   function overlapXZ(ax, az, aw, al, bx, bz, bw, bl) {
     return Math.abs(ax - bx) < (aw + bw) / 2 - 1e-3 && Math.abs(az - bz) < (al + bl) / 2 - 1e-3;
   }
@@ -1007,7 +1024,10 @@ export function createWarehouseScene(container, data, opts = {}) {
       selInfo(selectedUD);
     }
   });
-  addWin("pointerup", () => { if (dragUnit || dragging) { dragUnit = null; dragging = null; renderer.domElement.style.cursor = ""; } });
+  addWin("pointerup", () => {
+    if (dragUnit) rebuildEdges(dragUnit.zoneId, dragUnit.pid);
+    if (dragUnit || dragging) { dragUnit = null; dragging = null; renderer.domElement.style.cursor = ""; }
+  });
 
   // ===== zone-edit mode: move/resize a zone footprint, save to warehouse_layout =====
   let zoneEditMode = false, zeId = null, zePending = null, zeDragging = false;
