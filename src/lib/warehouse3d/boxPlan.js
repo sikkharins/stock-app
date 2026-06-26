@@ -12,7 +12,7 @@ export const REP_THRESHOLD = 5000;
 // Footprint is always clamped to the zone, so any excess stacks UPWARD (overflow=true
 // when the stack rises past the ceiling) rather than spilling sideways.
 export function planBoxes(box, zone, opts = {}) {
-  const { stock = 0, gap = 0.04, repThreshold = REP_THRESHOLD, manualCols = null } = opts;
+  const { stock = 0, gap = 0.04, repThreshold = REP_THRESHOLD, manualCols = null, manualLayers = null } = opts;
   const layersMax = Math.max(1, Math.floor(zone.ceilingH / box.h));
 
   if (stock <= 0) {
@@ -25,19 +25,28 @@ export function planBoxes(box, zone, opts = {}) {
   const pitchX = box.w + gap, pitchZ = box.l + gap;
   const maxCols = Math.max(1, Math.floor(zone.innerW / pitchX));
   const maxRows = Math.max(1, Math.floor(zone.innerL / pitchZ));
-
   const itemsPerLayer = Math.ceil(stock / layersMax);
-  let cols = Math.max(1, Math.round(Math.sqrt(itemsPerLayer)));
-  cols = Math.min(cols, maxCols);
-  if (manualCols) cols = Math.min(Math.max(1, manualCols), maxCols);
 
-  let rows = Math.ceil(itemsPerLayer / cols);
-  rows = Math.min(rows, maxRows);
+  // cols (= แถว, boxes along the wall). Manual value honored exactly so the user's
+  // count is never silently changed; overflow below flags it if it exceeds the zone.
+  let cols;
+  if (manualCols) cols = Math.max(1, Math.floor(manualCols));
+  else cols = Math.min(Math.max(1, Math.round(Math.sqrt(itemsPerLayer))), maxCols);
+
+  // rows (= depth, away from the wall). manualLayers fixes ชั้น, so depth fills to fit
+  // stock; otherwise keep the original auto-rows behaviour.
+  let rows;
+  if (manualLayers) {
+    const L = Math.max(1, Math.floor(manualLayers));
+    rows = Math.max(1, Math.ceil(stock / (cols * L)));
+  } else {
+    rows = Math.min(Math.ceil(itemsPerLayer / cols), maxRows);
+  }
 
   const perLayer = cols * rows;
-  const layers = Math.ceil(stock / perLayer); // UNCAPPED -> may exceed layersMax = vertical overflow
+  const layers = Math.ceil(stock / perLayer); // actual layers placed (<= requested ชั้น)
   const footW = cols * pitchX, footL = rows * pitchZ;
-  const overflow = layers > layersMax;
+  const overflow = layers > layersMax || cols > maxCols || rows > maxRows;
 
   return { usePile: false, cols, rows, layers, perLayer, layersMax, footW, footL, overflow };
 }

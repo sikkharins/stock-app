@@ -43,6 +43,38 @@ describe("planBoxes", () => {
     expect(p.cols).toBe(3);
   });
 
+  it("manualCols + manualLayers -> แถว/ชั้น คงที่ ลึกเติมอัตโนมัติให้จุครบ", () => {
+    // stock 100, แถว(cols)=5, ชั้น(layers)=2 -> depth rows = ceil(100/(5*2)) = 10
+    const p = planBoxes(BOX, ZONE, { stock: 100, manualCols: 5, manualLayers: 2 });
+    expect(p.cols).toBe(5);
+    expect(p.rows).toBe(10);
+    expect(p.layers).toBe(2);
+    expect(p.cols * p.rows * p.layers).toBeGreaterThanOrEqual(100);
+  });
+
+  it("ชั้น มากกว่าที่ stock เติมได้ -> layers จริงน้อยกว่าที่ขอ (ไม่พัง)", () => {
+    // stock 4, แถว 3, ชั้น 3 -> depth = ceil(4/9)=1, perLayer=3, layers actual = ceil(4/3)=2
+    const p = planBoxes(BOX, ZONE, { stock: 4, manualCols: 3, manualLayers: 3 });
+    expect(p.cols).toBe(3);
+    expect(p.rows).toBe(1);
+    expect(p.layers).toBe(2);
+  });
+
+  it("manualLayers อย่างเดียว (ไม่ใส่แถว) -> cols auto, ชั้น เป็นเพดาน", () => {
+    const p = planBoxes(BOX, ZONE, { stock: 100, manualLayers: 4 });
+    expect(p.layers).toBeLessThanOrEqual(4);
+    expect(p.cols).toBeGreaterThanOrEqual(1);
+    expect(p.cols * p.rows * p.layers).toBeGreaterThanOrEqual(100);
+  });
+
+  it("แถว/ชั้น เกินขนาดโซน -> overflow true แต่วางครบ (honored exactly)", () => {
+    const smallZone = { innerW: 1, innerL: 1, ceilingH: 1 };
+    const p = planBoxes(BOX, smallZone, { stock: 50, manualCols: 10, manualLayers: 5 });
+    expect(p.cols).toBe(10); // honored, not clamped to zone width
+    expect(p.overflow).toBe(true);
+    expect(p.cols * p.rows * p.layers).toBeGreaterThanOrEqual(50);
+  });
+
   it("REP_THRESHOLD ถูกดันขึ้นเป็น 5000", () => {
     expect(REP_THRESHOLD).toBe(5000);
   });
