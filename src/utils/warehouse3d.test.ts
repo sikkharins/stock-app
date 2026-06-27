@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildWarehouseData, autoPlaceZones, DEFAULT_WAREHOUSE } from "./warehouse3d.js";
+import { buildWarehouseData, autoPlaceZones, DEFAULT_WAREHOUSE, clearZoneLayout } from "./warehouse3d.js";
 
 // The util is plain JS producing dynamic shapes; treat results loosely in tests.
 type WD = { WAREHOUSE: any; ZONES: any[]; PRODUCTS: any[] };
@@ -203,5 +203,26 @@ describe("buildWarehouseData — arrangeRot passthrough", () => {
   test("omits arrangeRot when the zone has none", () => {
     const { ZONES } = build([product()], [{ id: "z1", productIds: [1] }], {});
     expect(ZONES[0].arrangeRot).toBeUndefined();
+  });
+});
+
+describe("clearZoneLayout", () => {
+  test("ลบ layout ของโซน เก็บ key อื่น (camera) ไว้", () => {
+    const wl = { zones: { z1: { layout: { 1: { x: 1, z: 2 } }, camera: { fov: 55 } }, z2: { layout: {} } } };
+    const out = clearZoneLayout(wl, "z1");
+    expect(out.zones.z1).toEqual({ camera: { fov: 55 } });
+    expect(out.zones.z2).toEqual({ layout: {} }); // z2 ไม่ถูกแตะ
+  });
+  test("entry ที่มีแค่ layout -> ลบทั้ง entry", () => {
+    const wl = { zones: { z1: { layout: { 1: { x: 1 } } } } };
+    expect(clearZoneLayout(wl, "z1").zones.z1).toBeUndefined();
+  });
+  test("ไม่มี layout -> คืน reference เดิม", () => {
+    const wl = { zones: { z1: { camera: { fov: 55 } } } };
+    expect(clearZoneLayout(wl, "z1")).toBe(wl);
+  });
+  test("ไม่มี entry โซน -> คืน reference เดิม", () => {
+    const wl = { zones: {} };
+    expect(clearZoneLayout(wl, "zX")).toBe(wl);
   });
 });

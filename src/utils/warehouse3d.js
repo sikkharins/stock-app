@@ -60,6 +60,21 @@ export function claudeDesignZones() {
   }));
 }
 
+// Remove a zone's manual drag layout from warehouse_layout, returning a new object.
+// Returns the SAME reference when there is nothing to clear (so React can skip updates).
+export function clearZoneLayout(warehouseLayout, zoneId) {
+  const wl = warehouseLayout || {};
+  const zones = wl.zones || {};
+  const entry = zones[zoneId];
+  if (!entry || !entry.layout) return warehouseLayout;
+  const newEntry = { ...entry };
+  delete newEntry.layout;
+  const newZones = { ...zones };
+  if (Object.keys(newEntry).length) newZones[zoneId] = newEntry;
+  else delete newZones[zoneId];
+  return { ...wl, zones: newZones };
+}
+
 // Lay out the given zones in a grid that fits inside the warehouse footprint.
 // Returns a map zoneId -> { origin:{x,z}, size:{w,l} } (metres).
 export function autoPlaceZones(zones, warehouse) {
