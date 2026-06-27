@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useCallback } from "react";
-import { buildWarehouseData, claudeDesignZones } from "../utils/warehouse3d.js";
+import { useEffect, useMemo, useRef, useCallback, useState } from "react";
+import { buildWarehouseData, claudeDesignZones, clearZoneLayout } from "../utils/warehouse3d.js";
 import { createWarehouseScene } from "../lib/warehouse3d/scene.js";
 import { getRelayUrl, cctvSnapshotUrl } from "../utils/cameraCapture.ts";
 
@@ -11,6 +11,7 @@ export default function Warehouse3DPage({ sh }) {
   const canEdit = !!(canE && canE("warehouse_3d"));
 
   const containerRef = useRef(null);
+  const [rebuildNonce, setRebuildNonce] = useState(0);
 
   // Rebuild the scene only when the catalog / zone membership / warehouse dims change —
   // not when per-zone camera or layout presets are saved.
@@ -22,7 +23,8 @@ export default function Warehouse3DPage({ sh }) {
     g: (warehouseLayout && warehouseLayout.zones)
       ? Object.entries(warehouseLayout.zones).map(([id, z]) => [id, z && z.origin, z && z.size, z && z.heightM])
       : null,
-  }), [products, zones, warehouseLayout]);
+    n: rebuildNonce,
+  }), [products, zones, warehouseLayout, rebuildNonce]);
 
   // Persist with functional updates (no stale closure, stable identity).
   const onSaveLayout = useCallback((layoutByZone) => {
@@ -35,6 +37,11 @@ export default function Warehouse3DPage({ sh }) {
       next.zones = zonesL;
       return next;
     });
+  }, [setWarehouseLayout]);
+
+  const onClearLayout = useCallback((zoneId) => {
+    setWarehouseLayout((prev) => clearZoneLayout(prev, zoneId));
+    setRebuildNonce((n) => n + 1);
   }, [setWarehouseLayout]);
 
   const onSaveCamera = useCallback((zoneId, camera) => {
@@ -68,6 +75,7 @@ export default function Warehouse3DPage({ sh }) {
     const scene = createWarehouseScene(el, data, {
       canEdit,
       onSaveLayout: canEdit ? onSaveLayout : null,
+      onClearLayout: canEdit ? onClearLayout : null,
       onSaveCamera: canEdit ? onSaveCamera : null,
       onSaveZoneGeom: canEdit ? onSaveZoneGeom : null,
       // closure reads the latest relay URL on every click + cache-busts with Date.now()
