@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildWarehouseData, autoPlaceZones, DEFAULT_WAREHOUSE, clearZoneLayout } from "./warehouse3d.js";
+import { buildWarehouseData, autoPlaceZones, DEFAULT_WAREHOUSE, clearZoneLayout, applyZoneLayout, mergeZoneEntry } from "./warehouse3d.js";
 
 // The util is plain JS producing dynamic shapes; treat results loosely in tests.
 type WD = { WAREHOUSE: any; ZONES: any[]; PRODUCTS: any[] };
@@ -224,5 +224,32 @@ describe("clearZoneLayout", () => {
   test("ไม่มี entry โซน -> คืน reference เดิม", () => {
     const wl = { zones: {} };
     expect(clearZoneLayout(wl, "zX")).toBe(wl);
+  });
+});
+
+describe("applyZoneLayout", () => {
+  test("merge layout เข้าโซน เก็บ key อื่น + โซนอื่น", () => {
+    const wl = { zones: { z1: { camera: { fov: 55 } } }, warehouse: { widthM: 54 } };
+    const out = applyZoneLayout(wl, { z1: { 1: { x: 1, z: 2 } }, z2: { 3: { x: 0, z: 0 } } });
+    expect(out.zones.z1).toEqual({ camera: { fov: 55 }, layout: { 1: { x: 1, z: 2 } } });
+    expect(out.zones.z2).toEqual({ layout: { 3: { x: 0, z: 0 } } });
+    expect(out.warehouse).toEqual({ widthM: 54 });
+  });
+  test("warehouseLayout ว่าง -> สร้าง zones", () => {
+    expect(applyZoneLayout(undefined, { z1: { 1: { x: 1 } } }))
+      .toEqual({ zones: { z1: { layout: { 1: { x: 1 } } } } });
+  });
+});
+
+describe("mergeZoneEntry", () => {
+  test("patch เข้าโซน เก็บ key อื่น + โซนอื่นไม่ถูกแตะ", () => {
+    const wl = { zones: { z1: { layout: { 1: {} } }, z2: { camera: {} } } };
+    const out = mergeZoneEntry(wl, "z1", { camera: { fov: 60 } });
+    expect(out.zones.z1).toEqual({ layout: { 1: {} }, camera: { fov: 60 } });
+    expect(out.zones.z2).toEqual({ camera: {} });
+  });
+  test("warehouseLayout ว่าง -> สร้าง entry", () => {
+    expect(mergeZoneEntry(undefined, "z1", { origin: { x: 1, z: 2 } }))
+      .toEqual({ zones: { z1: { origin: { x: 1, z: 2 } } } });
   });
 });

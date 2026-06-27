@@ -75,6 +75,26 @@ export function clearZoneLayout(warehouseLayout, zoneId) {
   return { ...wl, zones: newZones };
 }
 
+// Merge per-zone drag layouts into warehouse_layout (used by the arrange-save). Pure.
+export function applyZoneLayout(warehouseLayout, layoutByZone) {
+  const next = { ...(warehouseLayout || {}) };
+  const zones = { ...(next.zones || {}) };
+  for (const zid of Object.keys(layoutByZone || {})) {
+    zones[zid] = { ...(zones[zid] || {}), layout: layoutByZone[zid] };
+  }
+  next.zones = zones;
+  return next;
+}
+
+// Merge a patch (e.g. {camera} or {origin,size,heightM}) into one zone's entry. Pure.
+export function mergeZoneEntry(warehouseLayout, zoneId, patch) {
+  const next = { ...(warehouseLayout || {}) };
+  const zones = { ...(next.zones || {}) };
+  zones[zoneId] = { ...(zones[zoneId] || {}), ...patch };
+  next.zones = zones;
+  return next;
+}
+
 // Lay out the given zones in a grid that fits inside the warehouse footprint.
 // Returns a map zoneId -> { origin:{x,z}, size:{w,l} } (metres).
 export function autoPlaceZones(zones, warehouse) {
