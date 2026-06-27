@@ -77,6 +77,28 @@ describe("ZonePage editor — ordered product rows", () => {
     expect(btn.textContent).toBe("ยาว");        // -> back to default (key cleared)
   });
 
+  test("'+ ช่องว่าง' adds a gap row (10cm/แถว, excluded from count)", async () => {
+    const user = userEvent.setup();
+    render(<Harness initialZones={[{ id: "z1", name: "Z1", productIds: [1] }]} />);
+    await openEditor(user);
+
+    expect(screen.getByText("สินค้าที่ควรอยู่ในโซนนี้ (1)")).toBeTruthy();
+    await user.click(screen.getByText("+ ช่องว่าง"));
+
+    expect(screen.getByText("ช่องว่าง")).toBeTruthy();
+    expect(screen.getByText("= 10 ซม.")).toBeTruthy();                  // default 1 แถว
+    expect(screen.getByText("สินค้าที่ควรอยู่ในโซนนี้ (1)")).toBeTruthy(); // gap not counted
+
+    const gapInput = screen.getByPlaceholderText("1") as HTMLInputElement; // gap แถว input
+    await user.clear(gapInput);
+    await user.type(gapInput, "3");
+    expect(screen.getByText("= 30 ซม.")).toBeTruthy();
+
+    const removes = screen.getAllByTitle("ลบ");
+    await user.click(removes[removes.length - 1]);                       // gap is the last row
+    expect(screen.queryByText("ช่องว่าง")).toBeNull();
+  });
+
   test("clicking a product name enters replace mode (extra picker shown, แถว/ชั้น hidden)", async () => {
     const user = userEvent.setup();
     render(<Harness initialZones={[{ id: "z1", name: "Z1", productIds: [1], boxConfig: { 1: { cols: 3 } } }]} />);

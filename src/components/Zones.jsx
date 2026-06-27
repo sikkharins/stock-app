@@ -3,6 +3,7 @@ import { IB } from "../utils/constants.js";
 import Btn from "./ui/Btn.jsx";
 import ProductPicker from "./ui/ProductPicker.jsx";
 import { getRelayUrl } from "../utils/cameraCapture.ts";
+import { isGapId } from "../lib/warehouse3d/boxPlan.js";
 
 const blank = () => ({ id: Date.now(), name: "", note: "", productIds: [] });
 
@@ -57,6 +58,10 @@ export default function ZonePage({ sh }) {
     setEditing((z) => (z.productIds.some((x) => String(x) === String(id)) ? z : { ...z, productIds: [...z.productIds, id] }));
     setPick(null);
   };
+  const addGap = () => setEditing((z) => {
+    const gid = "gap-" + Date.now() + "-" + Math.floor(Math.random() * 1e6);
+    return { ...z, productIds: [...z.productIds, gid], boxConfig: { ...(z.boxConfig || {}), [gid]: { cols: 1 } } };
+  });
   const removeProduct = (id) => setEditing((z) => {
     const boxConfig = { ...(z.boxConfig || {}) };
     delete boxConfig[String(id)];
@@ -125,7 +130,7 @@ export default function ZonePage({ sh }) {
             <label style={{ fontSize: 12, color: "var(--dim)" }}>หมายเหตุ (ไม่บังคับ)</label>
             <input value={editing.note || ""} onChange={(e) => setEditing((z) => ({ ...z, note: e.target.value }))} style={{ ...IB, marginTop: 4 }} />
           </div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>สินค้าที่ควรอยู่ในโซนนี้ ({editing.productIds.length})</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>สินค้าที่ควรอยู่ในโซนนี้ ({editing.productIds.filter((id) => !isGapId(id)).length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
             {editing.productIds.length === 0 && <span style={{ fontSize: 12.5, color: "var(--dim)" }}>ยังไม่ได้ผูกสินค้า</span>}
             {editing.productIds.map((id, idx) => {
@@ -137,7 +142,17 @@ export default function ZonePage({ sh }) {
                     <button onClick={() => moveProduct(idx, 1)} disabled={idx === editing.productIds.length - 1} title="เลื่อนขวา" style={arrowBtn(idx === editing.productIds.length - 1)}>›</button>
                   </div>
                   <span style={{ fontSize: 12, color: "var(--dim)", width: 24, textAlign: "center", flexShrink: 0 }}>#{idx + 1}</span>
-                  {replacing === id ? (
+                  {isGapId(id) ? (
+                    <>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--dim)" }}>ช่องว่าง</span>
+                      <label style={{ fontSize: 11, color: "var(--dim)", display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                        แถว
+                        <input type="number" min="1" value={cfg.cols ?? ""} placeholder="1" onChange={(e) => setBoxCfg(id, "cols", e.target.value)} style={numIB} />
+                      </label>
+                      <span style={{ fontSize: 11, color: "var(--dim)", flexShrink: 0 }}>= {(cfg.cols || 1) * 10} ซม.</span>
+                      <button onClick={() => removeProduct(id)} title="ลบ" style={{ width: 20, height: 20, borderRadius: 10, border: "none", background: "var(--line2)", color: "var(--text)", cursor: "pointer", fontSize: 13, lineHeight: "20px", padding: 0, flexShrink: 0 }}>×</button>
+                    </>
+                  ) : replacing === id ? (
                     <>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <ProductPicker value={id} onChange={(nid) => replaceProduct(id, nid)} products={products} pName={pN} getAvail={(pid) => { const p = products.find((x) => String(x.id) === String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
@@ -164,6 +179,7 @@ export default function ZonePage({ sh }) {
             })}
           </div>
           <ProductPicker value={pick} onChange={addProduct} products={products} pName={pN} getAvail={(pid) => { const p = products.find((x) => String(x.id) === String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
+          <button onClick={addGap} style={{ marginTop: 8, fontSize: 12, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--blue)", cursor: "pointer", fontFamily: "inherit" }}>+ ช่องว่าง</button>
           <div style={{ fontSize: 13, fontWeight: 600, margin: "14px 0 6px" }}>preset กล้อง (โซนนี้) ({(editing.presets || []).length})</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
             {(editing.presets || []).length === 0 && <span style={{ fontSize: 12.5, color: "var(--dim)" }}>ยังไม่ผูก preset กล้อง</span>}
