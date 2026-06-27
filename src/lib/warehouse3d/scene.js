@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint, pickDragKind } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -152,8 +152,9 @@ const TEMPLATE = `
     <div id="hint">เลือกโซนทางขวา แล้วกด “มุมกล้องโซนนี้” เพื่อเทียบกับภาพ CCTV</div>
     <div id="movePanel" class="panel">
       <div class="mp-title">✋ โหมดจัดเรียง</div>
-      <div class="mp-hint">ลากกล่อง <b>ทีละชิ้น</b> ด้วยคลิกซ้าย — ชิ้นชนิดเดียวกันจะดูดเข้ากริด และวางทับสินค้าคนละชนิดไม่ได้ · คลิกขวาค้าง = หมุนกล้อง · ล้อ = ซูม</div>
+      <div class="mp-hint">เลือก <b>ทั้งกอง</b> เพื่อลาก/หมุนสินค้าทั้งชนิด หรือ <b>ทีละกล่อง</b> เพื่อขยับกล่องเดี่ยว · คลิกขวาค้าง = หมุนกล้อง · ล้อ = ซูม</div>
       <div id="mpSel" class="mp-sel">— ยังไม่ได้เลือกสินค้า —</div>
+      <div class="mp-rot"><button class="tbtn" id="mpSelMode">เลือก: ทั้งกอง</button></div>
       <div class="mp-rot">
         <button class="tbtn" id="mpRotL">⟲ −15°</button>
         <button class="tbtn" id="mpRotR">+15° ⟳</button>
@@ -915,7 +916,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   gid("ppClose").addEventListener("click", hidePopup);
 
   /* ===== arrange mode: drag products + rotate + save layout ===== */
-  let moveMode = false, dragging = null, selectedUD = null, dragUnit = null, selUnit = null, selKind = null;
+  let moveMode = false, dragging = null, selectedUD = null, dragUnit = null, selUnit = null, selKind = null, selectWhole = true;
   const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const dragOff = new THREE.Vector3(), hitPt = new THREE.Vector3();
   const btnMove = gid("btnMove");
@@ -1027,7 +1028,8 @@ export function createWarehouseScene(container, data, opts = {}) {
     const hits = raycaster.intersectObjects(pickables.filter((m) => m.visible), false);
     if (!hits.length) { selectedUD = null; selUnit = null; dragUnit = null; dragging = null; selMarker.visible = false; selInfo(null); return; }
     const h0 = hits[0], obj = h0.object;
-    if (obj.isInstancedMesh && h0.instanceId != null && obj.userData.units) {
+    const kind = pickDragKind(obj.isInstancedMesh, h0.instanceId, !!obj.userData.units, selectWhole);
+    if (kind === "unit") {
       dragUnit = obj.userData.units[h0.instanceId];
       dragging = null; selUnit = dragUnit; selKind = "unit"; selectedUD = obj.userData;
       const fp = floorAt(e); if (fp) dragOff.set(fp.x - dragUnit.x, 0, fp.z - dragUnit.z);
@@ -1180,6 +1182,11 @@ export function createWarehouseScene(container, data, opts = {}) {
   if (canEdit) {
     gid("mpRotL").addEventListener("click", () => rotateSel(-15));
     gid("mpRotR").addEventListener("click", () => rotateSel(15));
+    const mpSelMode = gid("mpSelMode");
+    mpSelMode.addEventListener("click", () => {
+      selectWhole = !selectWhole;
+      mpSelMode.textContent = selectWhole ? "เลือก: ทั้งกอง" : "เลือก: ทีละกล่อง";
+    });
     gid("mpResetPos").addEventListener("click", () => {
       if (selKind === "unit" && selUnit) {
         const h = selUnit.home; selUnit.x = h.x; selUnit.y = h.y; selUnit.z = h.z;
