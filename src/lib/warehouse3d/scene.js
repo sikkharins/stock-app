@@ -198,6 +198,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   const { WAREHOUSE, ZONES, PRODUCTS } = data;
   const canEdit = opts.canEdit !== false;
   const onSaveLayout = typeof opts.onSaveLayout === "function" ? opts.onSaveLayout : null;
+  const onClearLayout = typeof opts.onClearLayout === "function" ? opts.onClearLayout : null;
   const onSaveCamera = typeof opts.onSaveCamera === "function" ? opts.onSaveCamera : null;
   const snapshotUrl = typeof opts.snapshotUrl === "function" ? opts.snapshotUrl : null;
   const onSaveZoneGeom = typeof opts.onSaveZoneGeom === "function" ? opts.onSaveZoneGeom : null;
@@ -666,6 +667,8 @@ export function createWarehouseScene(container, data, opts = {}) {
 
     const camBtns = `<button class="zr-cam zr-go">📷 มุมกล้องโซนนี้</button>` +
       (canEdit && onSaveCamera ? `<button class="zr-cam zr-save">💾 บันทึกมุมนี้</button>` : ``);
+    const autoBtn = (canEdit && onClearLayout && zone.layout)
+      ? `<button class="zr-cam zr-auto">↺ จัดอัตโนมัติ</button>` : ``;
 
     const row = document.createElement("div");
     row.className = "zone-row" + (st.overflow ? " overflow" : "");
@@ -678,7 +681,7 @@ export function createWarehouseScene(container, data, opts = {}) {
       <div class="zr-note">${zone.note || ""}</div>
       <div class="zr-meta"><span>ความเต็มพื้นที่</span><span>${st.fill.toFixed(1)}%</span></div>
       <div class="fillbar"><i style="width:${Math.min(100, st.fill)}%; background:${fillColor(st.fill)}"></i></div>
-      <div class="zr-actions">${camBtns}</div>
+      <div class="zr-actions">${camBtns}${autoBtn}</div>
       <div class="zr-warn">⚠ สินค้าล้นเกินพื้นที่โซน</div>
       <div class="zr-products">
         <div class="zp-head">สินค้า ${realCount} รายการ · รวม ${totalUnits.toLocaleString()} ชิ้น</div>
@@ -692,6 +695,11 @@ export function createWarehouseScene(container, data, opts = {}) {
       onSaveCamera(zone.id, captureCamera());
       saveBtn.textContent = "✓ บันทึกแล้ว";
       setT(() => { saveBtn.textContent = "💾 บันทึกมุมนี้"; }, 1600);
+    });
+    const autoBtn2 = row.querySelector(".zr-auto");
+    if (autoBtn2) autoBtn2.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (window.confirm("ล้างตำแหน่งที่ลากเองของโซนนี้ แล้วกลับไปจัดอัตโนมัติ?")) onClearLayout(zone.id);
     });
     row.querySelectorAll(".zp-item").forEach((it) => {
       it.addEventListener("click", (e) => {
