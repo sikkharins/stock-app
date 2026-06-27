@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint, pickDragKind } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -250,5 +250,23 @@ describe("normArrangeRot / arrangeRotY / arrangePoint", () => {
     expect(arrangePoint(180, 2, 3, 6, 8)).toEqual({ x: 4, z: 5 });
     expect(arrangePoint(270, 2, 3, 6, 8)).toEqual({ x: 3, z: 6 });
     expect(arrangePoint(270, 0, 0, 6, 8)).toEqual({ x: 0, z: 8 });
+  });
+});
+
+describe("pickDragKind", () => {
+  it("instanced + instanceId + units + ทีละกล่อง -> unit", () => {
+    expect(pickDragKind(true, 3, true, false)).toBe("unit");
+    expect(pickDragKind(true, 0, true, false)).toBe("unit"); // instanceId 0 ใช้ได้
+  });
+  it("instanced + ทั้งกอง -> block", () => {
+    expect(pickDragKind(true, 3, true, true)).toBe("block");
+  });
+  it("pile (ไม่ instanced) -> block เสมอ", () => {
+    expect(pickDragKind(false, null, false, false)).toBe("block");
+    expect(pickDragKind(false, null, false, true)).toBe("block");
+  });
+  it("instanced แต่ไม่มี instanceId/units -> block", () => {
+    expect(pickDragKind(true, null, true, false)).toBe("block");
+    expect(pickDragKind(true, 0, false, false)).toBe("block");
   });
 });

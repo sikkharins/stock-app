@@ -108,6 +108,14 @@ export function arrangePoint(R, px, pz, innerW, innerL) {
   }
 }
 
+// Decide whether a move-mode click grabs one box ("unit") or the whole group ("block").
+// Only an instanced product with a real instanceId + per-unit data can be a unit, and
+// only when the user is NOT in whole-stack mode.
+export function pickDragKind(isInstanced, instanceId, hasUnits, selectWhole) {
+  if (isInstanced && instanceId != null && hasUnits && !selectWhole) return "unit";
+  return "block";
+}
+
 // Distinct, readable swatch colours for per-SKU box tinting (blended with cardboard in the scene).
 export const PRODUCT_PALETTE = [
   "#d98b4a", "#e0c14a", "#7bbf5a", "#4aab9b", "#4a86d9",
