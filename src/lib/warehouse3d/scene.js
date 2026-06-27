@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -475,26 +475,29 @@ export function createWarehouseScene(container, data, opts = {}) {
 
     let curX = ox + MARGIN, curZ = oz + MARGIN, bandDepth = 0;
     const innerXMax = ox + w - MARGIN;
+    const innerZMax = oz + l - MARGIN;
     const innerW = w - 2 * MARGIN, innerL = l - 2 * MARGIN;
+    const flowZ = l > w; // flow products/gaps along the longer side of the zone
+    const bounds = { ox, oz, innerXMax, innerZMax, margin: MARGIN, gap: GAP };
 
     zone.productIds.forEach((pid) => {
       if (isGapId(pid)) {
         const gcfg = zone.boxConfig && zone.boxConfig[pid] ? zone.boxConfig[pid] : null;
         const gw = gapWidthM(gcfg);
-        if (curX + gw > innerXMax) { curX = ox + MARGIN; curZ += bandDepth + GAP; bandDepth = 0; }
-        const gd = Math.min(innerL, 0.6); // nominal depth of the floor marker
-        const gx = curX, gz = curZ;
-        const gm = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd),
+        const gd = Math.min(flowZ ? innerW : innerL, 0.6); // marker thickness across the flow
+        const fw = flowZ ? gd : gw; // X extent
+        const fl = flowZ ? gw : gd; // Z extent
+        const step = placeInBand({ curX, curZ, bandDepth }, { fw, fl, advance: 0 }, bounds, flowZ);
+        curX = step.curX; curZ = step.curZ; bandDepth = step.bandDepth;
+        const gm = new THREE.Mesh(new THREE.PlaneGeometry(fw, fl),
           new THREE.MeshBasicMaterial({ color: "#9aa3af", transparent: true, opacity: 0.14, depthWrite: false }));
         gm.rotation.x = -Math.PI / 2;
-        gm.position.set(gx + gw / 2, 0.03, gz + gd / 2);
+        gm.position.set(step.bx + fw / 2, 0.03, step.bz + fl / 2);
         gm.userData.zonePart = true; group.add(gm); st.meshes.push(gm);
-        const go = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(gw, gd)),
+        const go = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(fw, fl)),
           new THREE.LineBasicMaterial({ color: "#9aa3af", transparent: true, opacity: 0.5 }));
         go.rotation.x = -Math.PI / 2; go.position.copy(gm.position);
         go.userData.zonePart = true; group.add(go); st.meshes.push(go);
-        curX += gw; // gap reserves exactly its width (no extra inter-item GAP)
-        bandDepth = Math.max(bandDepth, gd);
         return;
       }
       const p = productById[pid];
@@ -576,10 +579,9 @@ export function createWarehouseScene(container, data, opts = {}) {
         bz = oz + (manual.z ?? 0);
         rotDeg = manual.rot ?? 0;
       } else {
-        if (curX + fw > innerXMax) { curX = ox + MARGIN; curZ += bandDepth + GAP; bandDepth = 0; }
-        bx = curX; bz = curZ;
-        curX += fw + GAP * 4;
-        bandDepth = Math.max(bandDepth, fl);
+        const step = placeInBand({ curX, curZ, bandDepth }, { fw, fl, advance: GAP * 4 }, bounds, flowZ);
+        bx = step.bx; bz = step.bz;
+        curX = step.curX; curZ = step.curZ; bandDepth = step.bandDepth;
       }
       pg.position.set(bx, 0, bz);
       pg.rotation.y = -rotDeg * Math.PI / 180;
