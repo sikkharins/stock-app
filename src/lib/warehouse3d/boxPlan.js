@@ -70,6 +70,23 @@ export function gapWidthM(cfg) {
   return cols * 0.10;
 }
 
+// Place one item along the flow axis inside a zone, wrapping into bands. Pure.
+//   cur:    { curX, curZ, bandDepth }   current cursor (metres, world coords)
+//   item:   { fw, fl, advance }         footprint X/Z extents + extra spacing after it
+//   bounds: { ox, oz, innerXMax, innerZMax, margin, gap }
+//   flowZ:  false = flow along X (wrap into Z bands); true = flow along Z (wrap into X)
+// Returns the item's base corner {bx,bz} and the advanced cursor {curX,curZ,bandDepth}.
+export function placeInBand(cur, item, bounds, flowZ) {
+  let { curX, curZ, bandDepth } = cur;
+  const { ox, oz, innerXMax, innerZMax, margin, gap } = bounds;
+  if (!flowZ) {
+    if (curX + item.fw > innerXMax) { curX = ox + margin; curZ += bandDepth + gap; bandDepth = 0; }
+    return { bx: curX, bz: curZ, curX: curX + item.fw + item.advance, curZ, bandDepth: Math.max(bandDepth, item.fl) };
+  }
+  if (curZ + item.fl > innerZMax) { curZ = oz + margin; curX += bandDepth + gap; bandDepth = 0; }
+  return { bx: curX, bz: curZ, curX, curZ: curZ + item.fl + item.advance, bandDepth: Math.max(bandDepth, item.fw) };
+}
+
 // Distinct, readable swatch colours for per-SKU box tinting (blended with cardboard in the scene).
 export const PRODUCT_PALETTE = [
   "#d98b4a", "#e0c14a", "#7bbf5a", "#4aab9b", "#4a86d9",

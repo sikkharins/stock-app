@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -180,5 +180,46 @@ describe("isGapId / gapWidthM", () => {
     expect(gapWidthM({})).toBeCloseTo(0.10);
     expect(gapWidthM(null)).toBeCloseTo(0.10);
     expect(gapWidthM({ cols: 0 })).toBeCloseTo(0.10);
+  });
+});
+
+describe("placeInBand", () => {
+  // zone origin (0,0), inner extents 10 (X) x 6 (Z), margin 0.3, gap 0.1
+  const bounds = { ox: 0, oz: 0, innerXMax: 10, innerZMax: 6, margin: 0.3, gap: 0.1 };
+  const start = { curX: 0.3, curZ: 0.3, bandDepth: 0 };
+
+  it("flow X: ไม่ wrap -> ไล่ตาม X, แชร์แถว Z เดิม", () => {
+    const a = placeInBand(start, { fw: 2, fl: 1, advance: 0.2 }, bounds, false);
+    expect([a.bx, a.bz]).toEqual([0.3, 0.3]);
+    expect(a.curX).toBeCloseTo(2.5);          // 0.3 + 2 + 0.2
+    expect(a.curZ).toBe(0.3);                  // unchanged
+    expect(a.bandDepth).toBe(1);              // max(0, fl)
+    const b = placeInBand({ curX: a.curX, curZ: a.curZ, bandDepth: a.bandDepth }, { fw: 2, fl: 1, advance: 0.2 }, bounds, false);
+    expect(b.bx).toBeCloseTo(2.5);             // next to the first
+    expect(b.bz).toBe(0.3);
+  });
+
+  it("flow X: เกิน innerXMax -> wrap ขึ้นแถว Z ใหม่", () => {
+    const cur = { curX: 9.5, curZ: 0.3, bandDepth: 1 };
+    const a = placeInBand(cur, { fw: 2, fl: 1.5, advance: 0 }, bounds, false);
+    expect(a.bx).toBe(0.3);                    // reset to ox + margin
+    expect(a.bz).toBeCloseTo(1.4);             // 0.3 + bandDepth(1) + gap(0.1)
+    expect(a.bandDepth).toBe(1.5);
+  });
+
+  it("flow Z: ไม่ wrap -> ไล่ตาม Z, แชร์ band X เดิม", () => {
+    const a = placeInBand(start, { fw: 2, fl: 1, advance: 0.2 }, bounds, true);
+    expect([a.bx, a.bz]).toEqual([0.3, 0.3]);
+    expect(a.curZ).toBeCloseTo(1.5);           // 0.3 + fl(1) + 0.2
+    expect(a.curX).toBe(0.3);                  // unchanged
+    expect(a.bandDepth).toBe(2);              // max(0, fw)
+  });
+
+  it("flow Z: เกิน innerZMax -> wrap ไป band X ใหม่", () => {
+    const cur = { curX: 0.3, curZ: 5.5, bandDepth: 2 };
+    const a = placeInBand(cur, { fw: 1.5, fl: 1, advance: 0 }, bounds, true);
+    expect(a.bz).toBe(0.3);                    // reset to oz + margin
+    expect(a.bx).toBeCloseTo(2.4);             // 0.3 + bandDepth(2) + gap(0.1)
+    expect(a.bandDepth).toBe(1.5);
   });
 });
