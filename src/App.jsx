@@ -295,6 +295,14 @@ export default function App(){
     }
     if(res?.error)console.warn("Save error:",sbKey,res.error);
   };
+  // Persist one config key immediately (explicit 3D layout saves) instead of waiting
+  // for the 800ms autosave debounce. Skips if the value is already the last-synced one.
+  const saveNow=(sbKey,value)=>{
+    const js=JSON.stringify(value);
+    if(js===lastSyncedJsonRef.current[sbKey])return;
+    saveData("v3_"+sbKey,value);
+    saveKeyWithMerge(sbKey,value,js);
+  };
 
   useEffect(()=>{
     let cancelled=false;
@@ -426,7 +434,7 @@ export default function App(){
 
   const visTabs=[...ALL_TABS.filter(tb=>canA(tb)),...(canA("users")?["users"]:[])];
   const isSup=!!cu.supplierName;const supN=cu.supplierName||"";
-  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,soFormLayout,setSoFormLayout,warehouseLayout,setWarehouseLayout,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,zones,setZones,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null),pendingAdjust,setPendingAdjust,clearPendingAdjust:()=>setPendingAdjust(null)};
+  const sh={pN,cN,lang,theme,products,setProducts,contacts,setContacts,pos,setPOs,sales,setSales,logs,setLogs,addLog,payments,setPayments,quotes,setQuotes,targets,setTargets,audit,addA,priceHist,addPH,cats,setCats,cashCats,setCashCats,tagMappings,setTagMappings,brands,setBrands,soFormLayout,setSoFormLayout,warehouseLayout,setWarehouseLayout,saveNow,users,setUsers,search,setSearch,modal,oM,cM,lowStock,canE,canC,canA,canApv,canD,getCN,cu,isSup,supN,actLogs,sess,notifs,cheques,setCheques,bankAccs,setBankAccs,bankTxns,setBankTxns,cnotes,setCNotes,defectives,setDefectives,billings,setBillings,supCNotes,setSupCNotes,promos,setPromos,events,setEvents,trucks,setTrucks,deliveryRuns,setDeliveryRuns,deliveryHelpers,setDeliveryHelpers,zones,setZones,handleTab,quickCreate,clearQuickCreate:()=>setQuickCreate(null),pendingAdjust,setPendingAdjust,clearPendingAdjust:()=>setPendingAdjust(null)};
   const curLabel=TAB_LABELS[tab]?TAB_LABELS[tab][lang]:tab;
 
   return <>
