@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -165,5 +165,20 @@ describe("mergeEdgePositions", () => {
     const tpl = new Array(72).fill(0); // 12 edges * 2 verts * 3
     const out = mergeEdgePositions(tpl, [{ x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2 }]);
     expect(out.length).toBe(72 * 3);
+  });
+});
+
+describe("isGapId / gapWidthM", () => {
+  it("isGapId: true เฉพาะ string ขึ้นต้น gap-", () => {
+    expect(isGapId("gap-123-45")).toBe(true);
+    expect(isGapId(5)).toBe(false);
+    expect(isGapId("5")).toBe(false);
+    expect(isGapId(undefined)).toBe(false);
+  });
+  it("gapWidthM: แต่ละแถว = 0.10 ม.", () => {
+    expect(gapWidthM({ cols: 3 })).toBeCloseTo(0.30);
+    expect(gapWidthM({})).toBeCloseTo(0.10);
+    expect(gapWidthM(null)).toBeCloseTo(0.10);
+    expect(gapWidthM({ cols: 0 })).toBeCloseTo(0.10);
   });
 });

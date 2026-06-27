@@ -59,6 +59,17 @@ export function orientBoxDims(d, orient) {
   return { w: d.l, l: d.w, h: d.h };
 }
 
+// A gap/spacer entry in zone.productIds (reserved empty space, not a product).
+export function isGapId(id) {
+  return typeof id === "string" && id.startsWith("gap-");
+}
+
+// Gap width in metres from its boxConfig entry. Each แถว (cols) = 10 cm; min 1.
+export function gapWidthM(cfg) {
+  const cols = Math.max(1, Math.floor((cfg && cfg.cols) || 1));
+  return cols * 0.10;
+}
+
 // Distinct, readable swatch colours for per-SKU box tinting (blended with cardboard in the scene).
 export const PRODUCT_PALETTE = [
   "#d98b4a", "#e0c14a", "#7bbf5a", "#4aab9b", "#4a86d9",
