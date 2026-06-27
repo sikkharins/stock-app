@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -478,6 +478,25 @@ export function createWarehouseScene(container, data, opts = {}) {
     const innerW = w - 2 * MARGIN, innerL = l - 2 * MARGIN;
 
     zone.productIds.forEach((pid) => {
+      if (isGapId(pid)) {
+        const gcfg = zone.boxConfig && zone.boxConfig[pid] ? zone.boxConfig[pid] : null;
+        const gw = gapWidthM(gcfg);
+        if (curX + gw > innerXMax) { curX = ox + MARGIN; curZ += bandDepth + GAP; bandDepth = 0; }
+        const gd = Math.min(innerL, 0.6); // nominal depth of the floor marker
+        const gx = curX, gz = curZ;
+        const gm = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd),
+          new THREE.MeshBasicMaterial({ color: "#9aa3af", transparent: true, opacity: 0.14, depthWrite: false }));
+        gm.rotation.x = -Math.PI / 2;
+        gm.position.set(gx + gw / 2, 0.03, gz + gd / 2);
+        gm.userData.zonePart = true; group.add(gm); st.meshes.push(gm);
+        const go = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(gw, gd)),
+          new THREE.LineBasicMaterial({ color: "#9aa3af", transparent: true, opacity: 0.5 }));
+        go.rotation.x = -Math.PI / 2; go.position.copy(gm.position);
+        go.userData.zonePart = true; group.add(go); st.meshes.push(go);
+        curX += gw; // gap reserves exactly its width (no extra inter-item GAP)
+        bandDepth = Math.max(bandDepth, gd);
+        return;
+      }
       const p = productById[pid];
       if (!p) return;
       const cfg = zone.boxConfig && zone.boxConfig[pid] ? zone.boxConfig[pid] : null;
@@ -619,6 +638,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   ZONES.forEach((zone) => {
     const st = zoneState[zone.id];
     const totalUnits = zone.productIds.reduce((s, pid) => s + (productById[pid]?.stock || 0), 0);
+    const realCount = zone.productIds.filter((pid) => !isGapId(pid)).length;
     const prodHtml = zone.productIds.map((pid) => {
       const p = productById[pid];
       if (!p) return "";
@@ -650,7 +670,7 @@ export function createWarehouseScene(container, data, opts = {}) {
       <div class="zr-actions">${camBtns}</div>
       <div class="zr-warn">⚠ สินค้าล้นเกินพื้นที่โซน</div>
       <div class="zr-products">
-        <div class="zp-head">สินค้า ${zone.productIds.length} รายการ · รวม ${totalUnits.toLocaleString()} ชิ้น</div>
+        <div class="zp-head">สินค้า ${realCount} รายการ · รวม ${totalUnits.toLocaleString()} ชิ้น</div>
         ${prodHtml}
       </div>`;
     row.addEventListener("click", () => selectZone(zone.id));
