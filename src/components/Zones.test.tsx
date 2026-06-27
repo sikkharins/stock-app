@@ -77,6 +77,19 @@ describe("ZonePage editor — ordered product rows", () => {
     expect(btn.textContent).toBe("ยาว");        // -> back to default (key cleared)
   });
 
+  test("'หมุนเรียง' cycles 0 -> 90 -> 180", async () => {
+    const user = userEvent.setup();
+    render(<Harness initialZones={[{ id: "z1", name: "Z1", productIds: [1] }]} />);
+    await openEditor(user);
+
+    const btn = screen.getByTitle("หมุนการจัดเรียงทั้งโซน (ตามเข็ม)") as HTMLButtonElement;
+    expect(btn.textContent).toBe("หมุนเรียง 0°");
+    await user.click(btn);
+    expect(btn.textContent).toBe("หมุนเรียง 90°");
+    await user.click(btn);
+    expect(btn.textContent).toBe("หมุนเรียง 180°");
+  });
+
   test("'+ ช่องว่าง' adds a gap row (10cm/แถว, excluded from count)", async () => {
     const user = userEvent.setup();
     render(<Harness initialZones={[{ id: "z1", name: "Z1", productIds: [1] }]} />);

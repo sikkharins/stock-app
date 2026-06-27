@@ -3,7 +3,7 @@ import { IB } from "../utils/constants.js";
 import Btn from "./ui/Btn.jsx";
 import ProductPicker from "./ui/ProductPicker.jsx";
 import { getRelayUrl } from "../utils/cameraCapture.ts";
-import { isGapId } from "../lib/warehouse3d/boxPlan.js";
+import { isGapId, normArrangeRot } from "../lib/warehouse3d/boxPlan.js";
 
 const blank = () => ({ id: Date.now(), name: "", note: "", productIds: [] });
 
@@ -62,6 +62,7 @@ export default function ZonePage({ sh }) {
     const gid = "gap-" + Date.now() + "-" + Math.floor(Math.random() * 1e6);
     return { ...z, productIds: [...z.productIds, gid], boxConfig: { ...(z.boxConfig || {}), [gid]: { cols: 1 } } };
   });
+  const cycleArrangeRot = () => setEditing((z) => ({ ...z, arrangeRot: normArrangeRot((z.arrangeRot || 0) + 90) }));
   const removeProduct = (id) => setEditing((z) => {
     const boxConfig = { ...(z.boxConfig || {}) };
     delete boxConfig[String(id)];
@@ -130,7 +131,10 @@ export default function ZonePage({ sh }) {
             <label style={{ fontSize: 12, color: "var(--dim)" }}>หมายเหตุ (ไม่บังคับ)</label>
             <input value={editing.note || ""} onChange={(e) => setEditing((z) => ({ ...z, note: e.target.value }))} style={{ ...IB, marginTop: 4 }} />
           </div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>สินค้าที่ควรอยู่ในโซนนี้ ({editing.productIds.filter((id) => !isGapId(id)).length})</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>สินค้าที่ควรอยู่ในโซนนี้ ({editing.productIds.filter((id) => !isGapId(id)).length})</span>
+            <button onClick={cycleArrangeRot} title="หมุนการจัดเรียงทั้งโซน (ตามเข็ม)" style={orientBtn}>หมุนเรียง {normArrangeRot(editing.arrangeRot || 0)}°</button>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
             {editing.productIds.length === 0 && <span style={{ fontSize: 12.5, color: "var(--dim)" }}>ยังไม่ได้ผูกสินค้า</span>}
             {editing.productIds.map((id, idx) => {
