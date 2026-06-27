@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -473,28 +473,34 @@ export function createWarehouseScene(container, data, opts = {}) {
     const st = { group, meshes: [], volProducts: 0, fill: 0, overflow: false, label, floorMat: zf.material, frameMat: frame.material, baseOpacity: 0.16, productMeta: {} };
     zoneState[zone.id] = st;
 
-    let curX = ox + MARGIN, curZ = oz + MARGIN, bandDepth = 0;
-    const innerXMax = ox + w - MARGIN;
-    const innerZMax = oz + l - MARGIN;
     const innerW = w - 2 * MARGIN, innerL = l - 2 * MARGIN;
-    const flowZ = l > w; // flow products/gaps along the longer side of the zone
-    const bounds = { ox, oz, innerXMax, innerZMax, margin: MARGIN, gap: GAP };
+    const R = normArrangeRot(zone.arrangeRot);
+    const swap = R === 90 || R === 270;
+    const cw = swap ? innerL : innerW; // canvas layout width
+    const cl = swap ? innerW : innerL; // canvas layout depth
+    const flowZ = cl > cw;             // flow along the longer canvas side
+    let curX = 0, curZ = 0, bandDepth = 0; // LOCAL canvas coords
+    const bounds = { ox: 0, oz: 0, innerXMax: cw, innerZMax: cl, margin: 0, gap: GAP };
+    const rotY = arrangeRotY(R);
+    const toWorld = (px, pz) => { const q = arrangePoint(R, px, pz, innerW, innerL); return { x: ox + MARGIN + q.x, z: oz + MARGIN + q.z }; };
 
     zone.productIds.forEach((pid) => {
       if (isGapId(pid)) {
         const gcfg = zone.boxConfig && zone.boxConfig[pid] ? zone.boxConfig[pid] : null;
         const gw = gapWidthM(gcfg);
-        const gd = Math.min(flowZ ? innerW : innerL, 0.6); // marker thickness across the flow
-        const fw = flowZ ? gd : gw; // X extent
-        const fl = flowZ ? gw : gd; // Z extent
+        const gd = Math.min(flowZ ? cw : cl, 0.6); // marker thickness across the flow
+        const fw = flowZ ? gd : gw; // canvas-X extent
+        const fl = flowZ ? gw : gd; // canvas-Z extent
         const step = placeInBand({ curX, curZ, bandDepth }, { fw, fl, advance: 0 }, bounds, flowZ);
         curX = step.curX; curZ = step.curZ; bandDepth = step.bandDepth;
-        const gm = new THREE.Mesh(new THREE.PlaneGeometry(fw, fl),
+        const c = toWorld(step.bx + fw / 2, step.bz + fl / 2); // marker center in world
+        const mw = swap ? fl : fw, ml = swap ? fw : fl;        // world plane dims
+        const gm = new THREE.Mesh(new THREE.PlaneGeometry(mw, ml),
           new THREE.MeshBasicMaterial({ color: "#9aa3af", transparent: true, opacity: 0.14, depthWrite: false }));
         gm.rotation.x = -Math.PI / 2;
-        gm.position.set(step.bx + fw / 2, 0.03, step.bz + fl / 2);
+        gm.position.set(c.x, 0.03, c.z);
         gm.userData.zonePart = true; group.add(gm); st.meshes.push(gm);
-        const go = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(fw, fl)),
+        const go = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(mw, ml)),
           new THREE.LineBasicMaterial({ color: "#9aa3af", transparent: true, opacity: 0.5 }));
         go.rotation.x = -Math.PI / 2; go.position.copy(gm.position);
         go.userData.zonePart = true; group.add(go); st.meshes.push(go);
@@ -573,18 +579,19 @@ export function createWarehouseScene(container, data, opts = {}) {
         st.productMeta[pid] = { product: p, zoneId: zone.id, isPile: false, layersMax, volPer, cols, rows, layersUsed, inst, dW: d.w, dL: d.l, dH: d.h, pitchX, pitchZ, perLayer, edges };
       }
 
-      let bx, bz, rotDeg = 0;
+      let bx, bz, rotRad = 0;
       if (manual) {
         bx = ox + (manual.x ?? 0);
         bz = oz + (manual.z ?? 0);
-        rotDeg = manual.rot ?? 0;
+        rotRad = -(manual.rot ?? 0) * Math.PI / 180;
       } else {
         const step = placeInBand({ curX, curZ, bandDepth }, { fw, fl, advance: GAP * 4 }, bounds, flowZ);
-        bx = step.bx; bz = step.bz;
         curX = step.curX; curZ = step.curZ; bandDepth = step.bandDepth;
+        const wp = toWorld(step.bx, step.bz);
+        bx = wp.x; bz = wp.z; rotRad = rotY;
       }
       pg.position.set(bx, 0, bz);
-      pg.rotation.y = -rotDeg * Math.PI / 180;
+      pg.rotation.y = rotRad;
       pg.userData = { pid, zoneId: zone.id };
       Object.assign(st.productMeta[pid], { pg, fw, fl, zoneOrigin: { x: ox, z: oz } });
       contactShadow(pg, fw / 2, fl / 2, fw, fl);
