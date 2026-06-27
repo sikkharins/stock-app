@@ -116,6 +116,35 @@ export function pickDragKind(isInstanced, instanceId, hasUnits, selectWhole) {
   return "block";
 }
 
+// Z lines that act as walls for auto-anchoring: warehouse perimeter (0 and lengthM)
+// plus internal back-to-back seams — where one zone's far Z edge meets another zone's
+// near Z edge at the same z, overlapping in X. Returns an array of z values.
+export function zoneWallLinesZ(zones, warehouse) {
+  const EPS = 0.01;
+  const lines = [0, warehouse.lengthM];
+  const add = (z) => { if (!lines.some((w) => Math.abs(w - z) < EPS)) lines.push(z); };
+  for (const a of zones) {
+    const aFar = a.origin.z + a.size.l;
+    const ax0 = a.origin.x, ax1 = a.origin.x + a.size.w;
+    for (const b of zones) {
+      if (b === a) continue;
+      if (Math.abs(aFar - b.origin.z) >= EPS) continue;            // far(a) meets near(b)
+      const bx0 = b.origin.x, bx1 = b.origin.x + b.size.w;
+      if (Math.min(ax1, bx1) - Math.max(ax0, bx0) > EPS) add(aFar); // truly back-to-back (X overlap)
+    }
+  }
+  return lines;
+}
+
+// Auto arrangement rotation (0 or 180 degrees): flip 180 when the FAR Z edge sits on a
+// wall line but the NEAR edge does not, so products anchor to the wall away from the aisle.
+export function autoWallRot(zone, wallLinesZ) {
+  const EPS = 0.01;
+  const onLine = (z) => wallLinesZ.some((w) => Math.abs(w - z) < EPS);
+  const near = zone.origin.z, far = zone.origin.z + zone.size.l;
+  return (onLine(far) && !onLine(near)) ? 180 : 0;
+}
+
 // Distinct, readable swatch colours for per-SKU box tinting (blended with cardboard in the scene).
 export const PRODUCT_PALETTE = [
   "#d98b4a", "#e0c14a", "#7bbf5a", "#4aab9b", "#4a86d9",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint, pickDragKind } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint, pickDragKind, zoneWallLinesZ, autoWallRot } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -268,5 +268,42 @@ describe("pickDragKind", () => {
   it("instanced แต่ไม่มี instanceId/units -> block", () => {
     expect(pickDragKind(true, null, true, false)).toBe("block");
     expect(pickDragKind(true, 0, false, false)).toBe("block");
+  });
+});
+
+describe("zoneWallLinesZ / autoWallRot", () => {
+  const wh = { lengthM: 30 };
+  const Z = [
+    { origin: { x: 0, z: 0 }, size: { w: 6, l: 8 } },    // top 0-8
+    { origin: { x: 0, z: 11 }, size: { w: 6, l: 4 } },   // upper-mid 11-15
+    { origin: { x: 0, z: 15 }, size: { w: 6, l: 4 } },   // lower-mid 15-19
+    { origin: { x: 0, z: 22 }, size: { w: 6, l: 8 } },   // bottom 22-30
+  ];
+
+  it("zoneWallLinesZ: ขอบโกดัง + รอยต่อหลังชนหลัง (z=15)", () => {
+    const lines = zoneWallLinesZ(Z, wh);
+    expect(lines).toContain(0);
+    expect(lines).toContain(30);
+    expect(lines).toContain(15);            // upper-mid far == lower-mid near, X overlap
+    expect(lines).not.toContain(8);
+    expect(lines).not.toContain(11);
+    expect(lines).not.toContain(19);
+    expect(lines).not.toContain(22);
+  });
+
+  it("zoneWallLinesZ: far==near แต่ไม่ซ้อนแนว X -> ไม่เป็น wall line", () => {
+    const Z2 = [
+      { origin: { x: 0, z: 0 }, size: { w: 6, l: 10 } },   // far=10 at x0-6
+      { origin: { x: 40, z: 10 }, size: { w: 6, l: 5 } },  // near=10 at x40-46
+    ];
+    expect(zoneWallLinesZ(Z2, wh)).not.toContain(10);
+  });
+
+  it("autoWallRot: far บน wall line + near ไม่อยู่ -> 180; ไม่งั้น 0", () => {
+    const lines = [0, 15, 30];
+    expect(autoWallRot({ origin: { x: 0, z: 0 }, size: { w: 6, l: 8 } }, lines)).toBe(0);    // top
+    expect(autoWallRot({ origin: { x: 0, z: 11 }, size: { w: 6, l: 4 } }, lines)).toBe(180); // upper-mid
+    expect(autoWallRot({ origin: { x: 0, z: 15 }, size: { w: 6, l: 4 } }, lines)).toBe(0);   // lower-mid
+    expect(autoWallRot({ origin: { x: 0, z: 22 }, size: { w: 6, l: 8 } }, lines)).toBe(180); // bottom
   });
 });
