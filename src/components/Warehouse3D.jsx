@@ -16,7 +16,7 @@ export default function Warehouse3DPage({ sh }) {
   // not when per-zone camera or layout presets are saved.
   const rebuildKey = useMemo(() => JSON.stringify({
     p: (products || []).map((p) => [p.id, p.stock, p.widthCm, p.lengthCm, p.heightCm, p.sizeClass, p.noLayDown, p.cubicM, p.nameT, p.name, p.code, p.unit, p.brand]),
-    z: (zones || []).map((z) => [z.id, z.name, z.note, z.productIds]),
+    z: (zones || []).map((z) => [z.id, z.name, z.note, z.productIds, z.boxConfig, z.arrangeRot]),
     w: (warehouseLayout && warehouseLayout.warehouse) || null,
     // per-zone geometry: rebuild when origin/size changes (NOT on camera/layout saves)
     g: (warehouseLayout && warehouseLayout.zones)

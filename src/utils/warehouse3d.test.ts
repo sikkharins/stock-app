@@ -192,3 +192,16 @@ describe("buildWarehouseData — boxConfig passthrough", () => {
     expect(ZONES[0].boxConfig).toBeUndefined();
   });
 });
+
+describe("buildWarehouseData — arrangeRot passthrough", () => {
+  test("carries arrangeRot from the app zone into the scene zone", () => {
+    const z = [{ id: "z1", productIds: [1], arrangeRot: 90 }];
+    const { ZONES } = build([product()], z, {});
+    expect(ZONES[0].arrangeRot).toBe(90);
+  });
+
+  test("omits arrangeRot when the zone has none", () => {
+    const { ZONES } = build([product()], [{ id: "z1", productIds: [1] }], {});
+    expect(ZONES[0].arrangeRot).toBeUndefined();
+  });
+});

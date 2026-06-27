@@ -157,6 +157,7 @@ export function buildWarehouseData(products = [], zones = [], warehouseLayout = 
     if (saved.camera || z.camera) out.camera = saved.camera || z.camera;
     if (saved.layout || z.layout) out.layout = saved.layout || z.layout;
     if (z.boxConfig) out.boxConfig = z.boxConfig; // per-product แถว/ชั้น from the form
+    if (z.arrangeRot) out.arrangeRot = z.arrangeRot; // per-zone arrangement rotation
     return out;
   });
 
