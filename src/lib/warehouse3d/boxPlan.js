@@ -87,6 +87,27 @@ export function placeInBand(cur, item, bounds, flowZ) {
   return { bx: curX, bz: curZ, curX, curZ: curZ + item.fl + item.advance, bandDepth: Math.max(bandDepth, item.fw) };
 }
 
+// Normalize any value to one of 0/90/180/270 (degrees CW).
+export function normArrangeRot(v) {
+  return ((Math.round((Number(v) || 0) / 90) * 90) % 360 + 360) % 360;
+}
+
+// three.js Y-rotation (radians) turning a +X/+Z box grid to match an R° CW arrangement.
+export function arrangeRotY(R) {
+  return { 0: 0, 90: -Math.PI / 2, 180: Math.PI, 270: Math.PI / 2 }[normArrangeRot(R)];
+}
+
+// Map a canvas-frame point (px,pz) into zone-inner coords [0..innerW] x [0..innerL]
+// for an R° CW arrangement. (Caller adds the ox+MARGIN / oz+MARGIN origin offset.)
+export function arrangePoint(R, px, pz, innerW, innerL) {
+  switch (normArrangeRot(R)) {
+    case 90:  return { x: innerW - pz, z: px };
+    case 180: return { x: innerW - px, z: innerL - pz };
+    case 270: return { x: pz, z: innerL - px };
+    default:  return { x: px, z: pz };
+  }
+}
+
 // Distinct, readable swatch colours for per-SKU box tinting (blended with cardboard in the scene).
 export const PRODUCT_PALETTE = [
   "#d98b4a", "#e0c14a", "#7bbf5a", "#4aab9b", "#4a86d9",

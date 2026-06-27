@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand } from "./boxPlan.js";
+import { planBoxes, productColor, PRODUCT_PALETTE, REP_THRESHOLD, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint } from "./boxPlan.js";
 
 const ZONE = { innerW: 10, innerL: 10, ceilingH: 10 };
 const BOX = { w: 0.4, l: 0.4, h: 0.4 }; // 40cm cube
@@ -221,5 +221,34 @@ describe("placeInBand", () => {
     expect(a.bz).toBe(0.3);                    // reset to oz + margin
     expect(a.bx).toBeCloseTo(2.4);             // 0.3 + bandDepth(2) + gap(0.1)
     expect(a.bandDepth).toBe(1.5);
+  });
+});
+
+describe("normArrangeRot / arrangeRotY / arrangePoint", () => {
+  it("normArrangeRot: snap ไป 0/90/180/270", () => {
+    expect(normArrangeRot(0)).toBe(0);
+    expect(normArrangeRot(90)).toBe(90);
+    expect(normArrangeRot(180)).toBe(180);
+    expect(normArrangeRot(270)).toBe(270);
+    expect(normArrangeRot(360)).toBe(0);
+    expect(normArrangeRot(450)).toBe(90);
+    expect(normArrangeRot(-90)).toBe(270);
+    expect(normArrangeRot(undefined)).toBe(0);
+  });
+
+  it("arrangeRotY: เรเดียนตาม R", () => {
+    expect(arrangeRotY(0)).toBe(0);
+    expect(arrangeRotY(90)).toBeCloseTo(-Math.PI / 2);
+    expect(arrangeRotY(180)).toBeCloseTo(Math.PI);
+    expect(arrangeRotY(270)).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("arrangePoint: map canvas -> zone-inner ตามการหมุน (innerW 6, innerL 8)", () => {
+    expect(arrangePoint(0, 2, 3, 6, 8)).toEqual({ x: 2, z: 3 });
+    expect(arrangePoint(90, 2, 3, 6, 8)).toEqual({ x: 3, z: 2 });
+    expect(arrangePoint(90, 0, 0, 6, 8)).toEqual({ x: 6, z: 0 });
+    expect(arrangePoint(180, 2, 3, 6, 8)).toEqual({ x: 4, z: 5 });
+    expect(arrangePoint(270, 2, 3, 6, 8)).toEqual({ x: 3, z: 6 });
+    expect(arrangePoint(270, 0, 0, 6, 8)).toEqual({ x: 0, z: 8 });
   });
 });
