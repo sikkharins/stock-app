@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useCallback, useState } from "react";
-import { buildWarehouseData, claudeDesignZones, clearZoneLayout } from "../utils/warehouse3d.js";
+import { buildWarehouseData, claudeDesignZones, clearZoneLayout, applyZoneLayout, mergeZoneEntry } from "../utils/warehouse3d.js";
 import { createWarehouseScene } from "../lib/warehouse3d/scene.js";
 import { getRelayUrl, cctvSnapshotUrl } from "../utils/cameraCapture.ts";
 
@@ -7,11 +7,13 @@ import { getRelayUrl, cctvSnapshotUrl } from "../utils/cameraCapture.ts";
 // and capture per-zone CCTV camera angles (persisted to warehouse_layout), and exports
 // the full { WAREHOUSE, ZONES, PRODUCTS } DATA as JSON.
 export default function Warehouse3DPage({ sh }) {
-  const { products, zones, setZones, warehouseLayout, setWarehouseLayout, canE } = sh;
+  const { products, zones, setZones, warehouseLayout, setWarehouseLayout, saveNow, canE } = sh;
   const canEdit = !!(canE && canE("warehouse_3d"));
 
   const containerRef = useRef(null);
   const [rebuildNonce, setRebuildNonce] = useState(0);
+  const whRef = useRef(warehouseLayout); whRef.current = warehouseLayout;
+  const saveNowRef = useRef(saveNow); saveNowRef.current = saveNow;
 
   // Rebuild the scene only when the catalog / zone membership / warehouse dims change —
   // not when per-zone camera or layout presets are saved.
@@ -26,43 +28,30 @@ export default function Warehouse3DPage({ sh }) {
     n: rebuildNonce,
   }), [products, zones, warehouseLayout, rebuildNonce]);
 
-  // Persist with functional updates (no stale closure, stable identity).
+  // Compute next from refs (latest), set state, and persist immediately via saveNow.
+  // Refs are required because the scene caches these callbacks (it rebuilds only on
+  // geometry/nonce, not on layout/camera saves), so a closure value would go stale.
   const onSaveLayout = useCallback((layoutByZone) => {
-    setWarehouseLayout((prev) => {
-      const next = { ...(prev || {}) };
-      const zonesL = { ...(next.zones || {}) };
-      for (const zid of Object.keys(layoutByZone)) {
-        zonesL[zid] = { ...(zonesL[zid] || {}), layout: layoutByZone[zid] };
-      }
-      next.zones = zonesL;
-      return next;
-    });
+    const next = applyZoneLayout(whRef.current, layoutByZone);
+    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
   }, [setWarehouseLayout]);
 
   const onClearLayout = useCallback((zoneId) => {
-    setWarehouseLayout((prev) => clearZoneLayout(prev, zoneId));
+    const next = clearZoneLayout(whRef.current, zoneId);
+    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
     setRebuildNonce((n) => n + 1);
   }, [setWarehouseLayout]);
 
   const onSaveCamera = useCallback((zoneId, camera) => {
-    setWarehouseLayout((prev) => {
-      const next = { ...(prev || {}) };
-      const zonesL = { ...(next.zones || {}) };
-      zonesL[zoneId] = { ...(zonesL[zoneId] || {}), camera };
-      next.zones = zonesL;
-      return next;
-    });
+    const next = mergeZoneEntry(whRef.current, zoneId, { camera });
+    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
   }, [setWarehouseLayout]);
 
   const onSaveZoneGeom = useCallback((zoneId, geom) => {
-    setWarehouseLayout((prev) => {
-      const next = { ...(prev || {}) };
-      const zonesL = { ...(next.zones || {}) };
-      zonesL[zoneId] = { ...(zonesL[zoneId] || {}), origin: geom.origin, size: geom.size };
-      if (geom.heightM != null) zonesL[zoneId].heightM = geom.heightM;
-      next.zones = zonesL;
-      return next;
-    });
+    const patch = { origin: geom.origin, size: geom.size };
+    if (geom.heightM != null) patch.heightM = geom.heightM;
+    const next = mergeZoneEntry(whRef.current, zoneId, patch);
+    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
   }, [setWarehouseLayout]);
 
   useEffect(() => {
