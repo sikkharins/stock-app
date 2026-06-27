@@ -10,7 +10,7 @@
 //        ... later: scene.dispose();
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint, pickDragKind } from "./boxPlan.js";
+import { planBoxes, productColor, snapClampZoneRect, clampZoneHeight, orientBoxDims, mergeEdgePositions, isGapId, gapWidthM, placeInBand, normArrangeRot, arrangeRotY, arrangePoint, pickDragKind, zoneWallLinesZ, autoWallRot } from "./boxPlan.js";
 
 const STYLE_ID = "wh3d-style";
 const CSS = `
@@ -444,6 +444,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   const zoneFloors = [];
   const UNITS = [];
   const OBSTACLES = [];
+  const wallLinesZ = zoneWallLinesZ(ZONES, WAREHOUSE);
 
   ZONES.forEach((zone) => {
     const group = new THREE.Group();
@@ -475,7 +476,7 @@ export function createWarehouseScene(container, data, opts = {}) {
     zoneState[zone.id] = st;
 
     const innerW = w - 2 * MARGIN, innerL = l - 2 * MARGIN;
-    const R = normArrangeRot(zone.arrangeRot);
+    const R = normArrangeRot((zone.arrangeRot || 0) + autoWallRot(zone, wallLinesZ));
     const swap = R === 90 || R === 270;
     const cw = swap ? innerL : innerW; // canvas layout width
     const cl = swap ? innerW : innerL; // canvas layout depth
