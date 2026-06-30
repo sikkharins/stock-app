@@ -1,4 +1,4 @@
-const LABELS={pending:"รอดำเนินการ",pending_delivery:"รอส่ง",out_for_delivery:"เตรียมส่ง",received:"รับแล้ว",partial:"ส่งบางส่วน",cancelled:"ยกเลิก",completed:"ส่งแล้ว",draft:"Draft",pending_approval:"รออนุมัติ",approved:"อนุมัติแล้ว",pending_special_approval:"รออนุมัติพิเศษ"};
+const LABELS={pending:"รอดำเนินการ",pending_delivery:"รอส่ง",out_for_delivery:"เตรียมส่ง",received:"รับแล้ว",partial:"ส่งบางส่วน",cancelled:"ยกเลิก",completed:"ส่งแล้ว",draft:"ร่าง",pending_approval:"รออนุมัติ",approved:"อนุมัติแล้ว",pending_special_approval:"รออนุมัติพิเศษ"};
 const M={
   pending:["rgba(255,149,0,0.14)","var(--orange)"],
   pending_delivery:["var(--blue-bg)","var(--blue)"],

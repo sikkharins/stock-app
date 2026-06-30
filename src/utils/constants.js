@@ -22,3 +22,4 @@ export const ALL_SECTION_KEYS = DASH_SECTIONS.map(s => s.key);
 export const DISC_OPTS = [0,1];
 export const CREDIT_OPTS = [45,60,90];
 export const IB = {width:"100%",boxSizing:"border-box",background:"var(--bg2)",border:"1px solid var(--line)",borderRadius:7,padding:"7px 12px",fontSize:13,color:"var(--text)",fontFamily:"inherit"};
+export const SO_AUTOSAVE_KEY = "so_form_autosave";
