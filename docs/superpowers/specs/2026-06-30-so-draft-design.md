@@ -94,6 +94,15 @@
 
 แผน implement ต้องไล่เช็คเพิ่มเฉพาะจุดที่ aggregate `sales` แบบไม่กรองสถานะ (count รวม / sum รวม) ที่อยู่นอก Sales.jsx เช่น Dashboard total, AISOBot context, BackupManager — ยืนยันด้วย grep หา `sales.length` / `sales.reduce` ที่ไม่มี filter status ตอนทำ plan
 
+## Mobile
+
+ฟีเจอร์ต้องใช้บนมือถือได้ (เป็น web app responsive, deploy Vercel)
+
+- **autosave ต้องเซฟระหว่างแก้ (debounce) ไม่พึ่ง event ตอนปิด** — มือถือ kill แท็บ background โดยไม่ส่ง `beforeunload`/`unload` ที่เชื่อถือได้ การดักตอนปิดจะพลาด ดีไซน์นี้เซฟระหว่างทางจึงรอด: สลับแอป/จอดับ/แท็บถูก kill แล้วกลับมา ฟอร์มยังอยู่
+- `localStorage` ใช้ได้บน mobile browser ปกติ; safety net เป็นรายเครื่อง (มือถือเครื่องไหนกรอก ก็กู้ได้บนเครื่องนั้น) — ตรงกับ non-goal ที่ไม่ sync draft-in-progress ข้ามเครื่อง
+- `Modal` กว้าง `min(580px,94%)` ([Modal.tsx:12](src/components/ui/Modal.tsx:12)) → responsive อยู่แล้ว
+- **footer 3 ปุ่ม**: `MBtns` ([Modal.tsx:30](src/components/ui/Modal.tsx:30)) ตอนนี้รองรับแค่ ยกเลิก+บันทึก จอแคบ (~357px) ใส่ 3 ปุ่มจะอัดกัน — ต้องปรับ: เพิ่ม `flexWrap:"wrap"` และ/หรือวาง "บันทึกร่าง" เป็น secondary ฝั่งซ้าย (`justifyContent:"space-between"`) ให้แตะง่าย ระวังขนาดเป้าแตะ (min ~40px สูง)
+
 ## Non-goals (YAGNI)
 - ไม่ทำ auto-save สำหรับโหมดแก้ไข SO ที่มีอยู่แล้ว
 - ไม่ sync draft-in-progress ข้ามเครื่อง (safety net เป็น localStorage ต่อเครื่อง); ส่วน Draft record sync ผ่าน sales ปกติ
