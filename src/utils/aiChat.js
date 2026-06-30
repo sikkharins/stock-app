@@ -65,6 +65,7 @@ export function buildContext(products, contacts, sales, pN, cN, cu, pos, payment
     .map((c) => ({ id: c.id, name: cN(c), nameT: c.nameT || "" }));
 
   const allSOs = [...sales]
+    .filter((so) => so.status !== "draft")
     .reverse()
     .map((so) => {
       const cust = contacts.find((c) => c.id === so.customerId);

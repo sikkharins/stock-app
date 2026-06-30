@@ -38,7 +38,7 @@ export default function CompareReport({products,sales,cats}){
   const catMap=useMemo(()=>{const m={};(cats||[]).forEach(c=>m[c.id]=c.name);return m;},[cats]);
 
   const calc=m=>{
-    const sos=sales.filter(s=>(s.date||"").startsWith(m));
+    const sos=sales.filter(s=>(s.date||"").startsWith(m)&&s.status!=="draft");
     let revenue=0;
     sos.forEach(so=>{revenue+=so.items.reduce((a,i)=>a+i.qty*i.price,0)-(so.discountAmt||0);});
     return{revenue,count:sos.length};
@@ -54,7 +54,7 @@ export default function CompareReport({products,sales,cats}){
   const{chartData,catKeys}=useMemo(()=>{
     const allCats={};
     [prevMonth,selMonth].forEach(m=>{
-      sales.filter(s=>(s.date||"").startsWith(m)).forEach(so=>so.items.forEach(i=>{
+      sales.filter(s=>(s.date||"").startsWith(m)&&s.status!=="draft").forEach(so=>so.items.forEach(i=>{
         const pr=prodMap[i.productId];if(!pr)return;
         const catName=catMap[pr.categoryId]||"ไม่ระบุ";
         allCats[catName]=(allCats[catName]||0)+i.qty*i.price;
@@ -64,7 +64,7 @@ export default function CompareReport({products,sales,cats}){
     const buildRow=(m,label)=>{
       const row={name:label};
       catKeys.forEach(c=>row[c]=0);
-      sales.filter(s=>(s.date||"").startsWith(m)).forEach(so=>so.items.forEach(i=>{
+      sales.filter(s=>(s.date||"").startsWith(m)&&s.status!=="draft").forEach(so=>so.items.forEach(i=>{
         const pr=prodMap[i.productId];if(!pr)return;
         const catName=catMap[pr.categoryId]||"ไม่ระบุ";
         row[catName]=(row[catName]||0)+i.qty*i.price;

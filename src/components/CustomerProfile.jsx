@@ -58,7 +58,7 @@ export default function CustomerProfile({ customer, sales, quotes, payments, pro
     };
   }, [onClose]);
 
-  const custSales  = [...sales].filter(so => so.customerId === customer.id).reverse();
+  const custSales  = [...sales].filter(so => so.customerId === customer.id && so.status !== "draft").reverse();
   const custQuotes = [...quotes].filter(qt => qt.customerId === customer.id).reverse();
   const soNet  = so => (so.items||[]).reduce((s,i) => s + i.qty*i.price, 0) - (so.discountAmt||0);
   const getPaid = ref => payments.filter(p => p.refId===ref && p.type==="ar").reduce((s,p) => s + (+p.amount||0), 0);

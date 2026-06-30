@@ -45,7 +45,7 @@ export default function RepOverview({ products, sales, pN, cats }) {
   const catMap = useMemo(() => { const m = {}; (cats || []).forEach(c => m[c.id] = c.name); return m; }, [cats]);
 
   const { barData, catKeys, byCat, byBrand } = useMemo(() => {
-    const ranged = sales.filter(so => keys.some(k => (so.date || "").startsWith(k)));
+    const ranged = sales.filter(so => so.status !== "draft" && keys.some(k => (so.date || "").startsWith(k)));
     const catAcc = {}, brandAcc = {};
     ranged.forEach(so => so.items.forEach(i => {
       const pr = prodMap[i.productId];

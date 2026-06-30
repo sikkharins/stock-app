@@ -70,7 +70,7 @@ export default function SalesOverview({sh}){
     // Filter sales
     const filtered=sales.filter(so=>{
       if(!so.date)return false;
-      if(so.status==="cancelled")return false;
+      if(so.status==="cancelled"||so.status==="draft")return false;
       const[y]=so.date.split("-");
       if(+y!==yr)return false;
       if(quarter!=="all"){

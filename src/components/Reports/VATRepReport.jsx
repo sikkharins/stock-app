@@ -13,7 +13,7 @@ export default function VATRepReport({sales,contacts}){
 
   const custMap={};contacts.forEach(c=>custMap[c.id]=c);
 
-  const vatSales=sales.filter(s=>s.useVatRep&&s.vatRepName&&s.vatRepName.trim()&&(s.date||"").startsWith(String(selYear)));
+  const vatSales=sales.filter(s=>s.status!=="draft"&&s.useVatRep&&s.vatRepName&&s.vatRepName.trim()&&(s.date||"").startsWith(String(selYear)));
 
   const groups={};
   vatSales.forEach(so=>{

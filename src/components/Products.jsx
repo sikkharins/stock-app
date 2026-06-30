@@ -438,7 +438,7 @@ export default function ProdPage({sh}){
         });
       });
 
-      const soList=sales.filter(s=>(s.items||[]).some(i=>i.productId===pr.id)).map(so=>{
+      const soList=sales.filter(s=>s.status!=="draft"&&(s.items||[]).some(i=>i.productId===pr.id)).map(so=>{
         const it=so.items.find(i=>i.productId===pr.id);
         const cust=custMap[so.customerId];
         return{...so,qty:it?it.qty:0,price:it?it.price:0,custName:cust?cN(cust):"-"};

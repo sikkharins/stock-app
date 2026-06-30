@@ -96,7 +96,7 @@ export default function TargetsReport({targets,setTargets,sales,contacts,users,c
   const salesUsers=users.filter(u=>u.role==="Sales"&&u.salesName);
   const custSalesMap=useMemo(()=>{const m={};contacts.forEach(c=>{if(c.type==="customer"&&c.salesPerson)m[c.id]=c.salesPerson;});return m;},[contacts]);
 
-  const monthSales=useMemo(()=>sales.filter(s=>(s.date||"").startsWith(selMonth)),[sales,selMonth]);
+  const monthSales=useMemo(()=>sales.filter(s=>(s.date||"").startsWith(selMonth)&&s.status!=="draft"),[sales,selMonth]);
 
   // ยอดรวมต่อเซลส์ (สำหรับ bar chart) + ยอดต่อ (เซลส์, ลูกค้า) สำหรับ donut
   const{actualMap,actualByCustomer}=useMemo(()=>{

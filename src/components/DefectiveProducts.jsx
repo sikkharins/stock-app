@@ -86,7 +86,7 @@ export default function DefectivePage({sh}){
 
   const custSOs=useMemo(()=>{
     if(!form||!form.customerId)return[];
-    let list=sales.filter(so=>so.customerId===+form.customerId);
+    let list=sales.filter(so=>so.customerId===+form.customerId&&so.status!=="draft");
     if(form.productId)list=list.filter(so=>(so.items||[]).some(i=>i.productId===+form.productId));
     return list;
   },[form?.customerId,form?.productId,sales]);
