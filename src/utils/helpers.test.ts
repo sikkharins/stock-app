@@ -41,6 +41,7 @@ import {
   resolveSaveSoNum,
   resolveSaveStatus,
   draftFromForm,
+  poMatchedItems,
 } from "./helpers.js";
 
 describe("round2", () => {
@@ -1529,5 +1530,34 @@ describe("draftFromForm", () => {
   test("ไม่เลือกลูกค้า -> customerId คงเป็นค่าว่าง", () => {
     const r = draftFromForm({ customerId: "", items: [{ productId: "3", qty: 1, price: 0 }] }, ui);
     expect(r.customerId).toBe("");
+  });
+});
+
+describe("poMatchedItems", () => {
+  const products = [
+    { id: 1, code: "SKU-1", name: "Cable", nameT: "สายไฟ" },
+    { id: 2, code: "SKU-2", name: "Switch", nameT: "สวิตช์" },
+  ];
+  const po = { poNum: "PO-1", items: [{ productId: 1, qty: 5 }, { productId: 2, qty: 3 }] };
+
+  test("empty / whitespace term returns []", () => {
+    expect(poMatchedItems(po, "", products)).toEqual([]);
+    expect(poMatchedItems(po, "   ", products)).toEqual([]);
+  });
+  test("matches by code", () => {
+    expect(poMatchedItems(po, "sku-1", products).map((i) => i.productId)).toEqual([1]);
+  });
+  test("matches by name (case-insensitive)", () => {
+    expect(poMatchedItems(po, "switch", products).map((i) => i.productId)).toEqual([2]);
+  });
+  test("matches by Thai name nameT", () => {
+    expect(poMatchedItems(po, "สายไฟ", products).map((i) => i.productId)).toEqual([1]);
+  });
+  test("term with no matching field returns []", () => {
+    expect(poMatchedItems(po, "zzz", products)).toEqual([]);
+  });
+  test("item whose product is missing from products is excluded", () => {
+    const po2 = { poNum: "PO-2", items: [{ productId: 99, qty: 1 }] };
+    expect(poMatchedItems(po2, "sku", products)).toEqual([]);
   });
 });

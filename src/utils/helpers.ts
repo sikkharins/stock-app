@@ -1051,6 +1051,22 @@ export const shipmentTotals = (po: DropshipPO): POLineRollup[] => {
   });
 };
 
+// Items in a PO whose product (code / name / Thai name) matches a search term.
+// Powers the PO search so a delivered product can be traced to its open order.
+export const poMatchedItems = (
+  po: DropshipPO,
+  term: string,
+  products: { id: number | string; code?: string; name?: string; nameT?: string }[]
+): DropshipPOItem[] => {
+  const t = (term || "").trim().toLowerCase();
+  if (!t) return [];
+  return (po.items || []).filter((it) => {
+    const p = products.find((x) => +x.id === +it.productId);
+    if (!p) return false;
+    return [p.code, p.name, p.nameT].some((v) => (v || "").toLowerCase().includes(t));
+  });
+};
+
 // Drop-ship PO status derived from its shipments:
 //   no shipments → "approved" (awaiting first shipment)
 //   fully committed AND every shipment delivered → "received"
