@@ -1538,3 +1538,90 @@ export const findSOCombos = (
     diffSatang: c.sat - targetSatang,
   }));
 };
+
+// --- SO draft / autosave helpers ---------------------------------------------
+
+export const soFormHasContent = (form: {
+  customerId?: unknown;
+  items?: Array<{ productId?: unknown } | null>;
+}): boolean => {
+  if (!form) return false;
+  if (form.customerId) return true;
+  return (form.items || []).some((it) => !!it && !!it.productId);
+};
+
+export const parseSoAutosave = (
+  raw: string | null
+): null | { form: Record<string, unknown>; [k: string]: unknown } => {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== "object" || !o.form || typeof o.form !== "object") return null;
+    return o;
+  } catch {
+    return null;
+  }
+};
+
+export const resolveSaveSoNum = (
+  oldSO: { status?: string; soNum?: string } | null | undefined,
+  sales: Array<{ [k: string]: unknown }>
+): string => {
+  if (!oldSO || oldSO.status === "draft") return nextDocNum("SO", sales, "soNum");
+  return oldSO.soNum || "";
+};
+
+export const resolveSaveStatus = (
+  oldSO: { status?: string } | null | undefined,
+  needsApproval: boolean
+): string => {
+  if (!oldSO || oldSO.status === "draft") {
+    return needsApproval ? "pending_special_approval" : "pending_delivery";
+  }
+  if (needsApproval) return "pending_special_approval";
+  return oldSO.status || "pending_delivery";
+};
+
+export const draftFromForm = (
+  form: {
+    customerId?: string | number;
+    date?: string;
+    items?: Array<{ productId?: string | number; qty?: string | number; price?: string | number }>;
+    useVatRep?: boolean;
+    note?: string;
+    legacyNum?: string;
+    eventId?: string;
+    eventPackPurchases?: unknown[];
+  },
+  ui: {
+    incVat: boolean;
+    payType: string;
+    discPct: number;
+    creditDays: number;
+    extraDiscPct?: string | number;
+    extraDiscAmt?: string | number;
+    vatRepName?: string;
+    vatRepAddress?: string;
+    vatRepIdCard?: string;
+  }
+) => ({
+  customerId: form.customerId ? +form.customerId : "",
+  date: form.date || "",
+  items: (form.items || [])
+    .filter((i) => i && i.productId)
+    .map((i) => ({ productId: +(i.productId as string), qty: +(i.qty ?? 0), price: +(i.price ?? 0) })),
+  includeVat: ui.incVat,
+  payType: ui.payType,
+  discPct: ui.discPct,
+  creditDays: ui.creditDays,
+  extraDiscPct: +(ui.extraDiscPct || 0),
+  extraDiscAmt: +(ui.extraDiscAmt || 0),
+  useVatRep: !!form.useVatRep,
+  vatRepName: ui.vatRepName || "",
+  vatRepAddress: ui.vatRepAddress || "",
+  vatRepIdCard: ui.vatRepIdCard || "",
+  note: form.note || "",
+  legacyNum: form.legacyNum || "",
+  eventId: form.eventId || "",
+  eventPackPurchases: [...(form.eventPackPurchases || [])],
+});

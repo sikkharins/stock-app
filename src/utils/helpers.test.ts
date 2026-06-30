@@ -36,6 +36,11 @@ import {
   type Category,
   type SelectedReward,
   type SaleCustomer,
+  soFormHasContent,
+  parseSoAutosave,
+  resolveSaveSoNum,
+  resolveSaveStatus,
+  draftFromForm,
 } from "./helpers.js";
 
 describe("round2", () => {
@@ -1418,5 +1423,111 @@ describe("findSOCombos", () => {
     const withPaid = [...sos, { soNum: "PAID", remaining: 0, date: "2026-01-04" }];
     const r = findSOCombos(withPaid, 300000, 0);
     expect(r.every((c) => !c.soNums.includes("PAID"))).toBe(true);
+  });
+});
+
+describe("soFormHasContent", () => {
+  test("ฟอร์มเปล่า -> false", () => {
+    expect(soFormHasContent({ customerId: "", items: [{ productId: "" }] })).toBe(false);
+  });
+  test("เลือกลูกค้าแล้ว -> true", () => {
+    expect(soFormHasContent({ customerId: "5", items: [{ productId: "" }] })).toBe(true);
+  });
+  test("มีสินค้าอย่างน้อย 1 -> true", () => {
+    expect(soFormHasContent({ customerId: "", items: [{ productId: "3" }] })).toBe(true);
+  });
+  test("null/undefined -> false", () => {
+    expect(soFormHasContent(null as never)).toBe(false);
+    expect(soFormHasContent({} as never)).toBe(false);
+  });
+});
+
+describe("parseSoAutosave", () => {
+  test("null/empty -> null", () => {
+    expect(parseSoAutosave(null)).toBe(null);
+    expect(parseSoAutosave("")).toBe(null);
+  });
+  test("JSON พัง -> null", () => {
+    expect(parseSoAutosave("{not json")).toBe(null);
+  });
+  test("ไม่มี form -> null", () => {
+    expect(parseSoAutosave("{}")).toBe(null);
+    expect(parseSoAutosave('{"form":123}')).toBe(null);
+  });
+  test("มี form object -> คืน object", () => {
+    const r = parseSoAutosave('{"form":{"customerId":"5"},"payType":"cash"}');
+    expect(r).not.toBe(null);
+    expect((r as { form: { customerId: string } }).form.customerId).toBe("5");
+  });
+});
+
+describe("resolveSaveSoNum", () => {
+  test("สร้างใหม่ (oldSO null) -> เลขใหม่ขึ้นต้น SO-", () => {
+    expect(resolveSaveSoNum(null, []).startsWith("SO-")).toBe(true);
+  });
+  test("โปรโมตร่าง -> เลขใหม่ (ไม่ใช่ค่าว่างของร่าง)", () => {
+    const r = resolveSaveSoNum({ status: "draft", soNum: "" }, []);
+    expect(r.startsWith("SO-")).toBe(true);
+  });
+  test("แก้ SO จริงเดิม -> คงเลขเดิม", () => {
+    expect(resolveSaveSoNum({ status: "pending_delivery", soNum: "SO-2026-06-001" }, [])).toBe(
+      "SO-2026-06-001"
+    );
+  });
+});
+
+describe("resolveSaveStatus", () => {
+  test("ใหม่ ไม่ต้องอนุมัติ -> pending_delivery", () => {
+    expect(resolveSaveStatus(null, false)).toBe("pending_delivery");
+  });
+  test("ใหม่ ต้องอนุมัติ -> pending_special_approval", () => {
+    expect(resolveSaveStatus(null, true)).toBe("pending_special_approval");
+  });
+  test("โปรโมตร่าง ต้องอนุมัติ -> pending_special_approval", () => {
+    expect(resolveSaveStatus({ status: "draft" }, true)).toBe("pending_special_approval");
+  });
+  test("โปรโมตร่าง ไม่ต้องอนุมัติ -> pending_delivery", () => {
+    expect(resolveSaveStatus({ status: "draft" }, false)).toBe("pending_delivery");
+  });
+  test("แก้ SO เดิม ไม่ต้องอนุมัติ -> คงสถานะเดิม", () => {
+    expect(resolveSaveStatus({ status: "out_for_delivery" }, false)).toBe("out_for_delivery");
+  });
+  test("แก้ SO เดิม ต้องอนุมัติ -> pending_special_approval", () => {
+    expect(resolveSaveStatus({ status: "completed" }, true)).toBe("pending_special_approval");
+  });
+});
+
+describe("draftFromForm", () => {
+  const ui = {
+    incVat: true,
+    payType: "cash",
+    discPct: 1,
+    creditDays: 45,
+    extraDiscPct: "",
+    extraDiscAmt: "",
+    vatRepName: "",
+    vatRepAddress: "",
+    vatRepIdCard: "",
+  };
+  test("แปลง customerId/items เป็นตัวเลข", () => {
+    const r = draftFromForm(
+      { customerId: "5", date: "2026-06-30", items: [{ productId: "3", qty: "2", price: "100" }] },
+      ui
+    );
+    expect(r.customerId).toBe(5);
+    expect(r.items).toEqual([{ productId: 3, qty: 2, price: 100 }]);
+    expect(r.includeVat).toBe(true);
+    expect(r.payType).toBe("cash");
+  });
+  test("กรองรายการสินค้าที่ยังไม่เลือกทิ้ง", () => {
+    const r = draftFromForm(
+      { customerId: "5", items: [{ productId: "3", qty: 1, price: 0 }, { productId: "", qty: 1, price: 0 }] },
+      ui
+    );
+    expect(r.items).toHaveLength(1);
+  });
+  test("ไม่เลือกลูกค้า -> customerId คงเป็นค่าว่าง", () => {
+    const r = draftFromForm({ customerId: "", items: [{ productId: "3", qty: 1, price: 0 }] }, ui);
+    expect(r.customerId).toBe("");
   });
 });
