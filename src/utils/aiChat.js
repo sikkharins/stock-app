@@ -13,24 +13,41 @@ export async function sendAIMessage(messages, context, settings = {}) {
   return parseAIResponse(text);
 }
 
+const unescapeJsonStr = (s) => s.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+
+// Extract the "message" string even when the JSON is malformed or truncated
+// (e.g. response cut off by max_tokens, so the closing quote/brace are missing).
+function extractMessageField(src) {
+  // closing quote present (well-formed string, but JSON broke elsewhere)
+  const full = src.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (full) return unescapeJsonStr(full[1]);
+  // truncated mid-string: no closing quote — grab everything to the end
+  const partial = src.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)$/);
+  if (partial) return unescapeJsonStr(partial[1]);
+  return null;
+}
+
 function parseAIResponse(text) {
   // 1) try ```json ... ``` block
   const codeMatch = text.match(/```json\s*([\s\S]*?)```/);
   if (codeMatch) {
     try { return JSON.parse(codeMatch[1].trim()); } catch {}
   }
-  // 2) try outermost { ... }
+  // 2) try outermost { ... } (well-formed JSON)
   const braceMatch = text.match(/(\{[\s\S]*\})/);
   if (braceMatch) {
     try { return JSON.parse(braceMatch[1].trim()); } catch {}
-    // 3) JSON parse failed — try to extract "message" field via regex
-    const msgMatch = braceMatch[1].match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (msgMatch) {
-      const msg = msgMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-      const spkMatch = braceMatch[1].match(/"speak"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      const spk = spkMatch ? spkMatch[1].replace(/\\n/g, " ").replace(/\\"/g, '"') : "";
-      const actMatch = braceMatch[1].match(/"action"\s*:\s*"([^"]*)"/);
-      return { action: actMatch ? actMatch[1] : "chat", message: msg, speak: spk || msg.slice(0, 80) };
+  }
+  // 3) JSON malformed or truncated — pull "message" straight from the text so
+  //    we render markdown instead of dumping raw JSON to the user.
+  if (/"(?:action|message)"\s*:/.test(text)) {
+    const msg = extractMessageField(text);
+    if (msg) {
+      const spkMatch = text.match(/"speak"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const spk = spkMatch ? unescapeJsonStr(spkMatch[1]).replace(/\n/g, " ") : "";
+      const actMatch = text.match(/"action"\s*:\s*"([^"]*)"/);
+      const speakFallback = msg.replace(/[#*`|>_-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+      return { action: actMatch ? actMatch[1] : "info", message: msg, speak: spk || speakFallback };
     }
   }
   // 4) plain text fallback — never show raw JSON

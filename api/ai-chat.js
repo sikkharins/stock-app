@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: aiModel,
-        max_tokens: 2048,
+        max_tokens: 8192,
         system: systemPrompt,
         messages,
       }),
