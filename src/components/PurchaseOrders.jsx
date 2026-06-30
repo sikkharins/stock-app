@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, nextDocNum, shipmentTotals, poStatusFromShipments, buildDropshipShipmentSO, poEditViolation } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, nowStr, fmtD, nextDocNum, shipmentTotals, poStatusFromShipments, buildDropshipShipmentSO, poEditViolation, poMatchedItems } from "../utils/helpers.js";
 import { diffFields, diffLineItems } from "../utils/auditDiff.ts";
 import { printDoc } from "./PrintDocument.jsx";
 import { Modal, MBtns } from "./ui/Modal.jsx";
@@ -39,10 +39,10 @@ export default function POPage({sh}){
   const filtered=useMemo(()=>[...basePOs].reverse().filter(po=>{
     const sup=contacts.find(c=>c.id===po.supplierId);
     const s=(search||"").toLowerCase();
-    const ms=po.poNum.toLowerCase().includes(s)||(sup?(cN(sup)||"").toLowerCase().includes(s):false);
+    const ms=po.poNum.toLowerCase().includes(s)||(sup?(cN(sup)||"").toLowerCase().includes(s):false)||(po.refNo||"").toLowerCase().includes(s)||poMatchedItems(po,s,products).length>0;
     const mst=statusFilter==="all"||po.status===statusFilter;
     return ms&&mst;
-  }),[basePOs,search,contacts,statusFilter,cN]);
+  }),[basePOs,search,contacts,statusFilter,cN,products]);
 
   const ef={supplierId:"",date:todayStr(),deliveryDate:"",creditDays:0,items:[{productId:"",qty:1,cost:0}],note:"",refNo:"",dropShip:false,dropShipCustomerId:""};
   const[form,setForm]=useState(ef);
@@ -294,6 +294,8 @@ export default function POPage({sh}){
         <tbody>{filtered.map(po=>{
           const sup=contacts.find(c=>c.id===po.supplierId);
           const wasRejected=(po.approvalHistory||[]).some(h=>h.action==="rejected")&&po.status==="draft";
+          const matched=search?poMatchedItems(po,search.toLowerCase(),products):[];
+          const roll=matched.length?shipmentTotals(po):[];
           return <tr key={po.id} style={{borderBottom:"0.5px solid var(--line)",background:wasRejected?"rgba(255,149,0,0.14)":""}}>
             <td style={{padding:"8px 6px",fontWeight:500}}>
               {po.poNum}
@@ -301,6 +303,7 @@ export default function POPage({sh}){
               {po.dropShip&&<span style={{marginLeft:6,fontSize:10,color:"var(--blue)",background:"rgba(10,132,255,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500}}>{"ส่งนอกสถานที่"}</span>}
               {linkedSONums(po).map(sn=><span key={sn} onClick={e=>{e.stopPropagation();sh.handleTab("sales");sh.setSearch(sn);}} style={{marginLeft:4,fontSize:10,color:"var(--green)",background:"rgba(52,199,89,0.12)",borderRadius:4,padding:"1px 6px",fontWeight:500,cursor:"pointer"}}>{"→ "+sn}</span>)}
               {po.refNo&&<div style={{fontSize:11,color:"var(--dim)",marginTop:2,fontWeight:400}}>{"อ้างอิง: "+po.refNo}</div>}
+              {matched.map(it=>{const pr=products.find(x=>+x.id===+it.productId);const r=roll.find(x=>x.productId===+it.productId);return <div key={"m"+it.productId} style={{fontSize:11,color:"var(--green)",marginTop:2,fontWeight:500}}>{"ตรง: "+(pr?pN(pr):it.productId)+" · คงเหลือ "+(r?r.remaining:0)}</div>;})}
             </td>
             <td style={{padding:"8px 6px"}}>{sup?cN(sup):"-"}</td>
             <td style={{padding:"8px 6px",color:"var(--dim)"}}>{toBE(po.date)}</td>
