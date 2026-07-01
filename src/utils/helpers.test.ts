@@ -11,6 +11,7 @@ import {
   round2,
   haversineKm,
   productCubicM,
+  partCubicM,
   soVolumeM3,
   soRevenue,
   consolidatePickList,
@@ -609,6 +610,28 @@ describe("productCubicM", () => {
     expect(
       productCubicM({ id: 1, widthCm: 0, lengthCm: 80, heightCm: 175, sizeClass: "S" })
     ).toBe(CLASS_M3.S); // zero width → fall through
+  });
+});
+
+describe("partCubicM / productCubicM (split parts)", () => {
+  const hot = { key: "hot", name: "คอยล์ร้อน", priceRatio: 0.6, widthCm: 100, lengthCm: 100, heightCm: 50 }; // 0.5 m³
+  const cold = { key: "cold", name: "คอยล์เย็น", priceRatio: 0.4, widthCm: 100, lengthCm: 100, heightCm: 30 }; // 0.3 m³
+
+  test("partCubicM = W×L×H/1e6 เมื่อครบ, 0 เมื่อไม่ครบ", () => {
+    expect(partCubicM(hot)).toBeCloseTo(0.5, 6);
+    expect(partCubicM({ key: "x", name: "x", priceRatio: 1 })).toBe(0);
+    expect(partCubicM({ key: "x", name: "x", priceRatio: 1, widthCm: 100, lengthCm: 100, heightCm: 0 })).toBe(0);
+    expect(partCubicM(null)).toBe(0);
+  });
+
+  test("productCubicM ของ split = ผลรวมส่วน", () => {
+    const p = { id: 1, splitEnabled: true, splitParts: [hot, cold], sizeClass: "S" as const, cubicM: 99 };
+    expect(productCubicM(p)).toBeCloseTo(0.8, 6); // 0.5 + 0.3 (ชนะทั้ง cubicM override และ sizeClass)
+  });
+
+  test("productCubicM ของ split ที่ยังไม่กรอกกล่อง → fallback logic เดิม", () => {
+    const p = { id: 2, splitEnabled: true, splitParts: [{ key: "hot", name: "ร้อน", priceRatio: 1 }], sizeClass: "L" as const };
+    expect(productCubicM(p)).toBeCloseTo(1.0, 6); // CLASS_M3.L
   });
 });
 

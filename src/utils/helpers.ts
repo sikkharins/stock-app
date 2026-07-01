@@ -40,6 +40,12 @@ export interface SplitPart {
   key: string;            // "hot" | "cold" | future
   name: string;           // display name, e.g. "คอยล์ร้อน"
   priceRatio: number;     // 0..1, all ratios on a product must sum to ~1
+  // Per-part physical box (cm) — used for zone/3D arrangement & volume.
+  // When splitEnabled, these replace the product-level box entirely.
+  widthCm?: number;
+  lengthCm?: number;
+  heightCm?: number;
+  noLayDown?: boolean;    // ห้ามนอน ต่อส่วน
 }
 
 export interface Product {
@@ -568,10 +574,29 @@ export const haversineKm = (
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 };
 
-// Resolve effective cubic m³ for a product. Priority: explicit cubicM override →
-// computed from W×L×H (cm) → per-class default. Default class = M.
+// Cubic m³ of one split part from its own box dims; 0 if not fully specified.
+export const partCubicM = (part: SplitPart | undefined | null): number => {
+  if (!part) return 0;
+  const { widthCm: w, lengthCm: l, heightCm: h } = part;
+  if (
+    typeof w === "number" && typeof l === "number" && typeof h === "number" &&
+    w > 0 && l > 0 && h > 0
+  ) {
+    return (w * l * h) / 1_000_000;
+  }
+  return 0;
+};
+
+// Resolve effective cubic m³ for a product. Split products (with per-part boxes) →
+// sum of part volumes. Otherwise: explicit cubicM override → W×L×H (cm) → per-class
+// default. Default class = M.
 export const productCubicM = (p: Product | undefined | null): number => {
   if (!p) return CLASS_M3.M;
+  if (p.splitEnabled && Array.isArray(p.splitParts) && p.splitParts.length) {
+    const sum = p.splitParts.reduce((s, part) => s + partCubicM(part), 0);
+    if (sum > 0) return sum; // มีส่วนที่กรอกกล่อง → ใช้ผลรวม
+    // ยังไม่กรอกกล่องต่อส่วน → ตกลง logic เดิมด้านล่าง
+  }
   if (typeof p.cubicM === "number" && p.cubicM > 0) return p.cubicM;
   if (
     typeof p.widthCm === "number" &&
