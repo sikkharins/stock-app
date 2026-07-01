@@ -167,8 +167,9 @@ export default function ProdPage({sh}){
       {/* Hover-reveal: distributor + dimensions (collapsed by default) */}
       <div data-reveal style={{maxHeight:0,opacity:0,overflow:"hidden",transition:"max-height 220ms var(--ease-out,ease-out), opacity 180ms var(--ease-out,ease-out), margin-top 180ms var(--ease-out,ease-out)",fontSize:11,color:"var(--dim)",display:"flex",flexDirection:"column",gap:3}}>
         {pr.distributor&&<div><span style={{color:"var(--faint)",textTransform:"uppercase",letterSpacing:"0.05em",fontSize:9,marginRight:5}}>จำหน่ายโดย</span>{pr.distributor}</div>}
-        {hasDims&&<div><span style={{color:"var(--faint)",textTransform:"uppercase",letterSpacing:"0.05em",fontSize:9,marginRight:5}}>ขนาด</span><span className="num">{pr.widthCm+"×"+pr.lengthCm+"×"+pr.heightCm}</span> cm{pr.noLayDown&&<span style={{color:"var(--orange)",marginLeft:6,fontWeight:600}}>· ห้ามนอน</span>}</div>}
-        {!hasDims&&pr.sizeClass&&<div><span style={{color:"var(--faint)",textTransform:"uppercase",letterSpacing:"0.05em",fontSize:9,marginRight:5}}>กลุ่มขนาด</span>{pr.sizeClass}</div>}
+        {pr.splitEnabled&&(pr.splitParts||[]).length>0&&<div><span style={{color:"var(--faint)",textTransform:"uppercase",letterSpacing:"0.05em",fontSize:9,marginRight:5}}>แยกส่วน</span>{(pr.splitParts||[]).map(pt=>`${pt.name} ${pt.widthCm&&pt.lengthCm&&pt.heightCm?`${pt.widthCm}×${pt.lengthCm}×${pt.heightCm}`:"—"}`).join(" · ")} cm</div>}
+        {!pr.splitEnabled&&hasDims&&<div><span style={{color:"var(--faint)",textTransform:"uppercase",letterSpacing:"0.05em",fontSize:9,marginRight:5}}>ขนาด</span><span className="num">{pr.widthCm+"×"+pr.lengthCm+"×"+pr.heightCm}</span> cm{pr.noLayDown&&<span style={{color:"var(--orange)",marginLeft:6,fontWeight:600}}>· ห้ามนอน</span>}</div>}
+        {!pr.splitEnabled&&!hasDims&&pr.sizeClass&&<div><span style={{color:"var(--faint)",textTransform:"uppercase",letterSpacing:"0.05em",fontSize:9,marginRight:5}}>กลุ่มขนาด</span>{pr.sizeClass}</div>}
       </div>
       {(()=>{const sc=salesByProd[pr.id]||{d7:0,d30:0};const anySold=sc.d7>0||sc.d30>0;const trend=salesTrend(sc.d7,sc.d30);const trendInfo=trend==="up"?{icon:"↑",color:"var(--green)"}:trend==="down"?{icon:"↓",color:"var(--orange)"}:null;return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:11,color:"var(--dim)",paddingTop:6,borderTop:"0.5px dashed var(--line)"}}>
         <span style={{textTransform:"uppercase",letterSpacing:"0.04em",fontSize:10,display:"flex",alignItems:"center",gap:4}}>
@@ -321,8 +322,8 @@ export default function ProdPage({sh}){
         <Field label="สต็อก"><input type="number" value={form.stock} onChange={e=>setF("stock",e.target.value)} style={IB}/></Field>
         <Field label="ขั้นต่ำ"><input type="number" value={form.minStock} onChange={e=>setF("minStock",e.target.value)} style={IB}/></Field>
         <Field label="กลุ่มขนาด (จัดส่ง)"><CustomSelect value={form.sizeClass||"M"} onChange={v=>setF("sizeClass",v)} options={[{value:"S",label:"S — เล็ก (~0.05 m³)"},{value:"M",label:"M — กลาง (~0.30 m³)"},{value:"L",label:"L — ใหญ่ (~1.00 m³)"},{value:"XL",label:"XL — ใหญ่มาก (~2.50 m³)"}]}/></Field>
-        <Field label="ปริมาตร m³ (override)"><input type="number" step="0.01" value={form.cubicM??""} onChange={e=>setF("cubicM",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="เว้นไว้ = ใช้ตามกลุ่ม"/></Field>
-        <div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginTop:4}}>
+        {!form.splitEnabled&&<Field label="ปริมาตร m³ (override)"><input type="number" step="0.01" value={form.cubicM??""} onChange={e=>setF("cubicM",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="เว้นไว้ = ใช้ตามกลุ่ม"/></Field>}
+        {!form.splitEnabled&&<div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginTop:4}}>
           <div style={{fontSize:12,fontWeight:600,color:"var(--dim)",marginBottom:8}}>ขนาดกล่อง (cm) — สำหรับจัดวางบนรถ</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
             <Field label="กว้าง W"><input type="number" step="0.1" value={form.widthCm??""} onChange={e=>setDim("widthCm",e.target.value===""?undefined:parseFloat(e.target.value))} style={IB} placeholder="60"/></Field>
@@ -334,7 +335,7 @@ export default function ProdPage({sh}){
             ห้ามนอน (ต้องวางตั้งเท่านั้น เช่น ตู้เย็น ตู้กดน้ำ)
           </label>
           {(()=>{const w=+form.widthCm||0,l=+form.lengthCm||0,h=+form.heightCm||0,v=w>0&&l>0&&h>0?(w*l*h)/1e6:null;return <div style={{fontSize:11,color:v!=null?"var(--green)":"var(--faint)",marginTop:6,fontWeight:v!=null?500:400}}>{v!=null?`คำนวณได้: ${v.toFixed(3)} m³ (${w}×${l}×${h}/1,000,000) — ใช้แทนกลุ่มขนาดอัตโนมัติ`:`กรอกครบทั้ง 3 ค่า → ใช้คำนวณปริมาตรอัตโนมัติ (W×L×H/1,000,000)`}</div>;})()}
-        </div>
+        </div>}
         {/* Split-parts (sold as set, e.g., AC = hot+cold coils) */}
         <div style={{gridColumn:"1/-1",background:"var(--hover)",border:"1px solid var(--line)",borderRadius:8,padding:"10px 12px",marginTop:4}}>
           <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"var(--dim)",cursor:"pointer",marginBottom:form.splitEnabled?8:0}}>
@@ -346,14 +347,28 @@ export default function ProdPage({sh}){
             <div style={{display:"grid",gridTemplateColumns:"100px 1fr 100px 40px",gap:8,fontSize:11,color:"var(--dim)",marginBottom:4,paddingLeft:4}}>
               <span>key</span><span>ชื่อส่วน</span><span style={{textAlign:"right"}}>ratio</span><span></span>
             </div>
-            {(form.splitParts||[]).map((p,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"100px 1fr 100px 40px",gap:8,marginBottom:4}}>
-                <input value={p.key||""} onChange={e=>setF("splitParts",(form.splitParts||[]).map((x,xi)=>xi===i?{...x,key:e.target.value}:x))} style={IB} placeholder="hot"/>
-                <input value={p.name||""} onChange={e=>setF("splitParts",(form.splitParts||[]).map((x,xi)=>xi===i?{...x,name:e.target.value}:x))} style={IB} placeholder="คอยล์ร้อน"/>
-                <input type="number" step="0.01" min="0" max="1" value={p.priceRatio??""} onChange={e=>setF("splitParts",(form.splitParts||[]).map((x,xi)=>xi===i?{...x,priceRatio:e.target.value===""?0:parseFloat(e.target.value)}:x))} style={{...IB,textAlign:"right"}} placeholder="0.6"/>
-                <button type="button" onClick={()=>setF("splitParts",(form.splitParts||[]).filter((_,xi)=>xi!==i))} style={{padding:"6px 0",borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>×</button>
+            {(form.splitParts||[]).map((p,i)=>{
+              const upd=(k,v)=>setF("splitParts",(form.splitParts||[]).map((x,xi)=>xi===i?{...x,[k]:v}:x));
+              const num=e=>e.target.value===""?undefined:parseFloat(e.target.value);
+              return (
+              <div key={i} style={{border:"1px solid var(--line)",borderRadius:6,padding:8,marginBottom:6,background:"var(--bg)"}}>
+                <div style={{display:"grid",gridTemplateColumns:"100px 1fr 100px 40px",gap:8}}>
+                  <input value={p.key||""} onChange={e=>upd("key",e.target.value)} style={IB} placeholder="hot"/>
+                  <input value={p.name||""} onChange={e=>upd("name",e.target.value)} style={IB} placeholder="คอยล์ร้อน"/>
+                  <input type="number" step="0.01" min="0" max="1" value={p.priceRatio??""} onChange={e=>upd("priceRatio",e.target.value===""?0:parseFloat(e.target.value))} style={{...IB,textAlign:"right"}} placeholder="0.6"/>
+                  <button type="button" onClick={()=>setF("splitParts",(form.splitParts||[]).filter((_,xi)=>xi!==i))} style={{padding:"6px 0",borderRadius:5,border:"1px solid var(--red)",background:"rgba(255,59,48,0.12)",color:"var(--red)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>×</button>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:8,marginTop:6,alignItems:"center"}}>
+                  <input type="number" step="0.1" value={p.widthCm??""} onChange={e=>upd("widthCm",num(e))} style={IB} placeholder="กว้าง W"/>
+                  <input type="number" step="0.1" value={p.lengthCm??""} onChange={e=>upd("lengthCm",num(e))} style={IB} placeholder="ยาว L"/>
+                  <input type="number" step="0.1" value={p.heightCm??""} onChange={e=>upd("heightCm",num(e))} style={IB} placeholder="สูง H"/>
+                  <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--dim)",whiteSpace:"nowrap",cursor:"pointer"}}>
+                    <input type="checkbox" checked={!!p.noLayDown} onChange={e=>upd("noLayDown",e.target.checked)}/>ห้ามนอน
+                  </label>
+                </div>
               </div>
-            ))}
+              );
+            })}
             <button type="button" onClick={()=>setF("splitParts",[...(form.splitParts||[]),{key:"",name:"",priceRatio:0}])} style={{marginTop:4,padding:"5px 10px",borderRadius:5,border:"1px dashed var(--blue)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>+ เพิ่มส่วน</button>
             {(() => {const sum=(form.splitParts||[]).reduce((s,p)=>s+(+p.priceRatio||0),0);const ok=Math.abs(sum-1)<=0.001;return <div style={{fontSize:11,color:ok?"var(--green)":"var(--orange)",marginTop:6,fontWeight:500}}>ผลรวมสัดส่วน: {sum.toFixed(3)} {ok?"✓":"(ต้อง = 1)"}</div>;})()}
           </>}
