@@ -65,6 +65,10 @@ export function buildContext(products, contacts, sales, pN, cN, cu, pos, payment
     cost: p.cost || 0,
     stock: p.stock,
     unit: p.unit || "เครื่อง",
+    // ขนาดกล่อง (ซม.) — undefined จะถูกตัดออกจาก JSON เอง ทำให้ตัวที่ยังไม่กรอกไม่มี key นี้
+    widthCm: p.widthCm,
+    lengthCm: p.lengthCm,
+    heightCm: p.heightCm,
   }));
 
   const custs = contacts

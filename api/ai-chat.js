@@ -51,7 +51,11 @@ export default async function handler(req, res) {
 
 function buildSystemPrompt(ctx, lang, customPrompt, allowGeneralChat = true) {
   const products = (ctx.products || [])
-    .map((p) => `[${p.id}] ${p.brand} — ${p.name} | ขาย ฿${p.price} | ทุน ฿${p.cost || 0} | สต็อก ${p.stock} ${p.unit || "ชิ้น"}`)
+    .map((p) => {
+      const hasDim = p.widthCm > 0 && p.lengthCm > 0 && p.heightCm > 0;
+      const dim = hasDim ? `${p.widthCm}×${p.lengthCm}×${p.heightCm}ซม.` : "ยังไม่กรอกขนาด";
+      return `[${p.id}] ${p.brand} — ${p.name} | ขาย ฿${p.price} | ทุน ฿${p.cost || 0} | สต็อก ${p.stock} ${p.unit || "ชิ้น"} | ขนาด(กว้าง×ยาว×สูง) ${dim}`;
+    })
     .join("\n");
 
   const customers = (ctx.customers || [])
@@ -227,7 +231,7 @@ ${topCustomersData || "ยังไม่มีข้อมูล"}
 }
 \`\`\`
 
-### 5. แก้ไขสินค้า (เมื่อผู้ใช้สั่งแก้ราคา/ต้นทุน/สต็อก/ชื่อ):
+### 5. แก้ไขสินค้า (เมื่อผู้ใช้สั่งแก้ราคา/ต้นทุน/สต็อก/ชื่อ/ขนาด):
 \`\`\`json
 {
   "action": "update_products",
@@ -241,9 +245,11 @@ ${topCustomersData || "ยังไม่มีข้อมูล"}
   }
 }
 \`\`\`
-- "changes" รองรับ fields: price, cost, stock, minStock, name, nameT
+- "changes" รองรับ fields: price, cost, stock, minStock, name, nameT, widthCm, lengthCm, heightCm
+- widthCm/lengthCm/heightCm = ขนาดกล่อง กว้าง/ยาว/สูง หน่วยเซนติเมตร (เช่นผู้ใช้บอก "ตู้เย็น X กว้าง 60 ยาว 70 สูง 180" → changes: {"widthCm":60,"lengthCm":70,"heightCm":180})
 - ต้องใส่ productId ที่ถูกต้องจากข้อมูลสินค้าเท่านั้น
 - ระบบจะแสดงรายการให้ผู้ใช้ยืนยันก่อนบันทึกจริง
+- ข้อมูลสินค้าแต่ละตัวมีขนาด(กว้าง×ยาว×สูง) ต่อท้าย ตัวที่ขึ้น "ยังไม่กรอกขนาด" คือยังไม่มีข้อมูลขนาด — เมื่อผู้ใช้ถามหาสินค้าที่ยังไม่กรอกขนาด ให้ลิสต์เฉพาะตัวที่ "ยังไม่กรอกขนาด"
 
 ### 6. ตอบข้อมูลทั่วไป (เช็คสต็อก, ยอดค้าง, ดูประวัติ, สรุปยอด ฯลฯ):
 \`\`\`json

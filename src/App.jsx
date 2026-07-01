@@ -636,6 +636,9 @@ export default function App(){
         if(c.minStock!=null)up.minStock=+c.minStock;
         if(c.name!=null)up.name=c.name;
         if(c.nameT!=null)up.nameT=c.nameT;
+        if(c.widthCm!=null)up.widthCm=+c.widthCm;
+        if(c.lengthCm!=null)up.lengthCm=+c.lengthCm;
+        if(c.heightCm!=null)up.heightCm=+c.heightCm;
         return up;
       }));
       addA("แก้ไขสินค้า (AI Bot)",updates.length+" รายการ");
