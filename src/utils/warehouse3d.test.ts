@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildWarehouseData, autoPlaceZones, DEFAULT_WAREHOUSE, clearZoneLayout, applyZoneLayout, mergeZoneEntry } from "./warehouse3d.js";
+import { buildWarehouseData, autoPlaceZones, DEFAULT_WAREHOUSE, clearZoneLayout, applyZoneLayout, mergeZoneEntry, expandProductsForWarehouse } from "./warehouse3d.js";
 
 // The util is plain JS producing dynamic shapes; treat results loosely in tests.
 type WD = { WAREHOUSE: any; ZONES: any[]; PRODUCTS: any[] };
@@ -13,6 +13,51 @@ const product = (over: Record<string, unknown> = {}) => ({
 
 // a dummy real zone forces the real-data path (empty zones triggers Claude Design seed)
 const Z = [{ id: "z1", productIds: [] }];
+
+const splitProduct = (over: Record<string, unknown> = {}) => ({
+  id: 7, code: "AC-7", name: "AC", nameT: "แอร์ LG", brand: "LG", stock: 350,
+  sizeClass: "M", unit: "ชุด", splitEnabled: true,
+  splitParts: [
+    { key: "hot", name: "คอยล์ร้อน", priceRatio: 0.6, widthCm: 60, lengthCm: 80, heightCm: 90 },
+    { key: "cold", name: "คอยล์เย็น", priceRatio: 0.4, widthCm: 90, lengthCm: 30, heightCm: 30, noLayDown: true },
+  ],
+  ...over,
+});
+
+describe("expandProductsForWarehouse", () => {
+  test("non-split ผ่านเหมือนเดิม", () => {
+    const out = expandProductsForWarehouse([product()]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe(1);
+  });
+
+  test("split แตกเป็น pseudo-product ต่อส่วน", () => {
+    const out = expandProductsForWarehouse([splitProduct()]);
+    expect(out.map((u: any) => u.id)).toEqual(["7:hot", "7:cold"]);
+    expect(out[0].nameT).toBe("แอร์ LG — คอยล์ร้อน");
+    expect(out[0].stock).toBe(350);
+    expect(out[0].widthCm).toBe(60);
+    expect(out[0].splitEnabled).toBeFalsy();
+    expect(out[1].noLayDown).toBe(true);
+  });
+});
+
+describe("buildWarehouseData — split products", () => {
+  test("PRODUCTS มี composite id ต่อส่วน", () => {
+    const { PRODUCTS } = build([splitProduct()], [{ id: "z1", productIds: [] }], {});
+    expect(PRODUCTS.map((p) => p.id)).toEqual(["7:hot", "7:cold"]);
+  });
+
+  test("zone ที่อ้าง id เปล่า (ของ split เดิม) → แตกเป็นส่วนอัตโนมัติ", () => {
+    const { ZONES } = build([splitProduct()], [{ id: "z1", productIds: [7] }], {});
+    expect(ZONES[0].productIds).toEqual(["7:hot", "7:cold"]);
+  });
+
+  test("zone ที่อ้าง composite id อยู่แล้ว → คงเดิม", () => {
+    const { ZONES } = build([splitProduct()], [{ id: "z1", productIds: ["7:cold"] }], {});
+    expect(ZONES[0].productIds).toEqual(["7:cold"]);
+  });
+});
 
 describe("buildWarehouseData — PRODUCTS mapping", () => {
   test("maps products 1:1 preserving fields", () => {

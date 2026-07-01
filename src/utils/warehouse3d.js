@@ -116,6 +116,38 @@ export function autoPlaceZones(zones, warehouse) {
   return out;
 }
 
+// Expand split products into per-part pseudo-products for warehouse/zone use.
+// Non-split products pass through unchanged. Each split part becomes a pseudo-
+// product with id "<productId>:<partKey>", carrying that part's own box + name.
+export function expandProductsForWarehouse(products = []) {
+  const list = Array.isArray(products) ? products : [];
+  const out = [];
+  for (const p of list) {
+    if (p && p.splitEnabled && Array.isArray(p.splitParts) && p.splitParts.length) {
+      const base = p.nameT || p.name || "";
+      for (const part of p.splitParts) {
+        out.push({
+          ...p,
+          id: `${p.id}:${part.key}`,
+          code: p.code || "",
+          name: p.name ? `${p.name} — ${part.name}` : part.name,
+          nameT: base ? `${base} — ${part.name}` : part.name,
+          widthCm: part.widthCm,
+          lengthCm: part.lengthCm,
+          heightCm: part.heightCm,
+          noLayDown: !!part.noLayDown,
+          cubicM: undefined,     // ปล่อยให้ปริมาตรมาจาก W×L×H ของส่วน
+          splitEnabled: false,   // pseudo-product เป็นชิ้นเดียว
+          splitParts: undefined,
+        });
+      }
+    } else {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
 // Map one app Product onto the scene's PRODUCTS item shape (fill safe defaults for
 // optional fields so the renderer never receives undefined dimensions).
 function mapProduct(p) {
@@ -175,6 +207,18 @@ export function buildWarehouseData(products = [], zones = [], warehouseLayout = 
     needPlacement.forEach((z) => { placement[z.id] = grid[z.id]; });
   }
 
+  // Split products เดิมอาจถูกอ้างด้วย id เปล่าใน zone.productIds — แตกเป็นส่วนตอน render
+  const splitPartIds = new Map();
+  for (const p of productList) {
+    if (p && p.splitEnabled && Array.isArray(p.splitParts) && p.splitParts.length) {
+      splitPartIds.set(String(p.id), p.splitParts.map((part) => `${p.id}:${part.key}`));
+    }
+  }
+  const expandZoneIds = (ids) =>
+    (Array.isArray(ids) ? ids : []).flatMap((id) =>
+      splitPartIds.has(String(id)) ? splitPartIds.get(String(id)) : [id]
+    );
+
   const ZONES = baseZones.map((z, i) => {
     const saved = zlay[z.id] || {};
     const geom = saved.origin && saved.size ? saved : (z.origin && z.size ? z : placement[z.id]);
@@ -185,7 +229,7 @@ export function buildWarehouseData(products = [], zones = [], warehouseLayout = 
       origin: (geom && geom.origin) || { x: 0, z: 0 },
       size: (geom && geom.size) || { w: 4, l: 4 },
       color: saved.color || z.color || (geom && geom.color) || ZONE_PALETTE[i % ZONE_PALETTE.length],
-      productIds: Array.isArray(z.productIds) ? z.productIds : [],
+      productIds: expandZoneIds(z.productIds),
       presets: Array.isArray(z.presets) ? z.presets : [],
       heightM: Number(saved.heightM) || Number(z.heightM) || WAREHOUSE.heightM,
     };
@@ -196,7 +240,7 @@ export function buildWarehouseData(products = [], zones = [], warehouseLayout = 
     return out;
   });
 
-  const PRODUCTS = productList.map(mapProduct);
+  const PRODUCTS = expandProductsForWarehouse(productList).map(mapProduct);
 
   return { WAREHOUSE, ZONES, PRODUCTS };
 }
