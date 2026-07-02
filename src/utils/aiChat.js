@@ -1,3 +1,5 @@
+import { realSales } from "./helpers.js";
+
 export async function sendAIMessage(messages, context, settings = {}) {
   const res = await fetch("/api/ai-chat", {
     method: "POST",
@@ -13,16 +15,19 @@ export async function sendAIMessage(messages, context, settings = {}) {
   return parseAIResponse(text);
 }
 
-const unescapeJsonStr = (s) => s.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+// Single pass so replace order can't corrupt literal backslashes ("C:\\net" ต้องได้
+// "C:\net" ไม่ใช่ขึ้นบรรทัดใหม่). Unknown escapes (\uXXXX ฯลฯ) are left as-is.
+const unescapeJsonStr = (s) => s.replace(/\\(.)/g, (m, c) =>
+  c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : (c === '"' || c === "\\" || c === "/") ? c : m);
 
-// Extract the "message" string even when the JSON is malformed or truncated
+// Extract a quoted JSON string field even when the JSON is malformed or truncated
 // (e.g. response cut off by max_tokens, so the closing quote/brace are missing).
-function extractMessageField(src) {
+function extractStringField(src, name) {
   // closing quote present (well-formed string, but JSON broke elsewhere)
-  const full = src.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const full = src.match(new RegExp('"' + name + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
   if (full) return unescapeJsonStr(full[1]);
   // truncated mid-string: no closing quote — grab everything to the end
-  const partial = src.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)$/);
+  const partial = src.match(new RegExp('"' + name + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)$'));
   if (partial) return unescapeJsonStr(partial[1]);
   return null;
 }
@@ -41,10 +46,10 @@ function parseAIResponse(text) {
   // 3) JSON malformed or truncated — pull "message" straight from the text so
   //    we render markdown instead of dumping raw JSON to the user.
   if (/"(?:action|message)"\s*:/.test(text)) {
-    const msg = extractMessageField(text);
+    const msg = extractStringField(text, "message");
     if (msg) {
-      const spkMatch = text.match(/"speak"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      const spk = spkMatch ? unescapeJsonStr(spkMatch[1]).replace(/\n/g, " ") : "";
+      const spkRaw = extractStringField(text, "speak");
+      const spk = spkRaw ? spkRaw.replace(/\n/g, " ") : "";
       const actMatch = text.match(/"action"\s*:\s*"([^"]*)"/);
       const speakFallback = msg.replace(/[#*`|>_-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
       return { action: actMatch ? actMatch[1] : "info", message: msg, speak: spk || speakFallback };
@@ -89,8 +94,7 @@ export function buildContext(products, contacts, sales, pN, cN, cu, pos, payment
     .filter((c) => c.type === "supplier")
     .map((c) => ({ id: c.id, name: cN(c), nameT: c.nameT || "" }));
 
-  const allSOs = [...sales]
-    .filter((so) => so.status !== "draft")
+  const allSOs = realSales(sales)
     .reverse()
     .map((so) => {
       const cust = contacts.find((c) => c.id === so.customerId);

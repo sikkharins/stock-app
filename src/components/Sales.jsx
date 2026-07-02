@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { IB, DISC_OPTS, CREDIT_OPTS, SO_AUTOSAVE_KEY } from "../utils/constants.js";
-import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo, nextDocNum, poStatusFromShipments, soFormHasContent, parseSoAutosave, resolveSaveSoNum, resolveSaveStatus, draftFromForm } from "../utils/helpers.js";
+import { fmt, toBE, todayStr, mkLog, round2, calcAccumulatedTotal, calcCurrentMatchTotal, findClaimableTiers, legacyPrefix, splitLegacyNum, snapshotItemParts, productQualifiesForPromo, nextDocNum, poStatusFromShipments, soFormHasContent, parseSoAutosave, resolveSaveSoNum, resolveSaveStatus, draftFromForm, realSales } from "../utils/helpers.js";
 import { diffFields, diffLineItems } from "../utils/auditDiff.ts";
 import { printDoc } from "./PrintDocument.jsx";
 import { printSOForm } from "./PrintSOForm.js";
@@ -26,7 +26,9 @@ function SOList({sh}){
   const ef={customerId:"",date:todayStr(),items:[{productId:"",qty:1,price:0}],useVatRep:false,vatRepId:"",note:"",legacyNum:"",eventId:"",eventPackPurchases:[]};
   const[form,setForm]=useState(ef);const[viewSO,setViewSO]=useState(null);const[confirmSO,setConfirmSO]=useState(null);const[delSO,setDelSO]=useState(null);const[editSO,setEditSO]=useState(null);const[viewProfile,setViewProfile]=useState(null);const[fSt,setFSt]=useState("all");const[approveSO,setApproveSO]=useState(null);const[warnMsg,setWarnMsg]=useState(null);
 
-  const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId))return false;if(fSt==="all"&&so.status==="draft")return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
+  // ร่างที่ยังไม่เลือกลูกค้า (customerId ว่าง) ต้องไม่หายจากสายตา sales user ที่สร้างมันเอง
+  const draftNoCust=so=>so.status==="draft"&&!so.customerId;
+  const filtered=useMemo(()=>[...sales].reverse().filter(so=>{if(myCI&&!myCI.includes(so.customerId)&&!draftNoCust(so))return false;if(fSt==="all"&&so.status==="draft")return false;if(fSt!=="all"&&so.status!==fSt)return false;const s=(search||"").toLowerCase();const cust=contacts.find(c=>c.id===so.customerId);return so.soNum.toLowerCase().includes(s)||(cust&&(cN(cust)||"").toLowerCase().includes(s));}),[sales,myCI,fSt,search,contacts,cN]);
   const[incVat,setIncVat]=useState(true);const[payType,setPayType]=useState("cash");const[discPct,setDiscPct]=useState(1);const[creditDays,setCreditDays]=useState(45);const[extraDiscPct,setExtraDiscPct]=useState("");const[extraDiscAmt,setExtraDiscAmt]=useState("");const[formErrors,setFormErrors]=useState([]);const[showQuick,setShowQuick]=useState(false);
   // Promo accumulate: pendingClaims = รับเลย, pendingSaves = เก็บไว้, selectedWalletIds = ใช้รางวัลจาก wallet
   const[pendingClaims,setPendingClaims]=useState([]); // [{promoId, tierId, promoName, tier}]
@@ -69,8 +71,8 @@ function SOList({sh}){
   },[modal,form,incVat,payType,discPct,creditDays,extraDiscPct,extraDiscAmt]);
 
   const soTot=so=>(so.items||[]).reduce((s,i)=>s+i.qty*i.price,0);
-  const mySO=useMemo(()=>myCI?sales.filter(s=>myCI.includes(s.customerId)):sales,[sales,myCI]);
-  const stats=useMemo(()=>{const real=mySO.filter(s=>s.status!=="draft");const pend=real.filter(s=>s.status==="pending_delivery").length;const out=real.filter(s=>s.status==="out_for_delivery").length;const comp=real.filter(s=>s.status==="completed").length;const pendApv=real.filter(s=>s.status==="pending_special_approval").length;const draft=mySO.filter(s=>s.status==="draft").length;const totAmt=real.reduce((s,so)=>s+soTot(so)-(so.discountAmt||0),0);return{total:real.length,pend,out,comp,pendApv,draft,totAmt};},[mySO]);
+  const mySO=useMemo(()=>myCI?sales.filter(s=>myCI.includes(s.customerId)||draftNoCust(s)):sales,[sales,myCI]);
+  const stats=useMemo(()=>{const real=realSales(mySO);const pend=real.filter(s=>s.status==="pending_delivery").length;const out=real.filter(s=>s.status==="out_for_delivery").length;const comp=real.filter(s=>s.status==="completed").length;const pendApv=real.filter(s=>s.status==="pending_special_approval").length;const draft=mySO.filter(s=>s.status==="draft").length;const totAmt=real.reduce((s,so)=>s+soTot(so)-(so.discountAmt||0),0);return{total:real.length,pend,out,comp,pendApv,draft,totAmt};},[mySO]);
   const addItem=()=>setForm(f=>({...f,items:[...f.items,{productId:"",qty:1,price:0}]}));
   const rmItem=idx=>setForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
   const setIt=(idx,k,v)=>setForm(f=>{const its=[...f.items];its[idx]={...its[idx],[k]:v};if(k==="productId"){const p=products.find(x=>x.id===+v);if(p)its[idx].price=p.price;}return{...f,items:its};});
@@ -135,7 +137,16 @@ function SOList({sh}){
     const origPrices=items.map(i=>{const p=products.find(x=>x.id===i.productId);return p?+p.price:+i.price;});
     const priceChanged=baseItems.some((i,idx)=>{if(promoOverriddenIdx.has(idx))return false;const p=products.find(x=>x.id===i.productId);return p&&+i.price!==+p.price;});
     const needsApproval=!hasApv&&(priceChanged||ep>0||ea>0);
-    const soBase={customerId:+form.customerId,date:form.date,items,origPrices,includeVat:incVat,vatAmount:vatAmt,payType,discountAmt:totalDisc,discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,extraDiscAmt:ea||0,rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,creditDays:payType==="credit"?creditDays:0,useVatRep:!!form.useVatRep,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:"",note:form.note||"",legacyNum:form.legacyNum||"",eventId:form.eventId||"",eventPackPurchases:[...(form.eventPackPurchases||[])]};
+    // Core form fields มาจาก draftFromForm (แหล่งเดียวกับ saveDraft) — field ใหม่ของ SO
+    // เพิ่มใน draftFromForm ที่เดียวแล้วได้ครบทั้งร่างและ SO จริง; ด้านล่าง override เฉพาะ
+    // ค่าที่การสร้าง SO จริงคำนวณเพิ่ม (items ที่ snapshot แล้ว, ส่วนลด/VAT/รางวัลที่คิดแล้ว)
+    const soBase={
+      ...draftFromForm(form,{incVat,payType,discPct,creditDays,extraDiscPct,extraDiscAmt,vatRepName:selRep?selRep.name:"",vatRepAddress:selRep?selRep.address:"",vatRepIdCard:selRep?selRep.idCard:""}),
+      customerId:+form.customerId,items,origPrices,vatAmount:vatAmt,discountAmt:totalDisc,
+      discPct:payType==="cash"?discPct:0,extraDiscPct:ep||0,extraDiscAmt:ea||0,
+      rewardDiscPct,rewardDiscAmt:totalRewardDisc,appliedRewards,
+      creditDays:payType==="credit"?creditDays:0,
+    };
 
     // Update customer: claimedTierIds, savedRewards, savedFromSO
     const oldSO=soId?sales.find(s=>s.id===soId):null;
@@ -171,7 +182,7 @@ function SOList({sh}){
       const _soDefs=[{key:"customerId",label:"ลูกค้า",fmt:_cust},{key:"date",label:"วันที่",fmt:toBE},{key:"payType",label:"การชำระ",fmt:v=>v==="cash"?"เงินสด":v==="credit"?"เครดิต":String(v??"")},{key:"creditDays",label:"เครดิต (วัน)"},{key:"discountAmt",label:"ส่วนลด",fmt:_money},{key:"includeVat",label:"VAT",fmt:v=>v?"รวม":"ไม่รวม"},{key:"vatRepName",label:"ตัวแทน VAT"},{key:"note",label:"หมายเหตุ"}];
       const _changes=oldSO?[...diffFields(oldSO,soBase,_soDefs),...diffLineItems(oldSO.items||[],soBase.items||[],{priceKey:"price",nameOf:_nameOf,fmtMoney:_money})]:[];
       addA("แก้ไข SO",editSO?.soNum||"",_changes);setEditSO(null);}
-    else if(soId&&isPromote){setSales(p=>p.map(s=>s.id===soId?{...s,...soBase,soNum:newSoNum,status,fromQuote:s.fromQuote||""}:s));addA("สร้าง SO"+(needsApproval?" (รออนุมัติ)":""),newSoNum);setEditSO(null);}
+    else if(soId&&isPromote){setSales(p=>p.map(s=>s.id===soId?{...s,...soBase,soNum:newSoNum,status,fromQuote:s.fromQuote||"",savedAt:undefined}:s));addA("สร้าง SO"+(needsApproval?" (รออนุมัติ)":""),newSoNum);setEditSO(null);}
     else{setSales(p=>[...p,{id:Date.now()+Math.random(),soNum:newSoNum,status,fromQuote:"",...soBase}]);addA("สร้าง SO"+(needsApproval?" (รออนุมัติ)":""),newSoNum);}
     clearAutosave();
     setRestored(false);
@@ -194,7 +205,7 @@ function SOList({sh}){
   };
   const trySubmit=(soId)=>{const errs=[];if(!form.customerId)errs.push("ยังไม่เลือกลูกค้า");const exId=soId||0;const isDropship=!!editSO?.dropShip;form.items.forEach((it,idx)=>{if(!it.productId)errs.push("สินค้ารายการที่ "+(idx+1)+" ยังไม่เลือก");else if(!isDropship&&+it.qty>getAvail(it.productId,exId))errs.push("สินค้ารายการที่ "+(idx+1)+" เกินสต็อก");});if(errs.length){setFormErrors(errs);return;}setFormErrors([]);setReviewMode({soId});};
   const confirmAndSave=()=>{if(!reviewMode)return;const id=reviewMode.soId;setReviewMode(null);doSave(id);};
-  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO&&cu?.role!=="Admin"){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.linkedPO){setPOs(p=>p.map(x=>{if(x.poNum!==so.linkedPO)return x;const hadShip=(x.shipments||[]).some(sh=>sh.soNum===so.soNum);const linkedSO=x.linkedSO===so.soNum?"":x.linkedSO;const shipments=(x.shipments||[]).filter(sh=>sh.soNum!==so.soNum);const base={...x,linkedSO,shipments};return hadShip?{...base,status:poStatusFromShipments(base)}:base;}));}if(so.status==="completed"&&!so.linkedPO){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}const soPays=payments.filter(p=>p.refId===so.soNum&&p.type==="ar");if(soPays.length){setPayments(prev=>prev.filter(p=>!(p.refId===so.soNum&&p.type==="ar")));setBankTxns(prev=>prev.filter(t=>!soPays.some(p=>t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="in")));setCheques(prev=>prev.filter(c=>!soPays.some(p=>p.method==="เช็ค"&&p.chequeNo&&c.chequeNo===p.chequeNo&&c.refId===p.refId)));}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
+  const confirmDel=id=>{const so=sales.find(s=>s.id===id);if(!so)return;if(so.linkedPO&&cu?.role!=="Admin"){setWarnMsg("ไม่สามารถลบ SO นี้ได้ — เชื่อมโยงกับ "+so.linkedPO);return;}if(so.linkedPO){setPOs(p=>p.map(x=>{if(x.poNum!==so.linkedPO)return x;const hadShip=(x.shipments||[]).some(sh=>sh.soNum===so.soNum);const linkedSO=x.linkedSO===so.soNum?"":x.linkedSO;const shipments=(x.shipments||[]).filter(sh=>sh.soNum!==so.soNum);const base={...x,linkedSO,shipments};return hadShip?{...base,status:poStatusFromShipments(base)}:base;}));}if(so.status==="completed"&&!so.linkedPO){for(const it of so.items){const pr=products.find(p=>p.id===it.productId);if(pr){const bef=pr.stock;setProducts(ps=>ps.map(p=>p.id===it.productId?{...p,stock:p.stock+it.qty}:p));addLog(mkLog(it.productId,"adjust_in",it.qty,bef,bef+it.qty,so.soNum,"ยกเลิก SO (คืนสต็อก)",cu?.username));}}}const soPays=so.soNum?payments.filter(p=>p.refId===so.soNum&&p.type==="ar"):[];if(soPays.length){setPayments(prev=>prev.filter(p=>!(p.refId===so.soNum&&p.type==="ar")));setBankTxns(prev=>prev.filter(t=>!soPays.some(p=>t.refId===p.refId&&Math.abs(t.amount-p.amount)<0.01&&t.date===p.date&&t.type==="in")));setCheques(prev=>prev.filter(c=>!soPays.some(p=>p.method==="เช็ค"&&p.chequeNo&&c.chequeNo===p.chequeNo&&c.refId===p.refId)));}addA("ลบ SO",so.soNum||"");setSales(p=>p.filter(s=>s.id!==id));};
   const deliveringRef=useRef(new Set());
   const confirmDelivery=id=>{
     if(deliveringRef.current.has(id))return;

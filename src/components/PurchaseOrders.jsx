@@ -36,13 +36,26 @@ export default function POPage({sh}){
   const [statusFilter,setStatusFilter]=useState("all");
   const basePOs=isSup?pos.filter(po=>po.supplierId===(contacts.find(c=>c.type==="supplier"&&c.name===supN)||{}).id):pos;
   const counts=useMemo(()=>{const c={};basePOs.forEach(po=>{c[po.status]=(c[po.status]||0)+1;});return c;},[basePOs]);
+  // Per-PO matched line items + shipment rollup for the active search — computed once per
+  // search/data change here, so the filter AND the row badges read from the same Map instead
+  // of re-running poMatchedItems/shipmentTotals per row on every render.
+  const matchedByPo=useMemo(()=>{
+    const m=new Map();
+    const s=(search||"").trim().toLowerCase();
+    if(!s)return m;
+    for(const po of basePOs){
+      const matched=poMatchedItems(po,s,products);
+      if(matched.length)m.set(po.id,{matched,roll:shipmentTotals(po)});
+    }
+    return m;
+  },[basePOs,search,products]);
   const filtered=useMemo(()=>[...basePOs].reverse().filter(po=>{
     const sup=contacts.find(c=>c.id===po.supplierId);
     const s=(search||"").toLowerCase();
-    const ms=po.poNum.toLowerCase().includes(s)||(sup?(cN(sup)||"").toLowerCase().includes(s):false)||(po.refNo||"").toLowerCase().includes(s)||poMatchedItems(po,s,products).length>0;
+    const ms=po.poNum.toLowerCase().includes(s)||(sup?(cN(sup)||"").toLowerCase().includes(s):false)||(po.refNo||"").toLowerCase().includes(s)||matchedByPo.has(po.id);
     const mst=statusFilter==="all"||po.status===statusFilter;
     return ms&&mst;
-  }),[basePOs,search,contacts,statusFilter,cN,products]);
+  }),[basePOs,search,contacts,statusFilter,cN,matchedByPo]);
 
   const ef={supplierId:"",date:todayStr(),deliveryDate:"",creditDays:0,items:[{productId:"",qty:1,cost:0}],note:"",refNo:"",dropShip:false,dropShipCustomerId:""};
   const[form,setForm]=useState(ef);
@@ -294,8 +307,9 @@ export default function POPage({sh}){
         <tbody>{filtered.map(po=>{
           const sup=contacts.find(c=>c.id===po.supplierId);
           const wasRejected=(po.approvalHistory||[]).some(h=>h.action==="rejected")&&po.status==="draft";
-          const matched=search?poMatchedItems(po,search.toLowerCase(),products):[];
-          const roll=matched.length?shipmentTotals(po):[];
+          const mm=matchedByPo.get(po.id);
+          const matched=mm?mm.matched:[];
+          const roll=mm?mm.roll:[];
           return <tr key={po.id} style={{borderBottom:"0.5px solid var(--line)",background:wasRejected?"rgba(255,149,0,0.14)":""}}>
             <td style={{padding:"8px 6px",fontWeight:500}}>
               {po.poNum}
