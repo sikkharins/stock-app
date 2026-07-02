@@ -366,11 +366,13 @@ export default function ProdPage({sh}){
                     <input type="checkbox" checked={!!p.noLayDown} onChange={e=>upd("noLayDown",e.target.checked)}/>ห้ามนอน
                   </label>
                 </div>
+                {(()=>{const w=+p.widthCm||0,l=+p.lengthCm||0,h=+p.heightCm||0,v=w>0&&l>0&&h>0?(w*l*h)/1e6:null;return <div style={{fontSize:11,color:v!=null?"var(--green)":"var(--faint)",marginTop:5,fontWeight:v!=null?500:400}}>{v!=null?`ปริมาตร: ${v.toFixed(3)} m³ (${w}×${l}×${h}/1,000,000)`:"กรอกครบ 3 ค่า → คำนวณปริมาตรส่วนนี้"}</div>;})()}
               </div>
               );
             })}
             <button type="button" onClick={()=>setF("splitParts",[...(form.splitParts||[]),{key:"",name:"",priceRatio:0}])} style={{marginTop:4,padding:"5px 10px",borderRadius:5,border:"1px dashed var(--blue)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>+ เพิ่มส่วน</button>
             {(() => {const sum=(form.splitParts||[]).reduce((s,p)=>s+(+p.priceRatio||0),0);const ok=Math.abs(sum-1)<=0.001;return <div style={{fontSize:11,color:ok?"var(--green)":"var(--orange)",marginTop:6,fontWeight:500}}>ผลรวมสัดส่วน: {sum.toFixed(3)} {ok?"✓":"(ต้อง = 1)"}</div>;})()}
+            {(() => {const tot=(form.splitParts||[]).reduce((s,p)=>{const w=+p.widthCm||0,l=+p.lengthCm||0,h=+p.heightCm||0;return s+(w>0&&l>0&&h>0?(w*l*h)/1e6:0);},0);return tot>0?<div style={{fontSize:11,color:"var(--green)",marginTop:3,fontWeight:500}}>ปริมาตรรวมทั้งชุด: {tot.toFixed(3)} m³</div>:null;})()}
           </>}
         </div>
       </div>
