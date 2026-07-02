@@ -780,20 +780,32 @@ export default function AISOBot({ sh, onCreateSO, onCreatePO, onCreateQuote, onU
           {pendingAction && (() => {
             if (pendingUpdate) {
               const ups = pendingUpdate.updates || [];
-              const FIELD_LABELS = { price: "ราคาขาย", cost: "ต้นทุน", stock: "สต็อก", minStock: "สต็อกขั้นต่ำ", name: "ชื่อ (EN)", nameT: "ชื่อ (TH)" };
+              const FIELD_LABELS = { price: "ราคาขาย", cost: "ต้นทุน", stock: "สต็อก", minStock: "สต็อกขั้นต่ำ", name: "ชื่อ (EN)", nameT: "ชื่อ (TH)", widthCm: "กว้าง (ซม.)", lengthCm: "ยาว (ซม.)", heightCm: "สูง (ซม.)" };
+              const dimStr = (o) => o && o.widthCm > 0 && o.lengthCm > 0 && o.heightCm > 0 ? `${o.widthCm}×${o.lengthCm}×${o.heightCm}` : "—";
               return <div style={{ alignSelf: "flex-start", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 12, padding: 12, maxWidth: "90%", fontSize: 12 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--orange)" }}>{"แก้ไขสินค้า (" + ups.length + " รายการ)"}</div>
                 {ups.map((u, i) => {
                   const p = products.find(x => x.id === u.productId);
                   return <div key={i} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: i < ups.length - 1 ? "1px solid var(--line)" : "none" }}>
                     <div style={{ fontWeight: 500, marginBottom: 4 }}>{u.name || (p ? pN(p) : "?")}</div>
-                    {Object.entries(u.changes || {}).map(([field, newVal]) => {
-                      const oldVal = p ? p[field] : "?";
-                      const isNum = typeof newVal === "number";
-                      return <div key={field} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 2 }}>
+                    {Object.entries(u.changes || {}).flatMap(([field, newVal]) => {
+                      // partDims เป็น object ต่อส่วน — แตกเป็นบรรทัดละส่วน แทนที่จะโชว์ [object Object]
+                      if (field === "partDims" && newVal && typeof newVal === "object") {
+                        return Object.entries(newVal).map(([pk, dims]) => {
+                          const old = p && Array.isArray(p.splitParts) ? p.splitParts.find(x => x.key === pk) : null;
+                          return <div key={"partDims-" + pk} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 2 }}>
+                            <span style={{ color: "var(--dim)" }}>{"ขนาดส่วน " + pk + " (ซม.)"}</span>
+                            <span>{dimStr(old)} → <span style={{ color: "var(--orange)", fontWeight: 600 }}>{dimStr(dims)}</span></span>
+                          </div>;
+                        });
+                      }
+                      const oldVal = p ? p[field] : undefined;
+                      const money = field === "price" || field === "cost";
+                      const showVal = (v) => v == null ? "—" : money ? "฿" + fmt(v) : String(v);
+                      return [<div key={field} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 2 }}>
                         <span style={{ color: "var(--dim)" }}>{FIELD_LABELS[field] || field}</span>
-                        <span>{isNum ? "฿" + fmt(oldVal) : String(oldVal)} → <span style={{ color: "var(--orange)", fontWeight: 600 }}>{isNum ? "฿" + fmt(newVal) : String(newVal)}</span></span>
-                      </div>;
+                        <span>{showVal(oldVal)} → <span style={{ color: "var(--orange)", fontWeight: 600 }}>{showVal(newVal)}</span></span>
+                      </div>];
                     })}
                   </div>;
                 })}

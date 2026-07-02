@@ -52,8 +52,11 @@ export default async function handler(req, res) {
 function buildSystemPrompt(ctx, lang, customPrompt, allowGeneralChat = true) {
   const products = (ctx.products || [])
     .map((p) => {
-      const hasDim = p.widthCm > 0 && p.lengthCm > 0 && p.heightCm > 0;
-      const dim = hasDim ? `${p.widthCm}×${p.lengthCm}×${p.heightCm}ซม.` : "ยังไม่กรอกขนาด";
+      const dimOf = (o) => (o.widthCm > 0 && o.lengthCm > 0 && o.heightCm > 0 ? `${o.widthCm}×${o.lengthCm}×${o.heightCm}ซม.` : "ยังไม่กรอกขนาด");
+      // สินค้าแยกส่วน: ขนาดจริงอยู่ที่แต่ละส่วน — โชว์ต่อส่วน ขนาดระดับสินค้าไม่ถูกใช้
+      const dim = Array.isArray(p.splitParts) && p.splitParts.length
+        ? "แยกส่วน → " + p.splitParts.map((pt) => `${pt.key} (${pt.name}) ${dimOf(pt)}`).join(" · ")
+        : dimOf(p);
       return `[${p.id}] ${p.brand} — ${p.name} | ขาย ฿${p.price} | ทุน ฿${p.cost || 0} | สต็อก ${p.stock} ${p.unit || "ชิ้น"} | ขนาด(กว้าง×ยาว×สูง) ${dim}`;
     })
     .join("\n");
@@ -245,11 +248,12 @@ ${topCustomersData || "ยังไม่มีข้อมูล"}
   }
 }
 \`\`\`
-- "changes" รองรับ fields: price, cost, stock, minStock, name, nameT, widthCm, lengthCm, heightCm
+- "changes" รองรับ fields: price, cost, stock, minStock, name, nameT, widthCm, lengthCm, heightCm, partDims
 - widthCm/lengthCm/heightCm = ขนาดกล่อง กว้าง/ยาว/สูง หน่วยเซนติเมตร (เช่นผู้ใช้บอก "ตู้เย็น X กว้าง 60 ยาว 70 สูง 180" → changes: {"widthCm":60,"lengthCm":70,"heightCm":180})
+- สินค้าแยกส่วน (ขนาดขึ้น "แยกส่วน →"): ขนาดกล่องอยู่ที่แต่ละส่วน ห้ามใช้ widthCm/lengthCm/heightCm ตรง ๆ ให้ใช้ "partDims" ระบุ key ของส่วนแทน เช่น changes: {"partDims":{"hot":{"widthCm":60,"lengthCm":80,"heightCm":90}}}
 - ต้องใส่ productId ที่ถูกต้องจากข้อมูลสินค้าเท่านั้น
 - ระบบจะแสดงรายการให้ผู้ใช้ยืนยันก่อนบันทึกจริง
-- ข้อมูลสินค้าแต่ละตัวมีขนาด(กว้าง×ยาว×สูง) ต่อท้าย ตัวที่ขึ้น "ยังไม่กรอกขนาด" คือยังไม่มีข้อมูลขนาด — เมื่อผู้ใช้ถามหาสินค้าที่ยังไม่กรอกขนาด ให้ลิสต์เฉพาะตัวที่ "ยังไม่กรอกขนาด"
+- ข้อมูลสินค้าแต่ละตัวมีขนาด(กว้าง×ยาว×สูง) ต่อท้าย ตัวที่ขึ้น "ยังไม่กรอกขนาด" คือยังไม่มีข้อมูลขนาด — เมื่อผู้ใช้ถามหาสินค้าที่ยังไม่กรอกขนาด ให้ลิสต์เฉพาะตัวที่ "ยังไม่กรอกขนาด" (สินค้าแยกส่วนนับต่อส่วน: ส่วนไหนขึ้น "ยังไม่กรอกขนาด" ให้ระบุชื่อส่วนนั้นด้วย)
 
 ### 6. ตอบข้อมูลทั่วไป (เช็คสต็อก, ยอดค้าง, ดูประวัติ, สรุปยอด ฯลฯ):
 \`\`\`json

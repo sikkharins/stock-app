@@ -69,6 +69,10 @@ export function buildContext(products, contacts, sales, pN, cN, cu, pos, payment
     widthCm: p.widthCm,
     lengthCm: p.lengthCm,
     heightCm: p.heightCm,
+    // สินค้าแยกส่วน: ขนาดจริงอยู่ที่แต่ละส่วน (ระดับสินค้าไม่ถูกใช้) — ส่งให้ AI เห็น/แก้ต่อส่วน
+    splitParts: p.splitEnabled && Array.isArray(p.splitParts) && p.splitParts.length
+      ? p.splitParts.map((pt) => ({ key: pt.key, name: pt.name, widthCm: pt.widthCm, lengthCm: pt.lengthCm, heightCm: pt.heightCm }))
+      : undefined,
   }));
 
   const custs = contacts

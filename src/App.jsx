@@ -636,9 +636,21 @@ export default function App(){
         if(c.minStock!=null)up.minStock=+c.minStock;
         if(c.name!=null)up.name=c.name;
         if(c.nameT!=null)up.nameT=c.nameT;
-        if(c.widthCm!=null)up.widthCm=+c.widthCm;
-        if(c.lengthCm!=null)up.lengthCm=+c.lengthCm;
-        if(c.heightCm!=null)up.heightCm=+c.heightCm;
+        // กัน NaN จากค่าที่ AI ส่งมาไม่ใช่ตัวเลข — อย่าเขียนขยะลง record
+        const dimN=v=>{const n=+v;return Number.isFinite(n)&&n>=0?n:null;};
+        if(c.widthCm!=null&&dimN(c.widthCm)!=null)up.widthCm=dimN(c.widthCm);
+        if(c.lengthCm!=null&&dimN(c.lengthCm)!=null)up.lengthCm=dimN(c.lengthCm);
+        if(c.heightCm!=null&&dimN(c.heightCm)!=null)up.heightCm=dimN(c.heightCm);
+        // สินค้าแยกส่วน: แก้ขนาดกล่องต่อส่วนผ่าน changes.partDims = {"<partKey>":{widthCm,lengthCm,heightCm}}
+        if(c.partDims&&typeof c.partDims==="object"&&up.splitEnabled&&Array.isArray(up.splitParts)){
+          up.splitParts=up.splitParts.map(pt=>{
+            const d=c.partDims[pt.key];
+            if(!d||typeof d!=="object")return pt;
+            const n={...pt};
+            for(const k of["widthCm","lengthCm","heightCm"]){if(d[k]!=null&&dimN(d[k])!=null)n[k]=dimN(d[k]);}
+            return n;
+          });
+        }
         return up;
       }));
       addA("แก้ไขสินค้า (AI Bot)",updates.length+" รายการ");
