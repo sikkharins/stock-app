@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fmt, toBE } from "../../utils/helpers.js";
+import { fmt, toBE, realSales } from "../../utils/helpers.js";
 import { dlCSV } from "../../utils/csv.js";
 import CustomSelect from "../ui/CustomSelect.jsx";
 
@@ -13,7 +13,7 @@ export default function VATRepReport({sales,contacts}){
 
   const custMap={};contacts.forEach(c=>custMap[c.id]=c);
 
-  const vatSales=sales.filter(s=>s.status!=="draft"&&s.useVatRep&&s.vatRepName&&s.vatRepName.trim()&&(s.date||"").startsWith(String(selYear)));
+  const vatSales=realSales(sales).filter(s=>s.useVatRep&&s.vatRepName&&s.vatRepName.trim()&&(s.date||"").startsWith(String(selYear)));
 
   const groups={};
   vatSales.forEach(so=>{

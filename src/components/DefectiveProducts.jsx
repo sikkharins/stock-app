@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { IB } from "../utils/constants.js";
-import { fmt, todayStr, toBE } from "../utils/helpers.js";
+import { fmt, todayStr, toBE, realSales } from "../utils/helpers.js";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Field from "./ui/Field.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
@@ -86,7 +86,7 @@ export default function DefectivePage({sh}){
 
   const custSOs=useMemo(()=>{
     if(!form||!form.customerId)return[];
-    let list=sales.filter(so=>so.customerId===+form.customerId&&so.status!=="draft");
+    let list=realSales(sales).filter(so=>so.customerId===+form.customerId);
     if(form.productId)list=list.filter(so=>(so.items||[]).some(i=>i.productId===+form.productId));
     return list;
   },[form?.customerId,form?.productId,sales]);

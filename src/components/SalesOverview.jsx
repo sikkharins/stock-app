@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { IB } from "../utils/constants.js";
+import { realSales } from "../utils/helpers.js";
 import { dlCSV } from "../utils/csv.js";
 import CustomSelect from "./ui/CustomSelect.jsx";
 
@@ -68,9 +69,9 @@ export default function SalesOverview({sh}){
   const{rows,grandTotals,totalAmount,totalSO,totalCustomers}=useMemo(()=>{
     const yr=+year;
     // Filter sales
-    const filtered=sales.filter(so=>{
+    const filtered=realSales(sales).filter(so=>{
       if(!so.date)return false;
-      if(so.status==="cancelled"||so.status==="draft")return false;
+      if(so.status==="cancelled")return false;
       const[y]=so.date.split("-");
       if(+y!==yr)return false;
       if(quarter!=="all"){

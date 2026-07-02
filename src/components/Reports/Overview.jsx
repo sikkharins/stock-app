@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { fmt } from "../../utils/helpers.js";
+import { fmt, realSales } from "../../utils/helpers.js";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const TIP_STYLE = { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12 };
@@ -45,7 +45,7 @@ export default function RepOverview({ products, sales, pN, cats }) {
   const catMap = useMemo(() => { const m = {}; (cats || []).forEach(c => m[c.id] = c.name); return m; }, [cats]);
 
   const { barData, catKeys, byCat, byBrand } = useMemo(() => {
-    const ranged = sales.filter(so => so.status !== "draft" && keys.some(k => (so.date || "").startsWith(k)));
+    const ranged = realSales(sales).filter(so => keys.some(k => (so.date || "").startsWith(k)));
     const catAcc = {}, brandAcc = {};
     ranged.forEach(so => so.items.forEach(i => {
       const pr = prodMap[i.productId];

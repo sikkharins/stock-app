@@ -5,7 +5,7 @@ import SalesAreaChart from "./ui/SalesAreaChart.jsx";
 import NeonGauge, { GAUGE_VARIANTS, useEased, useRev, colorAt, heatTier, heatCardStyle, HeatBadge } from "./ui/NeonGauge.jsx";
 import CustomSelect from "./ui/CustomSelect.jsx";
 import DashboardSettingsModal from "./ui/DashboardSettingsModal.jsx";
-import { fmt, toBE } from "../utils/helpers.js";
+import { fmt, toBE, realSales } from "../utils/helpers.js";
 import { MOVE_TYPES, ALL_WIDGET_KEYS, DASH_SECTIONS, ALL_SECTION_KEYS } from "../utils/constants.js";
 import { prevMonthKey, actualForMonth, yesterdayPct, projectETA } from "../utils/gaugeData.ts";
 
@@ -63,7 +63,7 @@ export default function DashPage({sh}){
     const ci=isSales?contacts.filter(c=>c.type==="customer"&&c.salesPerson===cu.salesName).map(c=>c.id):null;
     const mp=isSup?products.filter(p=>p.distributor===supN):products;
     const ls=isSup?mp.filter(p=>p.minStock>0&&p.stock<=p.minStock):lowStock;
-    const ms=(isSales?sales.filter(so=>ci.includes(so.customerId)):sales).filter(so=>so.status!=="draft");
+    const ms=realSales(isSales?sales.filter(so=>ci.includes(so.customerId)):sales);
     const ts=mp.reduce((s,p)=>s+(p.stock||0)*(p.price||0),0);
     const sl=ms.reduce((s,so)=>s+so.items.reduce((a,i)=>a+i.qty*i.price,0)-(so.discountAmt||0),0);
     const pr=ms.reduce((s,so)=>s+so.items.reduce((a,i)=>{const p=products.find(x=>x.id===i.productId);return a+i.qty*(i.price-(p?p.cost:0));},0),0);
@@ -100,7 +100,7 @@ export default function DashPage({sh}){
     const monthTs=targets.filter(t=>t.month===curMonth);
     if(!monthTs.length)return null;
     const custSp={};contacts.forEach(c=>{if(c.type==="customer"&&c.salesPerson)custSp[c.id]=c.salesPerson;});
-    const monthSales=sales.filter(so=>(so.date||"").startsWith(curMonth)&&so.status!=="draft");
+    const monthSales=realSales(sales).filter(so=>(so.date||"").startsWith(curMonth));
     // ยอดจริงต่อเซลส์
     const actualBySp={};
     monthSales.forEach(so=>{

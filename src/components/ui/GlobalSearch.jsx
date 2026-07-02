@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { realSales } from "../../utils/helpers.js";
 
 const QT_STATUS_LABEL = {draft:"ร่าง",sent:"ส่งแล้ว",approved:"อนุมัติ",converted:"แปลง SO",cancelled:"ยกเลิก",expired:"หมดอายุ"};
 const PO_STATUS_LABEL = {pending:"รอรับของ",received:"รับแล้ว",cancelled:"ยกเลิก"};
@@ -50,7 +51,9 @@ export default function GlobalSearch({ products, sales, quotes, pos, contacts, p
       }
 
       if (canA("sales")) {
-        const mySales = myCI ? sales.filter(so => myCI.includes(so.customerId)) : sales;
+        // ตัดร่างออกแบบชัดเจน — เดิมรอดเพราะบังเอิญ (soNum ของร่างเป็นค่าว่างเลยไม่ match)
+        const realS = realSales(sales);
+        const mySales = myCI ? realS.filter(so => myCI.includes(so.customerId)) : realS;
         const found = mySales.filter(so => (so.soNum||"").toLowerCase().includes(s)).slice(0, 5);
         if (found.length) r.sales = found;
 

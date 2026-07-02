@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB, STOCK_STATUS, BRAND_COLORS } from "../utils/constants.js";
-import { fmt, mkLog, getSS, toBE, fmtD, DEFAULT_SPLIT_PARTS, partCubicM } from "../utils/helpers.js";
+import { fmt, mkLog, getSS, toBE, fmtD, DEFAULT_SPLIT_PARTS, partCubicM, realSales } from "../utils/helpers.js";
 import { diffFields } from "../utils/auditDiff.ts";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Field from "./ui/Field.jsx";
@@ -455,7 +455,7 @@ export default function ProdPage({sh}){
         });
       });
 
-      const soList=sales.filter(s=>s.status!=="draft"&&(s.items||[]).some(i=>i.productId===pr.id)).map(so=>{
+      const soList=realSales(sales).filter(s=>(s.items||[]).some(i=>i.productId===pr.id)).map(so=>{
         const it=so.items.find(i=>i.productId===pr.id);
         const cust=custMap[so.customerId];
         return{...so,qty:it?it.qty:0,price:it?it.price:0,custName:cust?cN(cust):"-"};

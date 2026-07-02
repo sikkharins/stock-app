@@ -1582,6 +1582,12 @@ export const findSOCombos = (
 
 // --- SO draft / autosave helpers ---------------------------------------------
 
+// SO ที่นับเป็นยอดจริง — ตัดร่าง (draft) ทิ้ง
+// ทุก report/aggregation/list ที่อ่านข้อมูลขายควรเริ่มจาก realSales(sales) เสมอ
+// แทนการ inline `status !== "draft"` เอง (consumer ใหม่ลืมกรองได้ง่าย)
+export const realSales = <T extends { status?: string }>(sales: T[] | null | undefined): T[] =>
+  (Array.isArray(sales) ? sales : []).filter((s) => !!s && s.status !== "draft");
+
 export const soFormHasContent = (form: {
   customerId?: unknown;
   items?: Array<{ productId?: unknown } | null>;

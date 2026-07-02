@@ -37,6 +37,7 @@ import {
   type Category,
   type SelectedReward,
   type SaleCustomer,
+  realSales,
   soFormHasContent,
   parseSoAutosave,
   resolveSaveSoNum,
@@ -1447,6 +1448,27 @@ describe("findSOCombos", () => {
     const withPaid = [...sos, { soNum: "PAID", remaining: 0, date: "2026-01-04" }];
     const r = findSOCombos(withPaid, 300000, 0);
     expect(r.every((c) => !c.soNums.includes("PAID"))).toBe(true);
+  });
+});
+
+describe("realSales", () => {
+  test("ตัด draft ทิ้ง เหลือ SO จริง", () => {
+    const sales = [
+      { id: 1, status: "pending_delivery" },
+      { id: 2, status: "draft" },
+      { id: 3, status: "completed" },
+    ];
+    expect(realSales(sales).map((s) => s.id)).toEqual([1, 3]);
+  });
+  test("null/undefined -> []", () => {
+    expect(realSales(null)).toEqual([]);
+    expect(realSales(undefined)).toEqual([]);
+  });
+  test("คืน array ใหม่ ไม่แตะของเดิม", () => {
+    const sales = [{ id: 1, status: "draft" }];
+    const out = realSales(sales);
+    expect(out).toEqual([]);
+    expect(sales).toHaveLength(1);
   });
 });
 
