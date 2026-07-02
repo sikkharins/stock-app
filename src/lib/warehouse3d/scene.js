@@ -197,11 +197,15 @@ const TEMPLATE = `
 export function createWarehouseScene(container, data, opts = {}) {
   const { WAREHOUSE, ZONES, PRODUCTS } = data;
   const canEdit = opts.canEdit !== false;
-  const onSaveLayout = typeof opts.onSaveLayout === "function" ? opts.onSaveLayout : null;
-  const onClearLayout = typeof opts.onClearLayout === "function" ? opts.onClearLayout : null;
-  const onSaveCamera = typeof opts.onSaveCamera === "function" ? opts.onSaveCamera : null;
-  const snapshotUrl = typeof opts.snapshotUrl === "function" ? opts.snapshotUrl : null;
-  const onSaveZoneGeom = typeof opts.onSaveZoneGeom === "function" ? opts.onSaveZoneGeom : null;
+  // Host callbacks live in a mutable holder read at CALL TIME (cbs.*) — never destructure
+  // them into consts. The scene outlives React renders (it rebuilds only on geometry
+  // changes), so the host refreshes these via api.setCallbacks() on every render and no
+  // callback can go stale. Adding a new callback needs no ref plumbing on the host side.
+  const cbs = { onSaveLayout: null, onClearLayout: null, onSaveCamera: null, onSaveZoneGeom: null, snapshotUrl: null };
+  const setCallbacks = (o = {}) => {
+    for (const k of Object.keys(cbs)) if (k in o) cbs[k] = typeof o[k] === "function" ? o[k] : null;
+  };
+  setCallbacks(opts);
 
   // ---- inject scoped stylesheet once ----
   if (!document.getElementById(STYLE_ID)) {
@@ -666,8 +670,8 @@ export function createWarehouseScene(container, data, opts = {}) {
     }).join("");
 
     const camBtns = `<button class="zr-cam zr-go">📷 มุมกล้องโซนนี้</button>` +
-      (canEdit && onSaveCamera ? `<button class="zr-cam zr-save">💾 บันทึกมุมนี้</button>` : ``);
-    const autoBtn = (canEdit && onClearLayout && zone.layout)
+      (canEdit && cbs.onSaveCamera ? `<button class="zr-cam zr-save">💾 บันทึกมุมนี้</button>` : ``);
+    const autoBtn = (canEdit && cbs.onClearLayout && zone.layout)
       ? `<button class="zr-cam zr-auto">↺ จัดอัตโนมัติ</button>` : ``;
 
     const row = document.createElement("div");
@@ -692,14 +696,14 @@ export function createWarehouseScene(container, data, opts = {}) {
     const saveBtn = row.querySelector(".zr-save");
     if (saveBtn) saveBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      onSaveCamera(zone.id, captureCamera());
+      cbs.onSaveCamera?.(zone.id, captureCamera());
       saveBtn.textContent = "✓ บันทึกแล้ว";
       setT(() => { saveBtn.textContent = "💾 บันทึกมุมนี้"; }, 1600);
     });
     const autoBtn2 = row.querySelector(".zr-auto");
     if (autoBtn2) autoBtn2.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (window.confirm("ล้างตำแหน่งที่ลากเองของโซนนี้ แล้วกลับไปจัดอัตโนมัติ?")) onClearLayout(zone.id);
+      if (window.confirm("ล้างตำแหน่งที่ลากเองของโซนนี้ แล้วกลับไปจัดอัตโนมัติ?")) cbs.onClearLayout?.(zone.id);
     });
     row.querySelectorAll(".zp-item").forEach((it) => {
       it.addEventListener("click", (e) => {
@@ -871,14 +875,15 @@ export function createWarehouseScene(container, data, opts = {}) {
   function renderLiveBar(z) {
     const bar = gid("ccLiveBar");
     if (!bar) return;
-    if (!snapshotUrl) { bar.style.display = "none"; return; }
+    if (!cbs.snapshotUrl) { bar.style.display = "none"; return; }
     bar.style.display = "";
     const presets = Array.isArray(z.presets) ? z.presets : [];
     bar.innerHTML = `<span class="cc-lbl">ดึงภาพสด:</span>` + (presets.length
       ? presets.map((p) => `<button class="tbtn" data-tok="${String(p.token)}">${p.name}</button>`).join("")
       : `<button class="tbtn" data-tok="">มุมปัจจุบัน</button>`);
     bar.querySelectorAll("button[data-tok]").forEach((b) => b.addEventListener("click", () => {
-      showLiveCCTV(snapshotUrl(b.getAttribute("data-tok") || null));
+      const u = cbs.snapshotUrl?.(b.getAttribute("data-tok") || null);
+      if (u) showLiveCCTV(u);
     }));
   }
 
@@ -1073,7 +1078,7 @@ export function createWarehouseScene(container, data, opts = {}) {
   let zoneEditMode = false, zeId = null, zePending = null, zeDragging = false;
   const zeOff = new THREE.Vector3();
   const btnZoneEdit = gid("btnZoneEdit");
-  if (!canEdit || !onSaveZoneGeom) { btnZoneEdit.remove(); }
+  if (!canEdit || !cbs.onSaveZoneGeom) { btnZoneEdit.remove(); }
 
   const zePreview = new THREE.LineSegments(
     new THREE.BufferGeometry(),
@@ -1121,7 +1126,7 @@ export function createWarehouseScene(container, data, opts = {}) {
     if (!on) { zeId = null; zePending = null; zeDragging = false; zePreview.visible = false; zeReadout(); }
     else { hidePopup(); }
   }
-  if (canEdit && onSaveZoneGeom) btnZoneEdit.addEventListener("click", () => setZoneEdit(!zoneEditMode));
+  if (canEdit && cbs.onSaveZoneGeom) btnZoneEdit.addEventListener("click", () => setZoneEdit(!zoneEditMode));
 
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!zoneEditMode) return;
@@ -1154,13 +1159,13 @@ export function createWarehouseScene(container, data, opts = {}) {
     setPreviewRect(zePending.origin.x, zePending.origin.z, zePending.size.w, zePending.size.l);
     zeReadout();
   }
-  if (canEdit && onSaveZoneGeom) {
+  if (canEdit && cbs.onSaveZoneGeom) {
     gid("zeW").addEventListener("change", zeResize);
     gid("zeL").addEventListener("change", zeResize);
     gid("zeH").addEventListener("change", zeResize);
     gid("zeSave").addEventListener("click", () => {
-      if (!zeId || !zePending || !onSaveZoneGeom) return;
-      onSaveZoneGeom(zeId, { ...snapClampZoneRect(zePending.origin, zePending.size, WAREHOUSE), heightM: clampZoneHeight(zePending.heightM, WAREHOUSE) });
+      if (!zeId || !zePending || !cbs.onSaveZoneGeom) return;
+      cbs.onSaveZoneGeom(zeId, { ...snapClampZoneRect(zePending.origin, zePending.size, WAREHOUSE), heightM: clampZoneHeight(zePending.heightM, WAREHOUSE) });
       const b = gid("zeSave"); b.textContent = "✓ บันทึกแล้ว";
       setT(() => { b.textContent = "💾 บันทึกโซน"; }, 1600);
     });
@@ -1220,7 +1225,7 @@ export function createWarehouseScene(container, data, opts = {}) {
         });
         if (Object.keys(entries).length) layoutByZone[z.id] = entries;
       });
-      if (onSaveLayout) onSaveLayout(layoutByZone);
+      cbs.onSaveLayout?.(layoutByZone);
       const btn = gid("mpCopy");
       btn.textContent = "✓ บันทึกแล้ว";
       setT(() => { btn.textContent = "💾 บันทึกการจัดเรียงทั้งหมด"; }, 1600);
@@ -1297,5 +1302,5 @@ export function createWarehouseScene(container, data, opts = {}) {
     container.innerHTML = "";
   }
 
-  return { dispose };
+  return { dispose, setCallbacks };
 }

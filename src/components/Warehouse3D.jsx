@@ -11,7 +11,9 @@ export default function Warehouse3DPage({ sh }) {
   const canEdit = !!(canE && canE("warehouse_3d"));
 
   const containerRef = useRef(null);
+  const sceneApiRef = useRef(null);
   const [rebuildNonce, setRebuildNonce] = useState(0);
+  // whRef ยังจำเป็น: สอง save ใน tick เดียวกันต้อง merge ต่อกัน (commitLayout อัปเดต ref ทันที)
   const whRef = useRef(warehouseLayout); whRef.current = warehouseLayout;
   const saveNowRef = useRef(saveNow); saveNowRef.current = saveNow;
 
@@ -31,28 +33,33 @@ export default function Warehouse3DPage({ sh }) {
   // Compute next from refs (latest), set state, and persist immediately via saveNow.
   // Refs are required because the scene caches these callbacks (it rebuilds only on
   // geometry/nonce, not on layout/camera saves), so a closure value would go stale.
-  const onSaveLayout = useCallback((layoutByZone) => {
-    const next = applyZoneLayout(whRef.current, layoutByZone);
-    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
+  // commitLayout updates whRef.current SYNCHRONOUSLY: a second save fired in the same
+  // tick (before React re-renders, e.g. geometry blur + camera save) must merge on top
+  // of this save, not on the stale pre-render value — otherwise the first save is lost.
+  const commitLayout = useCallback((next) => {
+    whRef.current = next;
+    setWarehouseLayout(next);
+    saveNowRef.current?.("warehouse_layout", next);
   }, [setWarehouseLayout]);
+
+  const onSaveLayout = useCallback((layoutByZone) => {
+    commitLayout(applyZoneLayout(whRef.current, layoutByZone));
+  }, [commitLayout]);
 
   const onClearLayout = useCallback((zoneId) => {
-    const next = clearZoneLayout(whRef.current, zoneId);
-    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
+    commitLayout(clearZoneLayout(whRef.current, zoneId));
     setRebuildNonce((n) => n + 1);
-  }, [setWarehouseLayout]);
+  }, [commitLayout]);
 
   const onSaveCamera = useCallback((zoneId, camera) => {
-    const next = mergeZoneEntry(whRef.current, zoneId, { camera });
-    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
-  }, [setWarehouseLayout]);
+    commitLayout(mergeZoneEntry(whRef.current, zoneId, { camera }));
+  }, [commitLayout]);
 
   const onSaveZoneGeom = useCallback((zoneId, geom) => {
     const patch = { origin: geom.origin, size: geom.size };
     if (geom.heightM != null) patch.heightM = geom.heightM;
-    const next = mergeZoneEntry(whRef.current, zoneId, patch);
-    setWarehouseLayout(next); saveNowRef.current?.("warehouse_layout", next);
-  }, [setWarehouseLayout]);
+    commitLayout(mergeZoneEntry(whRef.current, zoneId, patch));
+  }, [commitLayout]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -70,10 +77,23 @@ export default function Warehouse3DPage({ sh }) {
       // closure reads the latest relay URL on every click + cache-busts with Date.now()
       snapshotUrl: (token) => cctvSnapshotUrl(getRelayUrl(), token, Date.now()),
     });
-    return () => scene.dispose();
+    sceneApiRef.current = scene;
+    return () => { sceneApiRef.current = null; scene.dispose(); };
     // rebuildKey/canEdit fully capture when a rebuild is needed; callbacks are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rebuildKey, canEdit]);
+
+  // Push fresh callbacks into the live scene every render (scene reads them at call time
+  // via setCallbacks) — callback ใหม่ในอนาคตใช้ closure ปกติได้เลย ไม่ต้องทำ ref-mirror
+  useEffect(() => {
+    sceneApiRef.current?.setCallbacks({
+      onSaveLayout: canEdit ? onSaveLayout : null,
+      onClearLayout: canEdit ? onClearLayout : null,
+      onSaveCamera: canEdit ? onSaveCamera : null,
+      onSaveZoneGeom: canEdit ? onSaveZoneGeom : null,
+      snapshotUrl: (token) => cctvSnapshotUrl(getRelayUrl(), token, Date.now()),
+    });
+  });
 
   const exportJSON = () => {
     const data = buildWarehouseData(products, zones, warehouseLayout);
