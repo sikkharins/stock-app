@@ -57,6 +57,37 @@ describe("buildWarehouseData — split products", () => {
     const { ZONES } = build([splitProduct()], [{ id: "z1", productIds: ["7:cold"] }], {});
     expect(ZONES[0].productIds).toEqual(["7:cold"]);
   });
+
+  test("boxConfig ที่ key ด้วย id เปล่า → ย้ายไปทุกส่วน (id ปกติ/gap คงเดิม)", () => {
+    const { ZONES } = build(
+      [splitProduct(), product()],
+      [{ id: "z1", productIds: [1, "gap-1", 7], boxConfig: { "7": { cols: 3, orient: "wide" }, "1": { cols: 2 }, "gap-1": { cols: 4 } } }],
+      {},
+    );
+    expect(ZONES[0].boxConfig["7:hot"]).toEqual({ cols: 3, orient: "wide" });
+    expect(ZONES[0].boxConfig["7:cold"]).toEqual({ cols: 3, orient: "wide" });
+    expect(ZONES[0].boxConfig["7"]).toBeUndefined();
+    expect(ZONES[0].boxConfig["1"]).toEqual({ cols: 2 });
+    expect(ZONES[0].boxConfig["gap-1"]).toEqual({ cols: 4 });
+  });
+
+  test("boxConfig ที่ key เป็น composite id อยู่แล้ว → ไม่ถูกทับ", () => {
+    const { ZONES } = build(
+      [splitProduct()],
+      [{ id: "z1", productIds: [7], boxConfig: { "7": { cols: 3 }, "7:cold": { cols: 9 } } }],
+      {},
+    );
+    expect(ZONES[0].boxConfig["7:hot"]).toEqual({ cols: 3 });
+    expect(ZONES[0].boxConfig["7:cold"]).toEqual({ cols: 9 });
+  });
+
+  test("layout (saved) ที่ key ด้วย id เปล่า → ให้เฉพาะส่วนแรก กันกล่องซ้อนตำแหน่งเดียวกัน", () => {
+    const wl = { zones: { z1: { layout: { "7": { x: 1, z: 2 } } } } };
+    const { ZONES } = build([splitProduct()], [{ id: "z1", productIds: [7] }], wl);
+    expect(ZONES[0].layout["7:hot"]).toEqual({ x: 1, z: 2 });
+    expect(ZONES[0].layout["7:cold"]).toBeUndefined();
+    expect(ZONES[0].layout["7"]).toBeUndefined();
+  });
 });
 
 describe("buildWarehouseData — PRODUCTS mapping", () => {

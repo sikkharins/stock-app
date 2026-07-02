@@ -31,6 +31,7 @@ export default function ZonePage({ sh }) {
   const ed = canE("zones");
   // Split products แตกเป็นส่วน (id "<id>:<part>") เพื่อผูก zone แยกได้เหมือนสินค้าแยก
   const pickUnits = useMemo(() => expandProductsForWarehouse(products), [products]);
+  const unitById = useMemo(() => new Map(pickUnits.map((u) => [String(u.id), u])), [pickUnits]);
   const [editing, setEditing] = useState(null); // draft zone หรือ null
   const [pick, setPick] = useState(null);
   const [replacing, setReplacing] = useState(null);
@@ -114,7 +115,20 @@ export default function ZonePage({ sh }) {
   };
   const del = (id) => { if (window.confirm("ลบโซนนี้?")) setZones((prev) => prev.filter((z) => z.id !== id)); };
 
-  const nameOf = (id) => { const p = pickUnits.find((x) => String(x.id) === String(id)); return p ? `${p.brand || ""} ${pN(p)}`.trim() : `#${id} (ถูกลบ)`; };
+  const nameOf = (id) => {
+    const u = unitById.get(String(id));
+    if (u) return `${u.brand || ""} ${pN(u)}`.trim();
+    // Legacy/orphan: id เปล่าของ split product (จะถูกแตกเป็นส่วนอัตโนมัติตอน render 3D)
+    // หรือ composite id ของสินค้าที่ภายหลังถูกยกเลิกแยกส่วน — อย่าโชว์ "(ถูกลบ)" ทั้งที่สินค้ายังอยู่
+    const sid = String(id);
+    const base = products.find((x) => String(x.id) === sid || sid.startsWith(String(x.id) + ":"));
+    if (base) {
+      const partKey = sid.startsWith(String(base.id) + ":") ? sid.slice(String(base.id).length + 1) : "";
+      const label = `${base.brand || ""} ${pN(base)}`.trim();
+      return partKey ? `${label} — ${partKey}` : `${label} (ครบชุด)`;
+    }
+    return `#${id} (ถูกลบ)`;
+  };
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 4px 40px" }}>
@@ -162,7 +176,7 @@ export default function ZonePage({ sh }) {
                   ) : replacing === id ? (
                     <>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <ProductPicker value={id} onChange={(nid) => replaceProduct(id, nid)} products={pickUnits} pName={pN} getAvail={(pid) => { const p = pickUnits.find((x) => String(x.id) === String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
+                        <ProductPicker value={id} onChange={(nid) => replaceProduct(id, nid)} products={pickUnits} pName={pN} getAvail={(pid) => { const p = unitById.get(String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
                       </div>
                       <button onClick={() => setReplacing(null)} title="ยกเลิก" style={orientBtn}>ยกเลิก</button>
                     </>
@@ -185,7 +199,7 @@ export default function ZonePage({ sh }) {
               );
             })}
           </div>
-          <ProductPicker value={pick} onChange={addProduct} products={pickUnits} pName={pN} getAvail={(pid) => { const p = pickUnits.find((x) => String(x.id) === String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
+          <ProductPicker value={pick} onChange={addProduct} products={pickUnits} pName={pN} getAvail={(pid) => { const p = unitById.get(String(pid)); return p ? p.stock : 0; }} unit="" avail={0} />
           <button onClick={addGap} style={{ marginTop: 8, fontSize: 12, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--line2)", background: "var(--bg)", color: "var(--blue)", cursor: "pointer", fontFamily: "inherit" }}>+ ช่องว่าง</button>
           <div style={{ fontSize: 13, fontWeight: 600, margin: "14px 0 6px" }}>preset กล้อง (โซนนี้) ({(editing.presets || []).length})</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>

@@ -116,6 +116,10 @@ export function autoPlaceZones(zones, warehouse) {
   return out;
 }
 
+// Split-product helpers — single owner of the "<productId>:<partKey>" composite-id format.
+const isSplitProduct = (p) => !!(p && p.splitEnabled && Array.isArray(p.splitParts) && p.splitParts.length);
+const splitPartId = (p, part) => `${p.id}:${part.key}`;
+
 // Expand split products into per-part pseudo-products for warehouse/zone use.
 // Non-split products pass through unchanged. Each split part becomes a pseudo-
 // product with id "<productId>:<partKey>", carrying that part's own box + name.
@@ -123,12 +127,12 @@ export function expandProductsForWarehouse(products = []) {
   const list = Array.isArray(products) ? products : [];
   const out = [];
   for (const p of list) {
-    if (p && p.splitEnabled && Array.isArray(p.splitParts) && p.splitParts.length) {
+    if (isSplitProduct(p)) {
       const base = p.nameT || p.name || "";
       for (const part of p.splitParts) {
         out.push({
           ...p,
-          id: `${p.id}:${part.key}`,
+          id: splitPartId(p, part),
           code: p.code || "",
           name: p.name ? `${p.name} — ${part.name}` : part.name,
           nameT: base ? `${base} — ${part.name}` : part.name,
@@ -210,14 +214,34 @@ export function buildWarehouseData(products = [], zones = [], warehouseLayout = 
   // Split products เดิมอาจถูกอ้างด้วย id เปล่าใน zone.productIds — แตกเป็นส่วนตอน render
   const splitPartIds = new Map();
   for (const p of productList) {
-    if (p && p.splitEnabled && Array.isArray(p.splitParts) && p.splitParts.length) {
-      splitPartIds.set(String(p.id), p.splitParts.map((part) => `${p.id}:${part.key}`));
+    if (isSplitProduct(p)) {
+      splitPartIds.set(String(p.id), p.splitParts.map((part) => splitPartId(p, part)));
     }
   }
   const expandZoneIds = (ids) =>
     (Array.isArray(ids) ? ids : []).flatMap((id) =>
       splitPartIds.has(String(id)) ? splitPartIds.get(String(id)) : [id]
     );
+  // boxConfig/layout ที่เคย key ด้วย id เปล่าของ split product ต้องย้ายตาม id ที่ถูก expand
+  // ไม่งั้น scene จะหา boxConfig[pid]/layout[pid] ไม่เจอ (แถว/ชั้น/orient + ตำแหน่งลากหาย)
+  // boxConfig ใช้กับทุกส่วน; layout เป็นตำแหน่งวาง ให้เฉพาะส่วนแรก กันกล่องซ้อนทับกัน
+  const expandKeyedConfig = (cfg, firstPartOnly) => {
+    if (!cfg || typeof cfg !== "object") return cfg;
+    let changed = false;
+    const out = {};
+    for (const key of Object.keys(cfg)) {
+      const parts = splitPartIds.get(String(key));
+      if (parts && parts.length) {
+        changed = true;
+        for (const pid of firstPartOnly ? parts.slice(0, 1) : parts) {
+          if (!(pid in cfg)) out[pid] = cfg[key];
+        }
+      } else {
+        out[key] = cfg[key];
+      }
+    }
+    return changed ? out : cfg;
+  };
 
   const ZONES = baseZones.map((z, i) => {
     const saved = zlay[z.id] || {};
@@ -234,8 +258,8 @@ export function buildWarehouseData(products = [], zones = [], warehouseLayout = 
       heightM: Number(saved.heightM) || Number(z.heightM) || WAREHOUSE.heightM,
     };
     if (saved.camera || z.camera) out.camera = saved.camera || z.camera;
-    if (saved.layout || z.layout) out.layout = saved.layout || z.layout;
-    if (z.boxConfig) out.boxConfig = z.boxConfig; // per-product แถว/ชั้น from the form
+    if (saved.layout || z.layout) out.layout = expandKeyedConfig(saved.layout || z.layout, true);
+    if (z.boxConfig) out.boxConfig = expandKeyedConfig(z.boxConfig, false); // per-product แถว/ชั้น from the form
     if (z.arrangeRot) out.arrangeRot = z.arrangeRot; // per-zone arrangement rotation
     return out;
   });
