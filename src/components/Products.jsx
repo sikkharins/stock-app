@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { IB, STOCK_STATUS, BRAND_COLORS } from "../utils/constants.js";
-import { fmt, mkLog, getSS, toBE, fmtD, DEFAULT_SPLIT_PARTS } from "../utils/helpers.js";
+import { fmt, mkLog, getSS, toBE, fmtD, DEFAULT_SPLIT_PARTS, partCubicM } from "../utils/helpers.js";
 import { diffFields } from "../utils/auditDiff.ts";
 import { Modal, MBtns } from "./ui/Modal.jsx";
 import Field from "./ui/Field.jsx";
@@ -67,7 +67,7 @@ export default function ProdPage({sh}){
   const series=useMemo(()=>{const ref=new Date();return{total:newProductsSeries(logs||[],30,ref),stockVal:stockValueSeries(baseP,logs||[],30,ref),low:lowStockSeries(baseP,logs||[],30,ref),res:reservedSeries(sales,30,ref)};},[baseP,logs,sales]);
   const deltas=useMemo(()=>{const sumTail=(arr,n)=>arr.slice(-n).reduce((s,v)=>s+v,0);const newCnt=sumTail(series.total,7);const stockNow=series.stockVal[series.stockVal.length-1]||0;const stock7=series.stockVal[series.stockVal.length-8]??stockNow;const stockDelta=stockNow-stock7;return{total:newCnt>0?{text:"+"+newCnt+" สัปดาห์นี้",positive:true}:null,stockVal:stockDelta!==0?{text:(stockDelta>0?"+":"")+"฿"+fmt(Math.round(stockDelta))+" 7 วัน",positive:stockDelta>0}:null};},[series]);
   const saveProd=()=>{const errs=[];if(!form.code)errs.push("ยังไม่กรอกรหัสสินค้า");if(!form.brand)errs.push("ยังไม่เลือกยี่ห้อ");if(!form.name)errs.push("ยังไม่กรอกชื่อสินค้า");
-    if(form.splitEnabled){const parts=form.splitParts||[];if(parts.length<2)errs.push("ขายแยกส่วน: ต้องมีอย่างน้อย 2 ส่วน");const sum=parts.reduce((s,p)=>s+(+p.priceRatio||0),0);if(Math.abs(sum-1)>0.001)errs.push("ขายแยกส่วน: ผลรวมสัดส่วนต้องเท่ากับ 1 (ปัจจุบัน "+sum.toFixed(3)+")");if(parts.some(p=>!p.key||!p.name))errs.push("ขายแยกส่วน: ทุกส่วนต้องมี key และชื่อ");}
+    if(form.splitEnabled){const parts=form.splitParts||[];if(parts.length<2)errs.push("ขายแยกส่วน: ต้องมีอย่างน้อย 2 ส่วน");const sum=parts.reduce((s,p)=>s+(+p.priceRatio||0),0);if(Math.abs(sum-1)>0.001)errs.push("ขายแยกส่วน: ผลรวมสัดส่วนต้องเท่ากับ 1 (ปัจจุบัน "+sum.toFixed(3)+")");if(parts.some(p=>!p.key||!p.name))errs.push("ขายแยกส่วน: ทุกส่วนต้องมี key และชื่อ");const keys=parts.map(p=>String(p.key||"").trim());if(new Set(keys).size!==keys.length)errs.push("ขายแยกส่วน: key แต่ละส่วนต้องไม่ซ้ำกัน");}
     if(errs.length){setFormErrors(errs);return;}setFormErrors([]);const item={...form,id:form.id||Date.now(),categoryId:+form.categoryId,subcategoryId:+form.subcategoryId,price:+form.price,cost:+form.cost,stock:+form.stock,minStock:+form.minStock};if(form.id){const b=products.find(x=>x.id===form.id);if(b){if(b.price!==item.price)addPH(item.id,"price",b.price,item.price);if(b.cost!==item.cost)addPH(item.id,"cost",b.cost,item.cost);if(b.stock!==item.stock){const d=item.stock-b.stock;addLog(mkLog(item.id,d>0?"adjust_in":"adjust_out",Math.abs(d),b.stock,item.stock,"Edit","แก้ไข",cu.username));}{const _money=n=>"฿"+fmt(n);const _catName=id=>{const c=cats.find(x=>x.id===+id);return c?c.name:(id?"#"+id:"—");};const _prodDefs=[{key:"name",label:"ชื่อ"},{key:"brand",label:"ยี่ห้อ"},{key:"price",label:"ราคาขาย",fmt:_money},{key:"cost",label:"ต้นทุน",fmt:_money},{key:"minStock",label:"ขั้นต่ำ"},{key:"categoryId",label:"หมวด",fmt:_catName},{key:"distributor",label:"ผู้จัดจำหน่าย"}];addA("แก้ไขสินค้า",item.code,diffFields(b,item,_prodDefs));}}}else addA("เพิ่มสินค้า",item.code);setProducts(p=>form.id?p.map(x=>x.id===form.id?item:x):[...p,item]);cM();};
   const saveAdj=()=>{if(!adjPr||!adjForm.qty||+adjForm.qty<=0)return;const q=+adjForm.qty,b=adjPr.stock,a=adjForm.type==="adjust_in"?b+q:Math.max(0,b-q);setProducts(p=>p.map(x=>x.id===adjPr.id?{...x,stock:a}:x));addLog(mkLog(adjPr.id,adjForm.type,q,b,a,"Manual",adjForm.note,cu.username));addA("ปรับสต็อก",adjPr.code);cM();setAdjPr(null);};
   const del=id=>{const pr=products.find(p=>p.id===id);if(pr)addA("ลบสินค้า",pr.code);setProducts(p=>p.filter(x=>x.id!==id));};
@@ -366,13 +366,13 @@ export default function ProdPage({sh}){
                     <input type="checkbox" checked={!!p.noLayDown} onChange={e=>upd("noLayDown",e.target.checked)}/>ห้ามนอน
                   </label>
                 </div>
-                {(()=>{const w=+p.widthCm||0,l=+p.lengthCm||0,h=+p.heightCm||0,v=w>0&&l>0&&h>0?(w*l*h)/1e6:null;return <div style={{fontSize:11,color:v!=null?"var(--green)":"var(--faint)",marginTop:5,fontWeight:v!=null?500:400}}>{v!=null?`ปริมาตร: ${v.toFixed(3)} m³ (${w}×${l}×${h}/1,000,000)`:"กรอกครบ 3 ค่า → คำนวณปริมาตรส่วนนี้"}</div>;})()}
+                {(()=>{const v=partCubicM(p)||null;return <div style={{fontSize:11,color:v!=null?"var(--green)":"var(--faint)",marginTop:5,fontWeight:v!=null?500:400}}>{v!=null?`ปริมาตร: ${v.toFixed(3)} m³ (${p.widthCm}×${p.lengthCm}×${p.heightCm}/1,000,000)`:"กรอกครบ 3 ค่า → คำนวณปริมาตรส่วนนี้"}</div>;})()}
               </div>
               );
             })}
             <button type="button" onClick={()=>setF("splitParts",[...(form.splitParts||[]),{key:"",name:"",priceRatio:0}])} style={{marginTop:4,padding:"5px 10px",borderRadius:5,border:"1px dashed var(--blue)",background:"transparent",color:"var(--blue)",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>+ เพิ่มส่วน</button>
             {(() => {const sum=(form.splitParts||[]).reduce((s,p)=>s+(+p.priceRatio||0),0);const ok=Math.abs(sum-1)<=0.001;return <div style={{fontSize:11,color:ok?"var(--green)":"var(--orange)",marginTop:6,fontWeight:500}}>ผลรวมสัดส่วน: {sum.toFixed(3)} {ok?"✓":"(ต้อง = 1)"}</div>;})()}
-            {(() => {const tot=(form.splitParts||[]).reduce((s,p)=>{const w=+p.widthCm||0,l=+p.lengthCm||0,h=+p.heightCm||0;return s+(w>0&&l>0&&h>0?(w*l*h)/1e6:0);},0);return tot>0?<div style={{fontSize:11,color:"var(--green)",marginTop:3,fontWeight:500}}>ปริมาตรรวมทั้งชุด: {tot.toFixed(3)} m³</div>:null;})()}
+            {(() => {const tot=(form.splitParts||[]).reduce((s,p)=>s+partCubicM(p),0);return tot>0?<div style={{fontSize:11,color:"var(--green)",marginTop:3,fontWeight:500}}>ปริมาตรรวมทั้งชุด: {tot.toFixed(3)} m³</div>:null;})()}
           </>}
         </div>
       </div>
